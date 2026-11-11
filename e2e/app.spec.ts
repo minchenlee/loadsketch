@@ -1395,6 +1395,32 @@ test('design brief: starts from the requirements and the given nodes; a design b
   expect(errors).toEqual([]);
 });
 
+test('design briefs: in the browser every reference design passes, and none keeps a score', async ({ page }) => {
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app/');
+  await page.getByTestId('open-practice').click();
+  const ids = await page.getByTestId('briefs').locator('[data-testid^="brief-start-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')!.replace('brief-start-', '')));
+  expect(ids.length).toBeGreaterThanOrEqual(6);
+  await page.screenshot({ path: join(SHOTS, 'briefs-list.png') });
+  for (const id of ids) {
+    if (!(await page.getByTestId('briefs').isVisible().catch(() => false))) await page.getByTestId('open-practice').click();
+    await page.getByTestId(`brief-start-${id}`).click();
+    const box = page.getByTestId(`problem-${id}`);
+    await expect(box.getByTestId('brief-text')).toBeVisible();
+    await box.getByTestId('brief-reference').click();
+    await page.getByRole('button', { name: /^(執行|再跑一次)$/ }).click();
+    await page.getByRole('button', { name: '跳到結尾' }).click();
+    await expect(page.getByTestId('run')).toBeVisible({ timeout: 90_000 });
+    await expect(box.getByTestId('problem-score'), id).toHaveText('參考設計過關（不計分）');
+    await box.getByTestId('problem-quit').click();
+  }
+  expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('loadsketch-constraints') ?? '{}')).filter((k) => k.startsWith('brief-')))).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('practice: the dialog holds the keyboard; the problem in progress resumes; an incident ends by its button or another load', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));

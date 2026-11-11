@@ -101,7 +101,7 @@ node scripts/check-agents-md.ts
 - **右側面板的分頁**：`src/app/components/Inspector.tsx`（分頁清單和 `Tab` 型別）；元件從 `useApp` 讀狀態。
 - **課程（範例題目、挑戰）**：`src/learn/lessons.ts`，格式在 `src/learn/lesson.ts`（`Lesson`、`Question`、`Challenge`）。
 - **值班題**：`src/learn/oncall.ts` 的 `INCIDENTS`。
-- **需求題**（從需求和幾乎空白的畫布開始）：`src/learn/briefs.ts` 的 `BRIEFS`。每題要有 `reference`（過關）和 `naive`（最常見的第一版，不過關），`tests/briefs.test.ts` 會跑這兩個設計。零件的速度是已知條件：處理時間不能比該種元件的預設值短（`floors` 可以另外給），命中率不能比預設高；`fixed` 的節點不能改也不能刪。題目用的情境不能有指定節點的事件（down、slow…）：使用者的節點 id 事先不知道。
+- **需求題**（從需求和幾乎空白的畫布開始）：`src/learn/briefs.ts` 的 `BRIEFS`。每題要有 `reference`（過關）和 `naive`（最常見的第一版，不過關），`tests/briefs.test.ts` 會跑這兩個設計。零件的速度是已知條件：處理時間不能比該種元件的預設值短（`floors` 可以另外給），命中率不能比預設高；`fixed` 的節點不能改也不能刪。題目用的情境裡，指定節點的事件（down、slow…）只能指向 `fixed` 的節點：使用者自己加的節點 id 事先不知道。
 
 ## English summary
 

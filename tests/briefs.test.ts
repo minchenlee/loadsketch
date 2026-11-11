@@ -15,7 +15,7 @@ const edit = (d: Design, id: string, params: Record<string, unknown>): Design =>
 
 describe('briefs', () => {
   it('there are some; each starts from the given nodes only, with valid designs and a valid scenario', () => {
-    expect(BRIEFS.length).toBeGreaterThanOrEqual(3);
+    expect(BRIEFS.length).toBeGreaterThanOrEqual(6);
     for (const b of BRIEFS) {
       for (const d of [b.reference, b.naive]) {
         expect(parseDesign(d).ok).toBe(true);
@@ -27,6 +27,8 @@ describe('briefs', () => {
       expect([...new Set((start.ok ? [] : start.issues).map((i) => i.code))].sort()).toEqual(b.fixed.length ? ['client-no-edge', 'unreachable'] : ['client-no-edge']);
       // the canvas at the start: the users and what the brief gives, not connected
       expect(b.start.edges).toEqual([]);
+      // an event names a node only when the brief gives that node: the learner's node ids are not known
+      for (const ev of b.scenario.events ?? []) if ('node' in ev && ev.node) expect(b.fixed).toContain(ev.node);
       expect(b.start.nodes.map((n) => n.id).sort()).toEqual(['users', ...b.fixed].sort());
       // the reference and the naive design keep the given nodes as they are
       expect(brokenGivens(b, b.reference)).toEqual([]);

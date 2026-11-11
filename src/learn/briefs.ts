@@ -162,7 +162,9 @@ function arrive(op: 'read' | 'write', d: Design, run: Run, into: (n: DesignNode)
 }
 
 /** Calls of one kind that leave the users, and those that go into the chosen nodes, over the whole run. */
-function calls(op: 'read' | 'write', d: Design, run: Run, into: (n: DesignNode) => boolean): [out: number, arrived: number] {
+/** `calls`: every call, of either kind (what a cache fetches from its store is counted so). */
+type Op = 'read' | 'write' | 'calls';
+function calls(op: Op, d: Design, run: Run, into: (n: DesignNode) => boolean): [out: number, arrived: number] {
   const kind = new Map(d.nodes.map((n) => [n.id, n]));
   const sent = new Set<string>();
   const got = new Set<string>();
@@ -221,7 +223,18 @@ const notDegraded: Need = {
   },
 };
 
-const reachesNode = (id: string, text: string): Need => ({ id: `reaches-${id}`, text, check: (d, run) => reachable(d).has(id) && arrive('write', d, run, (n) => n.id === id) });
+/**
+ * The calls of one kind arrive at a given node. `share`: how much of what users send must arrive
+ * (less than all of it when a cache or a circuit breaker may answer some of the calls).
+ */
+const reachesNode = (id: string, text: string, op: Op = 'write', share = 0.97): Need => ({
+  id: `reaches-${id}`,
+  text,
+  check: (d, run) => {
+    const [out, arrived] = calls(op, d, run, (n) => n.id === id);
+    return reachable(d).has(id) && out > 0 && arrived >= share * out;
+  },
+});
 
 // ---------------------------------------------------------------------------------------------
 // Briefs
@@ -254,6 +267,12 @@ const NOTIFY = tx('需求：簡訊通知');
 const SHOP_DB: N = ['db', 'database', tx('公司共用的資料庫'), [1080, 320]];
 /** At the start, a given node sits under the users: the brief's card covers the right of the canvas. */
 const under = (n: N): N => [n[0], n[1], n[2], [0, 380], n[4]];
+const CHECKOUT = tx('需求：結帳');
+const GEOCODE = tx('需求：查地址');
+const CATALOG = tx('需求：商品頁');
+const PAY: N = ['pay', 'service', tx('金流供應商（外部）'), [1080, 320], { instances: 2, concurrency: 64, serviceMs: { mean: 50, cv: 0.5 }, queueLimit: 200 }];
+const GEO: N = ['geo', 'service', tx('地圖供應商（外部）'), [810, 200], { instances: 2, concurrency: 64, serviceMs: { mean: 30, cv: 0.5 }, queueLimit: 200, errorRate: 0.05 }];
+const STOCK: N = ['stock', 'database', tx('庫存資料庫（舊）'), [810, 320], { connections: 20, readMs: { mean: 40, cv: 0.5 } }];
 const SMS: N = ['sms', 'service', tx('簡訊供應商（外部）'), [1080, 200], { instances: 1, concurrency: 400, serviceMs: { mean: 200, cv: 0.5 }, queueLimit: 2000 }];
 
 export const BRIEFS: Brief[] = [
@@ -348,6 +367,81 @@ export const BRIEFS: Brief[] = [
       [['users', 'api'], ['api', 'outbox'], ['outbox', 'sender'], ['sender', 'sms']],
     ),
     naive: design(NOTIFY, [USERS, ['api', 'service', tx('通知 API'), [540, 200], { instances: 4 }], SMS], [['users', 'api'], ['api', 'sms']]),
+  },
+  {
+    id: 'brief-checkout',
+    title: CHECKOUT,
+    text: tx('3 人團隊，一個月。做商店的後端：看商品和結帳。結帳要呼叫外部的金流供應商，它已經在畫布上。它每天總有一段時間很慢。'),
+    functional: [tx('使用者能看商品'), tx('使用者能結帳：呼叫金流供應商扣款')],
+    load: [tx('每秒 1,500 個請求，80% 是看商品（讀取），20% 是結帳（寫入）'), tx('第 20 秒起金流供應商慢 40 倍，持續 20 秒'), tx('金流慢的時候，結帳可以失敗，但看商品不能受影響')],
+    given: [tx('金流供應商平常扣一筆 50 ms，這個改不了'), tx('你的程式處理一個請求平均 5 ms'), tx('資料庫讀一筆 3 ms、寫一筆 10 ms')],
+    outOfScope: [tx('重複扣款'), tx('退款'), tx('換另一家金流')],
+    scenario: sc(CHECKOUT, { rps: 1500, readRatio: 0.8 }, [{ type: 'slow', atS: 20, forS: 20, node: 'pay', multiplier: 40 }], { durationS: 90 }),
+    limits: { maxErrorRate: 0.06, maxP99Ms: 300, budgetPerMonth: 1450, maxPoints: 6 },
+    start: design(CHECKOUT, [USERS, under(PAY)]),
+    fixed: ['pay'],
+    needs: [reachesNode('pay', tx('結帳有送到金流供應商'), 'write', 0.8), looked, notDegraded],
+    hint: tx('金流慢 40 倍時，一筆扣款要 2 秒。每秒 300 筆結帳都在等，很快就把 API Server 的位子佔滿，看商品的請求也排不進去。慢的那 20 秒結帳本來就救不了，要做的是不要讓它拖垮別人：在「API → 金流」那條線上設逾時，等太久就放棄。逾時設得太長一樣會佔滿位子。'),
+    reference: design(
+      CHECKOUT,
+      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'db', { on: 'read' }], ['api', 'pay', { on: 'write', timeoutMs: 300 }]],
+    ),
+    naive: design(
+      CHECKOUT,
+      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'db', { on: 'read' }], ['api', 'pay', { on: 'write' }]],
+    ),
+  },
+  {
+    id: 'brief-geocode',
+    title: GEOCODE,
+    text: tx('2 人團隊，兩週。做一個查地址的 API：把地址換成座標。座標由外部的地圖供應商算，它已經在畫布上。它每 20 次會失敗 1 次。'),
+    functional: [tx('其他服務能用地址查到座標')],
+    load: [tx('每秒 1,500 個請求，全部是讀取'), tx('你的 API 失敗率不能超過 1%，雖然供應商自己有 5%')],
+    given: [tx('地圖供應商查一次平均 30 ms，失敗率 5%，這些改不了'), tx('你的程式處理一個請求平均 5 ms'), tx('快取命中率最高 90%')],
+    outOfScope: [tx('地址的格式檢查'), tx('供應商的計費'), tx('換另一家供應商')],
+    scenario: sc(GEOCODE, { rps: 1500, readRatio: 1 }, [], { durationS: 60 }),
+    limits: { maxErrorRate: 0.01, maxP99Ms: 200, budgetPerMonth: 1200, maxPoints: 5 },
+    start: design(GEOCODE, [USERS, under(GEO)]),
+    fixed: ['geo'],
+    needs: [reachesNode('geo', tx('查詢有送到地圖供應商'), 'calls', 0.05), notDegraded],
+    hint: tx('供應商每次有 5% 會失敗，而且每次失敗互不相關。失敗了再試一次，兩次都失敗的機率是 5% × 5% = 0.25%。在「API → 地圖供應商」那條線上設重試。重試會讓供應商多收約 5% 的請求，它吃得下；要是它是因為太忙才失敗，重試只會更糟。'),
+    reference: design(
+      GEOCODE,
+      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('查地址 API'), [540, 200], { instances: 3 }], GEO],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'geo', { retries: 1 }]],
+    ),
+    naive: design(
+      GEOCODE,
+      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('查地址 API'), [540, 200], { instances: 3 }], GEO],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'geo']],
+    ),
+  },
+  {
+    id: 'brief-catalog',
+    title: CATALOG,
+    text: tx('2 人團隊，一個月。商品頁要顯示庫存。庫存在一個很舊的資料庫裡，它已經在畫布上：很慢，連線很少，沒有人敢動它。'),
+    functional: [tx('使用者能看到商品的庫存'), tx('庫存數字晚幾秒更新沒關係')],
+    load: [tx('每秒 3,000 個請求，全部是讀取')],
+    given: [tx('舊的庫存資料庫讀一筆平均 40 ms，只有 20 條連線，這些改不了'), tx('你的程式處理一個請求平均 5 ms'), tx('快取命中率最高 90%')],
+    outOfScope: [tx('搬走舊資料庫'), tx('扣庫存'), tx('庫存數字的即時性')],
+    scenario: sc(CATALOG, { rps: 3000, readRatio: 1 }, [], { durationS: 60 }),
+    limits: { maxErrorRate: 0.01, maxP99Ms: 150, budgetPerMonth: 2000, maxPoints: 6 },
+    start: design(CATALOG, [USERS, under(STOCK)]),
+    fixed: ['stock'],
+    needs: [reachesNode('stock', tx('庫存是從舊資料庫查來的'), 'calls', 0.05), notDegraded],
+    hint: tx('舊資料庫有 20 條連線、讀一筆 40 ms，一秒最多 500 筆；你有 3,000 個請求。它改不了，所以只能讓它少收一點：「晚幾秒沒關係」表示可以用快取。API 先問快取，沒有才去讀舊資料庫（API → 快取，API → 舊資料庫）。九成的請求由快取回答，舊資料庫每秒只收到 300 筆。'),
+    reference: design(
+      CATALOG,
+      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商品 API'), [540, 200], { instances: 3 }], ['cache', 'cache', tx('庫存快取'), [810, 80]], STOCK],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'cache'], ['api', 'stock']],
+    ),
+    naive: design(
+      CATALOG,
+      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商品 API'), [540, 200], { instances: 3 }], STOCK],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'stock']],
+    ),
   },
 ];
 
