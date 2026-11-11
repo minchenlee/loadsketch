@@ -466,6 +466,19 @@ select.field {
   backdrop-filter: blur(6px);
   box-shadow: var(--shadow);
 }
+/* A big design: the cards and the labels lose the blur behind them and are less see-through
+   instead. Each blur is one more pass for the GPU on every frame that changes; with about 50
+   cards a zoom during a run dropped more than half of its frames. */
+:root .sd-many .sd-node {
+  --glass: color-mix(in srgb, var(--panel) 95%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.sd-many .sd-edge-label {
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 /* Entrance (motion.ts): a line draws from its source; its label and the next card follow */
 /* The card is at its full size at 0%: React Flow measures the handles when the card mounts (in
    the delay, or in the first frame), and a scaled card gives it wrong handle places. The card

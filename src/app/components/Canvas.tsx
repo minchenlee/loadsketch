@@ -13,6 +13,8 @@ import { t } from '../../i18n/index.ts';
 const nodeTypes = { component: ComponentNode };
 const edgeTypes = { flow: FlowEdge };
 const defaultEdgeOptions = { type: 'flow', markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: 'var(--edge)' } };
+/** Above this number of cards the glass has no blur: each blurred card is one more pass for the GPU. */
+const MANY = 24;
 const FIT = { padding: 0.1, minZoom: 0.2, maxZoom: 1.1 };
 /** ?controls=0: no zoom buttons. The intro site uses it on a phone, where its canvas only plays. */
 const CONTROLS = new URLSearchParams(location.search).get('controls') !== '0';
@@ -230,6 +232,8 @@ export function Canvas() {
 
   return (
     <ReactFlow
+      // many cards: no blur behind them (see .sd-many in index.css)
+      className={nodes.length > MANY ? 'sd-many' : undefined}
       nodes={fly ? nodes.map((n) => (fly.has(n.id) ? { ...n, position: fly.get(n.id)! } : n)) : nodes}
       edges={edges.map((e) => ({ ...e, markerEnd: defaultEdgeOptions.markerEnd }))}
       nodeTypes={nodeTypes}
