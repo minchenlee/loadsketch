@@ -5,7 +5,7 @@
 import { tx } from '../i18n/index.ts';
 import type { SimResult, WindowStat } from '../engine/index.ts';
 import type { Design, DesignEdge, DesignNode, Scenario } from '../schema/design.ts';
-import { resolveParams } from '../schema/kinds.ts';
+import { KINDS, resolveParams } from '../schema/kinds.ts';
 import { costOf, type Cost } from './cost.ts';
 import type { Patch } from './oncall.ts';
 
@@ -113,8 +113,8 @@ export const PROBLEMS: Problem[] = [
     scenario: sc(tx('限制：尖峰 3 倍'), { rps: 300, readRatio: 0.9, clientTimeoutMs: 2000 }, [{ type: 'spike', atS: 120, forS: 120, multiplier: 3 }], { durationS: 600 }),
     start: [{ node: 'api', params: { autoscale: 'off' } }],
     limits: { maxErrorRate: 0.01, maxP99Ms: 500, budgetPerMonth: 800, maxPoints: 6 },
-    hint: tx('固定開到尖峰需要的台數，平常時段就在浪費錢。打開自動擴充，並把檢查間隔和開機時間調短，讓它趕得上尖峰。'),
-    solution: [{ node: 'api', params: { autoscale: 'on', instances: 3, scaleEveryS: 10, bootS: 15, scaleDownS: 30 } }],
+    hint: tx('先算要幾台。尖峰每秒 900 個請求 × 每個 20 ms = 同時有 18 個在處理；每台同時處理 8 個，所以要 3 台，不是 6 台。自動擴充在這裡幫不上忙：新機器開機要 2 分鐘，尖峰也只有 2 分鐘，機器好了尖峰已經過了，還多 1 點複雜度。固定開 3 台就夠。'),
+    solution: [{ node: 'api', params: { instances: 3 } }],
     naive: [{ node: 'api', params: { autoscale: 'off', instances: 6 } }],
   },
   {
@@ -159,6 +159,14 @@ export interface ProblemVerdict {
   points: { total: number; items: PointItem[] };
   /** 50–100 when passed (the cheaper, the higher); 0 when not. */
   score: number;
+  /** What the problem gives and the design changed (a faster part, a removed component). A gate. */
+  broken: Broken[];
+}
+
+/** A reason to show: a message to translate with its values. */
+export interface Broken {
+  text: string;
+  vars: Record<string, string | number>;
 }
 
 /** Judge a run against the four limits: they are gates; past them, a cheaper design scores higher. */
@@ -174,10 +182,47 @@ export function judgeLimits(limits: Problem['limits'], design: Design, run: { re
   ];
   const passed = checks.every((c) => c.ok);
   const score = passed ? 50 + Math.round((50 * (limits.budgetPerMonth - cost.perMonth)) / limits.budgetPerMonth) : 0;
-  return { passed, checks, cost, points, score };
+  return { passed, checks, cost, points, score, broken: [] };
 }
 
-/** Judge one run of a problem. */
-export function judgeProblem(p: Problem, design: Design, run: { result: SimResult; windows: WindowStat[] }): ProblemVerdict {
-  return judgeLimits(p.limits, design, run);
+/** Times that the problem gives: how fast the code and the machines are. A smaller value is not a design. */
+const GIVEN_TIMES: [key: string, unit: string][] = [['serviceMs', 'ms'], ['readMs', 'ms'], ['writeMs', 'ms'], ['bootS', 's']];
+const meanOf = (v: unknown): number | undefined => (typeof v === 'number' ? v : v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined);
+const valueOf = (n: DesignNode, key: string): unknown => n.params?.[key] ?? KINDS[n.kind]?.params[key]?.default;
+
+/**
+ * What a problem gives, against the design it starts from: every component is still there and
+ * still gets requests (no way round the system, e.g. a weight-0 connection out of the users),
+ * no part is faster, no machine starts faster, and no cache hits more often.
+ */
+export function brokenStart(start: Design, design: Design, result: SimResult): Broken[] {
+  const out: Broken[] = [];
+  const now = new Map(design.nodes.map((n) => [n.id, n]));
+  for (const o of start.nodes) {
+    const n = now.get(o.id);
+    const name = o.label ?? o.id;
+    if (!n || n.kind !== o.kind) {
+      out.push({ text: tx('題目給的「{name}」不見了'), vars: { name } });
+      continue;
+    }
+    if (o.kind !== 'client' && !(result.nodes[o.id]?.arrivals > 0)) out.push({ text: tx('「{name}」沒有收到任何請求：不能繞過原本的元件'), vars: { name } });
+    const spec = KINDS[n.kind];
+    for (const [k, unit] of GIVEN_TIMES) {
+      const floor = meanOf(valueOf(o, k));
+      const got = meanOf(valueOf(n, k));
+      if (floor === undefined || got === undefined || got >= floor) continue;
+      out.push({ text: unit === 's' ? tx('「{name}」的{what}是 {got} 秒，題目給的最快是 {floor} 秒') : tx('「{name}」的{what}是 {got} ms，題目給的最快是 {floor} ms'), vars: { name, what: spec?.params[k]?.label ?? k, got, floor } });
+    }
+    const was = valueOf(o, 'hitRatio');
+    const hit = valueOf(n, 'hitRatio');
+    if (typeof was === 'number' && typeof hit === 'number' && hit > was) out.push({ text: tx('「{name}」的{what}是 {got}，題目給的最高是 {floor}'), vars: { name, what: spec?.params.hitRatio?.label ?? 'hitRatio', got: hit, floor: was } });
+  }
+  return out;
+}
+
+/** Judge one run of a problem. `start`: the design the problem starts from (the example with the problem's patches). */
+export function judgeProblem(p: Problem, design: Design, run: { result: SimResult; windows: WindowStat[] }, start?: Design): ProblemVerdict {
+  const v = judgeLimits(p.limits, design, run);
+  const broken = start ? brokenStart(start, design, run.result) : [];
+  return broken.length ? { ...v, passed: false, score: 0, broken } : v;
 }

@@ -193,3 +193,35 @@ describe('needs', () => {
     expect(a.score).toBeGreaterThan(more.score);
   }, 60_000);
 });
+
+describe('review findings', () => {
+  it('no reference design has a design warning', () => {
+    for (const b of BRIEFS) {
+      const r = parseDesign(b.reference);
+      expect(r.ok && r.issues.map((w) => w.code)).toEqual([]);
+    }
+  });
+
+  it('shortener: reads that go to a cache with no database behind the misses are not looked up', () => {
+    const b = BRIEF_BY_ID['brief-shortener'];
+    const d = structuredClone(b.reference);
+    d.edges.find((e) => e.to === 'cache')!.on = 'read';
+    d.edges.find((e) => e.to === 'db')!.on = 'write';
+    expect(failed(verdict(b, d))).toContain('looked');
+  });
+
+  it('a connection faster than the network the brief gives breaks the givens', () => {
+    const b = BRIEF_BY_ID['brief-shortener'];
+    const d = structuredClone(b.reference);
+    d.edges.find((e) => e.from === 'users')!.latencyMs = 0;
+    expect(brokenGivens(b, d).length).toBe(1);
+    expect(brokenGivens(b, b.reference)).toEqual([]);
+  });
+
+  it('checkout: a bulkhead that sheds the slow 20 s still passes', () => {
+    const b = BRIEF_BY_ID['brief-checkout'];
+    const d = structuredClone(b.reference);
+    Object.assign(d.edges.find((e) => e.to === 'pay')!, { bulkhead: 24 });
+    expect(failed(verdict(b, d))).toEqual([]);
+  });
+});

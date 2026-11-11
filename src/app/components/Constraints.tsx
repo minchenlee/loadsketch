@@ -123,7 +123,7 @@ function useVerdict(): ProblemVerdict | BriefVerdict | null {
     if (b) return run && sameScenario(run.scenario, b.scenario) ? judgeBrief(b, run.design, { ...run, allWindows: live.windows.slice() }) : null;
     const p = id ? PROBLEM_BY_ID[id] : undefined;
     if (!p || !run || !sameScenario(run.scenario, p.scenario)) return null;
-    return judgeProblem(p, run.design, run);
+    return judgeProblem(p, run.design, run, applyPatches(EXAMPLES[p.example], p.start));
   }, [id, run]);
 }
 
@@ -305,9 +305,9 @@ function ProblemBar({ id }: { id: string }) {
           );
         })}
       </ul>
-      {bv && bv.broken.length > 0 && (
+      {v && v.broken.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-[13px]" data-testid="brief-broken">
-          {bv.broken.map((x, k) => (
+          {v.broken.map((x, k) => (
             <li key={k} className="flex gap-1.5">
               <CircleX size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--bad)' }} />
               {t(x.text, { ...x.vars, name: t(String(x.vars.name)), what: t(String(x.vars.what ?? '')) })}

@@ -9,9 +9,9 @@
 // Pure functions: no React, no DOM.
 import { tx } from '../i18n/index.ts';
 import type { SimResult, WindowStat } from '../engine/index.ts';
-import { DESIGN_SCHEMA, edgeId, type Design, type DesignEdge, type DesignNode, type ParamValue, type Scenario } from '../schema/design.ts';
+import { DESIGN_SCHEMA, edgeId, edgeLatencyMs, type Design, type DesignEdge, type DesignNode, type ParamValue, type Scenario } from '../schema/design.ts';
 import { KINDS } from '../schema/kinds.ts';
-import { judgeLimits, type ProblemVerdict } from './constraints.ts';
+import { judgeLimits, type Broken, type ProblemVerdict } from './constraints.ts';
 import { HOURS_PER_MONTH } from './cost.ts';
 
 /**
@@ -28,10 +28,7 @@ export interface Need {
 }
 
 /** A broken given: text (message id) and its variables. */
-export interface Broken {
-  text: string;
-  vars: Record<string, string | number>;
-}
+export type { Broken };
 
 export interface Brief {
   id: string;
@@ -101,6 +98,13 @@ export function brokenGivens(b: Brief, d: Design): Broken[] {
     const name = was.label ?? id;
     if (!n || n.kind !== was.kind) out.push({ text: tx('題目給的「{name}」不見了'), vars: { name } });
     else if (!sameSettings(n, was)) out.push({ text: tx('題目給的「{name}」不能改設定'), vars: { name } });
+  }
+  // the network is given too: a connection cannot be faster than its default (20 ms from the users)
+  for (const e of d.edges) {
+    const from = now.get(e.from);
+    if (!from || e.latencyMs === undefined) continue;
+    const floor = edgeLatencyMs({}, from);
+    if (e.latencyMs < floor) out.push({ text: tx('連線「{name}」的網路延遲是 {got} ms，題目給的最快是 {floor} ms'), vars: { name: edgeId(e), got: e.latencyMs, floor } });
   }
   for (const n of d.nodes) {
     if (b.fixed.includes(n.id)) continue;
@@ -184,6 +188,23 @@ function calls(op: Op, d: Design, run: Run, into: (n: DesignNode) => boolean): [
   return [out, arrived];
 }
 
+/** Reads that go to a store: from a caller directly, or fetched by a cache (counted as calls of the cache). */
+function misses(d: Design, run: Run): number {
+  const kind = new Map(d.nodes.map((n) => [n.id, n.kind]));
+  const direct = new Set<string>();
+  const fetched = new Set<string>();
+  for (const e of d.edges) {
+    if (!STORES.includes(kind.get(e.to) ?? '')) continue;
+    (kind.get(e.from) === 'cache' ? fetched : direct).add(edgeId(e));
+  }
+  let n = 0;
+  for (const w of run.allWindows ?? run.windows) {
+    for (const [id, e] of Object.entries(w.edges)) n += direct.has(id) ? e.read : fetched.has(id) ? e.calls : 0;
+  }
+  return n;
+}
+const STORES = ['database', 'sharded_db', 'object_storage'];
+
 /** What users write is stored in a database. */
 const stored: Need = { id: 'stored', text: tx('資料有存進資料庫'), check: (d, run) => reaches(d, ['database', 'sharded_db']) && arrive('write', d, run, (n) => n.kind === 'database' || n.kind === 'sharded_db') };
 
@@ -194,7 +215,12 @@ const looked: Need = {
   check: (d, run) => {
     // a read put on a queue is answered before anything was looked up
     const [out, queued] = calls('read', d, run, (n) => n.kind === 'queue');
-    return queued <= 0.01 * out && arrive('read', d, run, (n) => ['cache', 'database', 'sharded_db'].includes(n.kind));
+    if (queued > 0.01 * out || !arrive('read', d, run, (n) => ['cache', 'database', 'sharded_db'].includes(n.kind))) return false;
+    // reads that go to a cache: what the cache does not have must be read from a store (the cache
+    // hits at most 90%, so at least 5% of the reads). A cache with no store behind its reads
+    // answers a miss with nothing.
+    const [, cached] = calls('read', d, run, (n) => n.kind === 'cache');
+    return cached <= 0.5 * out || misses(d, run) >= 0.05 * out;
   },
 };
 
@@ -289,7 +315,7 @@ export const BRIEFS: Brief[] = [
     start: design(SHORTENER, [USERS]),
     fixed: [],
     needs: [stored, looked, notDegraded],
-    hint: tx('先估容量。每秒 20,000 個請求 × 每個 5 ms = 同時要處理 100 個，預設的 2 台不夠。讀取每秒 19,000 次 × 3 ms = 57 條連線，資料庫預設只有 50 條。可以把資料庫開大，也可以在前面放快取擋掉九成的讀取；算算哪個便宜。'),
+    hint: tx('先估容量。API 處理一個請求時，除了自己的 5 ms，還要等快取或資料庫回應，平均大約佔住位子 7 ms。每秒 20,000 個請求 × 7 ms = 同時要處理約 140 個，預設的 2 台不夠。資料庫：讀取每秒 19,000 次 × 3 ms = 57 條連線，寫入每秒 1,000 次 × 10 ms = 10 條，一共 67 條，預設只有 50 條。可以把資料庫開大，也可以在前面放快取擋掉九成的讀取；兩種都算算看，價錢差不多。'),
     reference: design(
       SHORTENER,
       [
@@ -359,12 +385,13 @@ export const BRIEFS: Brief[] = [
       NOTIFY,
       [
         USERS,
-        ['api', 'service', tx('通知 API'), [270, 200]],
-        ['outbox', 'queue', tx('待送佇列'), [540, 200]],
+        ['lb', 'load_balancer', tx('負載平衡器'), [200, 200]],
+        ['api', 'service', tx('通知 API'), [400, 200]],
+        ['outbox', 'queue', tx('待送佇列'), [600, 200]],
         ['sender', 'worker', tx('送簡訊的背景工作'), [810, 200], { instances: 4, concurrency: 32, serviceMs: { mean: 2, cv: 1 } }],
         SMS,
       ],
-      [['users', 'api'], ['api', 'outbox'], ['outbox', 'sender'], ['sender', 'sms']],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'outbox'], ['outbox', 'sender'], ['sender', 'sms']],
     ),
     naive: design(NOTIFY, [USERS, ['api', 'service', tx('通知 API'), [540, 200], { instances: 4 }], SMS], [['users', 'api'], ['api', 'sms']]),
   },
@@ -380,17 +407,18 @@ export const BRIEFS: Brief[] = [
     limits: { maxErrorRate: 0.06, maxP99Ms: 300, budgetPerMonth: 1450, maxPoints: 6 },
     start: design(CHECKOUT, [USERS, under(PAY)]),
     fixed: ['pay'],
-    needs: [reachesNode('pay', tx('結帳有送到金流供應商'), 'write', 0.8), looked, notDegraded],
+    // 0.65: the slow 20 s are 22% of the run, and a bulkhead or a breaker may send none of them to pay
+    needs: [reachesNode('pay', tx('結帳有送到金流供應商'), 'write', 0.65), looked, notDegraded],
     hint: tx('金流慢 40 倍時，一筆扣款要 2 秒。每秒 300 筆結帳都在等，很快就把 API Server 的位子佔滿，看商品的請求也排不進去。慢的那 20 秒結帳本來就救不了，要做的是不要讓它拖垮別人：在「API → 金流」那條線上設逾時，等太久就放棄。逾時設得太長一樣會佔滿位子。'),
     reference: design(
       CHECKOUT,
       [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
-      [['users', 'lb'], ['lb', 'api'], ['api', 'db', { on: 'read' }], ['api', 'pay', { on: 'write', timeoutMs: 300 }]],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'db'], ['api', 'pay', { on: 'write', timeoutMs: 300 }]],
     ),
     naive: design(
       CHECKOUT,
       [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
-      [['users', 'lb'], ['lb', 'api'], ['api', 'db', { on: 'read' }], ['api', 'pay', { on: 'write' }]],
+      [['users', 'lb'], ['lb', 'api'], ['api', 'db'], ['api', 'pay', { on: 'write' }]],
     ),
   },
   {
@@ -399,7 +427,7 @@ export const BRIEFS: Brief[] = [
     text: tx('2 人團隊，兩週。做一個查地址的 API：把地址換成座標。座標由外部的地圖供應商算，它已經在畫布上。它每 20 次會失敗 1 次。'),
     functional: [tx('其他服務能用地址查到座標')],
     load: [tx('每秒 1,500 個請求，全部是讀取'), tx('你的 API 失敗率不能超過 1%，雖然供應商自己有 5%')],
-    given: [tx('地圖供應商查一次平均 30 ms，失敗率 5%，這些改不了'), tx('你的程式處理一個請求平均 5 ms'), tx('快取命中率最高 90%')],
+    given: [tx('地圖供應商查一次平均 30 ms，失敗率 5%，這些改不了'), tx('你的程式處理一個請求平均 5 ms')],
     outOfScope: [tx('地址的格式檢查'), tx('供應商的計費'), tx('換另一家供應商')],
     scenario: sc(GEOCODE, { rps: 1500, readRatio: 1 }, [], { durationS: 60 }),
     limits: { maxErrorRate: 0.01, maxP99Ms: 200, budgetPerMonth: 1200, maxPoints: 5 },

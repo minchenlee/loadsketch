@@ -15,7 +15,7 @@ function verdict(p: Problem, patches: Patch[]) {
   const d = applyPatches(applyPatches(example(p.example), p.start), patches);
   const sim = new Simulation(d, p.scenario);
   const result = sim.runToEnd();
-  return judgeProblem(p, d, { result, windows: sim.drainWindows() });
+  return judgeProblem(p, d, { result, windows: sim.drainWindows() }, applyPatches(example(p.example), p.start));
 }
 
 const failed = (v: ReturnType<typeof verdict>) => v.checks.filter((c) => !c.ok).map((c) => c.id);
@@ -72,4 +72,25 @@ describe('problems', () => {
     expect(a.score).toBeGreaterThan(b.score);
     expect(a.score).toBe(50 + Math.round((50 * (p.limits.budgetPerMonth - a.cost.perMonth)) / p.limits.budgetPerMonth));
   }, 60_000);
+});
+
+describe('what a problem gives cannot be changed', () => {
+  const p = PROBLEMS.find((x) => x.id === 'spike-budget')!;
+
+  it('a faster part, a faster boot or a way round the system does not pass', () => {
+    const fast = verdict(p, [{ node: 'api', params: { serviceMs: { mean: 1, cv: 1 } } }]);
+    expect(fast.passed).toBe(false);
+    expect(fast.broken.map((b) => b.vars.floor)).toEqual([20]);
+    const boot = verdict(p, [{ node: 'api', params: { autoscale: 'on', instances: 3, bootS: 15 } }]);
+    expect(boot.passed).toBe(false);
+    expect(boot.broken.length).toBe(1);
+    const round = verdict(p, [{ edge: 'users->lb', set: { weight: 0 } }]);
+    expect(round.passed).toBe(false);
+    expect(round.score).toBe(0);
+    expect(round.broken.length).toBeGreaterThan(0);
+  });
+
+  it('the known solutions change nothing that is given', () => {
+    for (const q of PROBLEMS) expect(verdict(q, q.solution).broken).toEqual([]);
+  });
 });

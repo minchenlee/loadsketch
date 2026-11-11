@@ -1411,7 +1411,7 @@ test('design brief: starts from the requirements and the given nodes; a design b
   // the reference design: the brief goes on (closed, so the design shows), judged without a score
   await box.getByTestId('brief-reference').click();
   await expect(box).not.toHaveAttribute('data-open');
-  expect(await store((s) => s.nodes.length)).toBe(5);
+  expect(await store((s) => s.nodes.length)).toBe(6);
   await runToEnd();
   await expect(box.getByTestId('problem-score')).toHaveText('參考設計過關（不計分）');
   expect(await best()).toBe(kept);

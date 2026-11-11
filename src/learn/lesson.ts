@@ -146,5 +146,9 @@ export function sameScenario(a: Scenario, b: Scenario): boolean {
 export function judge(c: Challenge, run: RunData, original: Design): Verdict {
   const goals = c.goals.map((g) => ({ ...g.check(run), text: t(g.text) }));
   const broken = c.rules.flatMap((r) => r.check(run.design, original));
+  // no way round the system: a component of the example that gets no request (e.g. behind a weight-0 connection)
+  for (const o of original.nodes) {
+    if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('「{name}」沒有收到任何請求：不能繞過原本的元件', { name: o.label ? t(o.label) : o.id }));
+  }
   return { passed: broken.length === 0 && goals.every((g) => g.ok), goals, broken };
 }

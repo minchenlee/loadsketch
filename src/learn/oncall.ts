@@ -5,6 +5,7 @@
 import { tx } from '../i18n/index.ts';
 import type { WindowStat } from '../engine/index.ts';
 import type { Design, Scenario } from '../schema/design.ts';
+import { KINDS } from '../schema/kinds.ts';
 import { settled } from './metrics.ts';
 
 /** What went wrong. `gray`: only one instance; `traffic`: the users sent much more (node: the client). */
@@ -81,8 +82,12 @@ export const INCIDENTS: Incident[] = [
     scenario: sc(tx('值班：失敗又變慢'), 400, 0.9, [{ type: 'slow', atS: 20, node: 'db', multiplier: 20 }]),
     answer: { node: 'db', fault: 'slow' },
     explain: tx('資料庫整個變慢 20 倍。快取沒命中的讀取和全部寫入都要等它，等到 API → db 的逾時（500 ms）就失敗；等待的請求佔住 API 的槽，後面的請求跟著排隊。打開資料庫的指標：使用率和排隊數都比之前高很多，但它自己沒有失敗（放棄的是呼叫它的 API）。'),
-    hint: tx('讓更少的請求碰到資料庫：提高快取命中率（例如 98%）。'),
-    solution: [{ node: 'cache', params: { hitRatio: 0.98 } }],
+    hint: tx('資料庫變慢了，但沒有壞，也沒有滿。失敗是因為 500 ms 的逾時現在比一次寫入還短，而且在等的請求佔滿 API 的槽。把 API Server 的同時處理數調大（例如 64），並把逾時放寬到等得到回應（API → db 3 秒，負載平衡器 → API 4 秒）：使用者會變慢，但不會失敗。另一個做法：API → db 的逾時調短，並打開降級回應。'),
+    solution: [
+      { node: 'api', params: { concurrency: 64 } },
+      { edge: 'api->db', set: { timeoutMs: 3000 } },
+      { edge: 'lb->api', set: { timeoutMs: 4000 } },
+    ],
     fixGoal: { maxErrorRate: 0.02 },
   },
   {
@@ -91,7 +96,7 @@ export const INCIDENTS: Incident[] = [
     example: 'hedged-reads',
     scenario: sc(tx('值班：失敗一成'), 400, 0.95, [{ type: 'slow', atS: 20, node: 'api', instance: 2, multiplier: 60 }]),
     answer: { node: 'api', fault: 'gray' },
-    explain: tx('API Server 4 台裡的第 3 台（#2）變慢 60 倍，其他台正常。負載平衡器輪流送，所以四分之一的請求送到慢的那台，在它的佇列裡排到逾時。對沖請求能救回一部分，但不是全部。打開 API Server 的指標：一台使用率滿了，其他台很閒。'),
+    explain: tx('API Server 4 台裡的第 3 台（#2）變慢 60 倍，其他台正常。負載平衡器輪流送，所以四分之一的請求送到慢的那台。對沖請求在 40 ms 後把讀取再送一份到別台，但不會取消慢的那台上的第一份；它的佇列很快就滿了。佇列滿了之後，送過去的請求立刻被拒絕，比對沖的 40 ms 還快，所以對沖救不到。寫入不做對沖，也救不到。打開 API Server 的指標：一台使用率滿了，其他台很閒。'),
     hint: tx('把負載平衡器的策略改成最少連線（least connections）：慢的那台連線多，就少送給它。'),
     solution: [{ node: 'lb', params: { policy: 'least_conn' } }],
     fixGoal: { maxErrorRate: 0.01 },
@@ -103,8 +108,8 @@ export const INCIDENTS: Incident[] = [
     scenario: sc(tx('值班：長尾變慢'), 600, 0.8, [{ type: 'pause', atS: 20, node: 'api', everyS: 2, pauseMs: 400 }]),
     answer: { node: 'api', fault: 'pause' },
     explain: tx('API Server 每 2 秒停頓 400 ms（stop-the-world GC）。停頓時它什麼都不做，剛好在那時進來的請求要等停頓結束，所以 p50 幾乎不變，p99 跳到約 400 ms 以上。使用率平均下來不高，看平均看不出來。'),
-    hint: tx('在負載平衡器 → API 設短逾時和 1 次重試（例如 100 ms）：卡在停頓裡的請求改送另一台。'),
-    solution: [{ edge: 'lb->api', set: { timeoutMs: 100, retries: 1 } }],
+    hint: tx('在負載平衡器 → API 打開對沖請求（例如 60 ms）：讀取等超過 60 ms 沒有回應，就再送一份到另一台。對沖只用在讀取；寫入重送可能寫兩次，所以不要用短逾時加重試來處理。'),
+    solution: [{ edge: 'lb->api', set: { hedgeMs: 60 } }],
     fixGoal: { maxErrorRate: 0.01, maxP99Ms: 250 },
   },
   {
@@ -127,9 +132,12 @@ export const INCIDENTS: Incident[] = [
     example: 'async-queue',
     scenario: sc(tx('值班：失敗但不慢'), 300, 0.7, [{ type: 'errors', atS: 20, node: 'db', rate: 0.2 }]),
     answer: { node: 'db', fault: 'errors' },
-    explain: tx('資料庫有兩成的讀取回錯誤（例如連線被重設），每台都一樣。錯誤很快就回來，所以延遲不變，只有失敗率升高。佇列和 worker 都正常。'),
-    hint: tx('偶發的錯誤用重試擋：API → db 設 2 次重試。'),
-    solution: [{ edge: 'api->db', set: { retries: 2 } }],
+    explain: tx('資料庫有兩成的請求回錯誤（例如連線被重設），每台都一樣。錯誤很快就回來，所以延遲不變，只有失敗率升高。使用者看到的是讀取失敗。worker 寫入資料庫也有兩成失敗：那些背景工作沒有做完，但使用者的失敗率看不出來，要打開佇列的指標才看得到。'),
+    hint: tx('偶發的錯誤用重試擋：API → db 和 worker → db 都設 2 次重試。只修 API 那一條，背景工作還是會掉兩成。'),
+    solution: [
+      { edge: 'api->db', set: { retries: 2 } },
+      { edge: 'thumb->db', set: { retries: 2 } },
+    ],
     fixGoal: { maxErrorRate: 0.01 },
   },
   {
@@ -138,13 +146,9 @@ export const INCIDENTS: Incident[] = [
     example: 'retry-storm',
     scenario: sc(tx('值班：全部失敗'), 400, 0.9, [{ type: 'down', atS: 20, node: 'cache' }]),
     answer: { node: 'cache', fault: 'down' },
-    explain: tx('快取整個故障，所有讀取都改讀資料庫，資料庫的負載變成好幾倍，開始逾時。每一跳各重試 3 次，請求數被放大很多倍（重試風暴），之後一直恢復不了。資料庫看起來最忙，但它是受害者。'),
-    hint: tx('拿掉每一跳的重試（重試 0 次）：快取故障時直接讀資料庫，資料庫撐得住。'),
-    solution: [
-      { edge: 'lb->api', set: { retries: 0 } },
-      { edge: 'api->cache', set: { retries: 0 } },
-      { edge: 'api->db', set: { retries: 0 } },
-    ],
+    explain: tx('快取整個故障。讀取會改讀資料庫，資料庫接得住（使用率不到一成）。問題在 API → 快取的重試：每個讀取先對壞掉的快取重試 3 次，每次還要等退避時間，這段時間一直佔住 API 的槽。API 的槽被佔滿，負載平衡器 → API 開始逾時並重試，請求數被放大（重試風暴），之後一直恢復不了。API Server 看起來最忙，但它是受害者。'),
+    hint: tx('不要對快取重試：把 API → 快取的重試設成 0 次。快取拿不到就當作沒命中，直接讀資料庫，資料庫撐得住。'),
+    solution: [{ edge: 'api->cache', set: { retries: 0 } }],
     fixGoal: { maxErrorRate: 0.01 },
   },
 ];
@@ -232,18 +236,31 @@ export function applyPatches(design: Design, patches: Patch[]): Design {
 /**
  * The learner's fix: every component of the incident's design is still there and still gets
  * requests (a fix may not route around the system, e.g. with a weight-0 edge out of the client),
- * and the run meets the goal.
+ * no cache hits more often than before (the hit ratio comes from the traffic; nobody sets it
+ * during an incident), background work is not lost (`lost`: the share of queued jobs that failed
+ * for good is above the error-rate goal), and the run meets the goal.
  */
 export function judgeFix(
   inc: Incident,
   original: Design,
   fixed: Design,
-  result: { summary: { errorRate: number; latencyMs: { p99: number } }; nodes: Record<string, { arrivals: number }> },
-): { ok: boolean; missing: string[]; idle: string[] } {
+  result: { summary: { errorRate: number; latencyMs: { p99: number } }; nodes: Record<string, { arrivals: number; asyncFail?: number }> },
+): { ok: boolean; missing: string[]; idle: string[]; raised: string[]; lost: boolean } {
   const have = new Set(fixed.nodes.map((n) => n.id));
   const missing = original.nodes.map((n) => n.id).filter((id) => !have.has(id));
   const idle = original.nodes.filter((n) => have.has(n.id) && !(result.nodes[n.id]?.arrivals > 0)).map((n) => n.id);
+  const hit = (n: Design['nodes'][number]) => (typeof n.params?.hitRatio === 'number' ? n.params.hitRatio : (KINDS[n.kind]?.params.hitRatio?.default as number | undefined));
+  const raised = original.nodes
+    .filter((o) => {
+      const n = fixed.nodes.find((x) => x.id === o.id);
+      const a = hit(o);
+      const b = n && hit(n);
+      return a !== undefined && b !== undefined && b > a;
+    })
+    .map((n) => n.id);
   const g = inc.fixGoal;
-  const ok = missing.length === 0 && idle.length === 0 && result.summary.errorRate <= g.maxErrorRate && (g.maxP99Ms === undefined || result.summary.latencyMs.p99 <= g.maxP99Ms);
-  return { ok, missing, idle };
+  const jobs = Object.values(result.nodes).filter((n) => n.asyncFail !== undefined);
+  const lost = jobs.reduce((x, n) => x + (n.asyncFail ?? 0), 0) > g.maxErrorRate * jobs.reduce((x, n) => x + n.arrivals, 0);
+  const ok = missing.length === 0 && idle.length === 0 && raised.length === 0 && !lost && result.summary.errorRate <= g.maxErrorRate && (g.maxP99Ms === undefined || result.summary.latencyMs.p99 <= g.maxP99Ms);
+  return { ok, missing, idle, raised, lost };
 }

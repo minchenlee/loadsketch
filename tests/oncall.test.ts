@@ -150,3 +150,39 @@ describe('score (Q9=A)', () => {
     expect(v.idle.length).toBeGreaterThan(0);
   });
 });
+
+describe('a fix must be one an engineer on call can make', () => {
+  const byId = Object.fromEntries(INCIDENTS.map((i) => [i.id, i]));
+
+  it('a higher cache hit ratio is not a fix: the hit ratio comes from the traffic', () => {
+    const inc = byId['db-slow'];
+    const d = example(inc.example);
+    const fixed = applyPatches(d, [{ node: 'cache', params: { hitRatio: 0.98 } }]);
+    const v = judgeFix(inc, d, fixed, run(fixed, inc.scenario).result);
+    expect(v.raised).toEqual(['cache']);
+    expect(v.ok).toBe(false);
+  });
+
+  it('db-errors: retries on the API connection alone leave one background job in five lost', () => {
+    const inc = byId['db-errors'];
+    const d = example(inc.example);
+    const half = applyPatches(d, [{ edge: 'api->db', set: { retries: 2 } }]);
+    const r = run(half, inc.scenario);
+    expect(r.result.summary.errorRate).toBeLessThanOrEqual(inc.fixGoal.maxErrorRate);
+    const v = judgeFix(inc, d, half, r.result);
+    expect(v.lost).toBe(true);
+    expect(v.ok).toBe(false);
+  });
+
+  it('cache-down: the database is not the busy one; the API is, and the retries on the dead cache are the cause', () => {
+    const inc = byId['cache-down'];
+    const r = base(inc).result;
+    expect(r.nodes.db.utilization!).toBeLessThan(0.1);
+    expect(r.nodes.api.utilization!).toBeGreaterThan(0.7);
+    expect(inc.solution).toEqual([{ edge: 'api->cache', set: { retries: 0 } }]);
+  });
+
+  it('gc-pause: the known fix does not send a write again', () => {
+    expect(byId['gc-pause'].solution).toEqual([{ edge: 'lb->api', set: { hedgeMs: 60 } }]);
+  });
+});

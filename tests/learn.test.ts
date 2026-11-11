@@ -71,6 +71,13 @@ describe('retry-storm lesson: challenges', () => {
     expect(passed(run(smallQueue, budget))).toEqual(['retry-storm/recover', 'retry-storm/fail-less', 'retry-storm/keep-retries']);
   });
 
+  it('a weight-0 connection out of the users (nothing reaches the system) passes no challenge', () => {
+    const round: Change = (d) => {
+      for (const e of d.edges) if (e.from === 'users') e.weight = 0;
+    };
+    expect(passed(run(round))).toEqual([]);
+  });
+
   it('removing the retries breaks the "keep retries" rule', () => {
     const v = judge(lesson.challenges[2], run(smallQueue, noRetries), original);
     expect(v.goals.every((g) => g.ok)).toBe(true);
