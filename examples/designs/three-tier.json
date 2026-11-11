@@ -1,0 +1,42 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "三層式網站（快取＋讀取副本）",
+  "description": "最常見的起點：負載平衡器把請求分給 3 台 API 伺服器；讀取先查快取（cache-aside），沒命中才查資料庫副本；寫入進主庫，再讓快取失效。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": { "instances": 3, "concurrency": 4, "serviceMs": { "mean": 6, "cv": 1 } }
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "label": "Redis",
+      "pos": [920, 80],
+      "params": { "hitRatio": 0.85 }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 320],
+      "params": { "replicas": 1, "connections": 12 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "cache" },
+    { "from": "api", "to": "db", "timeoutMs": 500 }
+  ]
+}

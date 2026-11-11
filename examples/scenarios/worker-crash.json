@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "Worker 故障：第 20 秒一台 worker 壞掉 20 秒",
+  "seed": 1,
+  "durationS": 90,
+  "warmupS": 0,
+  "traffic": { "rps": 200, "readRatio": 0.5, "clientTimeoutMs": 2000 },
+  "events": [{ "type": "down", "node": "thumb", "instance": 0, "atS": 20, "forS": 20 }]
+}

@@ -1,0 +1,8 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "物件儲存第 20 秒起慢 6 倍，持續 20 秒",
+  "seed": 1,
+  "durationS": 60,
+  "traffic": { "rps": 600, "readRatio": 0.5 },
+  "events": [{ "type": "slow", "atS": 20, "forS": 20, "node": "blob", "multiplier": 6 }]
+}

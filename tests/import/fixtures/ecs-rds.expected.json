@@ -1,0 +1,167 @@
+{
+  "$comment": "What the importer should make of ecs-rds/main.tf. evidence: 'definite' = every input comes from the plan or an AWS default and every line used is definite; 'assumption' = an input is an estimate or a presumed/candidate line. Numbers: db.t3.medium has 4 GiB; PostgreSQL max_connections = LEAST(memory/9531392, 5000) = 450 with all memory, 414 after the 8% OS reserve. The pool per task is not in Terraform, so it is an estimate (10). In the plan, health_check and multi_az are unknown until apply (after_unknown), so the importer fills the AWS defaults (evidence aws-default, still definite). ids: the resource type without aws_ plus _name (decisions.md, M22). params are what the design gets; facts are values the design has no field for, kept for the checks. concurrency, serviceMs, connections, readMs and writeMs are estimates from the instance table (M23; 0.5 vCPU task, 2 vCPU db.t3.medium).",
+  "components": [
+    {
+      "id": "client",
+      "kind": "client",
+      "from": "generated",
+      "note": "added and wired to the entry (the ALB)"
+    },
+    {
+      "id": "lb_web",
+      "kind": "load_balancer",
+      "from": "aws_lb.web",
+      "params": {
+        "healthCheck": "liveness",
+        "hcIntervalS": 30,
+        "hcThreshold": 3,
+        "hcTimeoutMs": 6000,
+        "policy": "round_robin"
+      },
+      "facts": {
+        "internal": false
+      }
+    },
+    {
+      "id": "ecs_service_api",
+      "kind": "service",
+      "from": "aws_ecs_service.api",
+      "params": {
+        "instances": 3,
+        "autoscale": "on",
+        "maxInstances": 50,
+        "targetUtil": 0.6,
+        "concurrency": 8,
+        "serviceMs": 10
+      },
+      "facts": {
+        "cpu": 512,
+        "memory": 1024,
+        "vcpu": 0.5,
+        "minInstances": 3,
+        "zones": "us-east-1a,us-east-1b"
+      }
+    },
+    {
+      "id": "db_instance_main",
+      "kind": "database",
+      "from": "aws_db_instance.main",
+      "params": {
+        "replicas": 0,
+        "failover": "off",
+        "connections": 8,
+        "readMs": 3,
+        "writeMs": 10
+      },
+      "facts": {
+        "engine": "postgres",
+        "instanceClass": "db.t3.medium",
+        "allocatedStorage": 50,
+        "multiAz": false,
+        "vcpu": 2,
+        "memoryGiB": 4,
+        "maxConnectionsAllMemory": 450,
+        "maxConnectionsAfterReserve": 414
+      }
+    }
+  ],
+  "notComponents": [
+    {
+      "address": "aws_lb_target_group.api",
+      "why": "folded into the ALB -> service line"
+    },
+    {
+      "address": "aws_lb_listener.https",
+      "why": "folded into the ALB -> service line"
+    },
+    {
+      "address": "aws_appautoscaling_target.api",
+      "why": "becomes the service's min/max"
+    },
+    {
+      "address": "aws_appautoscaling_policy.api_cpu",
+      "why": "becomes the service's target CPU"
+    },
+    {
+      "address": "aws_ecs_cluster.main",
+      "why": "no runtime role of its own"
+    },
+    {
+      "address": "aws_ecs_task_definition.api",
+      "why": "read for the service (size, environment)"
+    },
+    {
+      "address": "aws_vpc.main / aws_subnet.* / aws_security_group.* / aws_db_subnet_group.main",
+      "why": "network: read for AZs and candidate lines"
+    }
+  ],
+  "lines": [
+    {
+      "from": "client",
+      "to": "lb_web",
+      "kind": "definite",
+      "why": "generated entry line"
+    },
+    {
+      "from": "lb_web",
+      "to": "ecs_service_api",
+      "kind": "definite",
+      "why": "listener default_action -> target group <- service load_balancer"
+    },
+    {
+      "from": "ecs_service_api",
+      "to": "db_instance_main",
+      "kind": "presumed",
+      "why": "task definition env DB_HOST references aws_db_instance.main.address; the db security group allowing the app group agrees"
+    }
+  ],
+  "notLines": [
+    {
+      "from": "ecs_service_api",
+      "env": "CACHE_HOST",
+      "why": "a fixed string"
+    },
+    {
+      "from": "ecs_service_api",
+      "env": "PAYMENTS_URL",
+      "why": "an outside variable"
+    }
+  ],
+  "findings": [
+    {
+      "check": "C1",
+      "evidence": "assumption",
+      "severity": "medium",
+      "on": "db_instance_main",
+      "why": "50 tasks x pool 10 (estimate) = 500 > 450 even with all memory; assumption because the pool is an estimate and the line is presumed"
+    },
+    {
+      "check": "C3",
+      "evidence": "definite",
+      "severity": "medium",
+      "on": "db_instance_main",
+      "why": "multi_az is false (AWS default); the ECS subnets are in two AZs, so the service is not flagged"
+    },
+    {
+      "check": "C4",
+      "evidence": "assumption",
+      "severity": "info",
+      "on": "ecs_service_api",
+      "why": "no peak rps given: report the most rps 50 tasks can take; per-task capacity is an estimate"
+    },
+    {
+      "check": "C9",
+      "evidence": "definite",
+      "severity": "low",
+      "on": "lb_web",
+      "why": "health check interval 30 s x unhealthy_threshold 3 = 90 s > 60 s (AWS defaults; HTTP timeout 6 s, provider docs)"
+    },
+    {
+      "check": "C10",
+      "evidence": "assumption",
+      "severity": "medium",
+      "on": "db_instance_main",
+      "why": "autoscaled service on a single DB with no replica and no cache; 50 x 10 = 500 > 80% of 414"
+    }
+  ]
+}

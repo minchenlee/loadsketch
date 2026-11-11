@@ -1,0 +1,52 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "自動擴充看不到監控（控制面依賴被監控的對象）",
+  "description": "API 伺服器開了自動擴充，每次決定加不加機器前，要向「監控服務」拿忙碌率（線設成「控制面」）。監控服務和 API 跑在同一個叢集、吃同一批資源：情境在第 20 秒流量變 3 倍，監控服務也跟著被擠爆（慢 100 倍，每次查詢都超過 1 秒逾時）。自動擴充器看不到數字，一直不動作（看 API 的「看不到監控」和時間軸），只剩原本 4 台扛 3 倍的流量。像 2021 年 Roblox（服務發現和監控都靠出問題的 Consul）和 AWS us-east-1（內部網路壅塞，監控和控制面一起失明）。試試看：把 API → 監控服務那條線刪掉（自動擴充改看雲端平台自己的指標，不經過被監控的叢集），再跑一次：第 25 秒就開始加機器。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [250, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器（自動擴充）",
+      "pos": [500, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 16,
+        "serviceMs": { "mean": 20, "cv": 0.5 },
+        "queueLimit": 2000,
+        "autoscale": "on",
+        "maxInstances": 16,
+        "targetUtil": 0.6,
+        "scaleEveryS": 5,
+        "bootS": 15,
+        "warmS": 0,
+        "scaleDownS": 60
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "資料庫",
+      "pos": [800, 120],
+      "params": {
+        "connections": 128,
+        "readMs": { "mean": 3, "cv": 0.5 },
+        "writeMs": { "mean": 6, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "metrics",
+      "kind": "service",
+      "label": "監控服務（同一個叢集）",
+      "pos": [800, 320],
+      "params": { "instances": 2, "concurrency": 8, "serviceMs": { "mean": 20, "cv": 0.3 } }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb", "timeoutMs": 2000 },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db", "timeoutMs": 500 },
+    { "from": "api", "to": "metrics", "on": "control", "timeoutMs": 1000 }
+  ]
+}

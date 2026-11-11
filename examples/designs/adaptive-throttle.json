@@ -1,0 +1,49 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "自適應限流（呼叫端自己擋）",
+  "description": "和「重試風暴」一樣，只多了一個設定：每條線都開自適應限流（Google SRE 的 adaptive throttling，K = 2）。呼叫端記住最近 10 秒送出幾次、成功幾次；成功太少時，自己在本地擋掉一部分呼叫，不送出去。突波過後重試風暴停下來，系統約 40 秒後恢復。比「重試預算」（約 10 秒）慢：窗口裡記著很多失敗，要累積夠多成功才完全放行。試試把 K 改成 1.5（擋得更早）或 3。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": { "instances": 3, "concurrency": 4, "serviceMs": { "mean": 6, "cv": 1 } }
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "label": "Redis",
+      "pos": [920, 80],
+      "params": { "hitRatio": 0.85 }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 320],
+      "params": { "replicas": 1, "connections": 12 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb", "throttleK": 2 },
+    { "from": "lb", "to": "api", "timeoutMs": 150, "retries": 3, "backoffMs": 10, "throttleK": 2 },
+    {
+      "from": "api",
+      "to": "cache",
+      "timeoutMs": 150,
+      "retries": 3,
+      "backoffMs": 10,
+      "throttleK": 2
+    },
+    { "from": "api", "to": "db", "timeoutMs": 150, "retries": 3, "backoffMs": 10, "throttleK": 2 }
+  ]
+}

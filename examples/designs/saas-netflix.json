@@ -1,0 +1,185 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Netflix 2016：兩個區域、Zuul、EVCache、Hystrix、Open Connect",
+  "description": "Netflix 2016 年的大致架構。影片串流幾乎都由 Open Connect 送出：Netflix 把快取機器放進各地 ISP 的機房，離峰時從 AWS 的母檔填充。瀏覽、登入、播放前的 API 呼叫才進 AWS：每個區域的 Zuul 是所有裝置請求的前門（路由、認證、限流），後面是幾百個微服務。服務大多是無狀態的，狀態放在快取或資料庫：EVCache（以 memcached 為基礎）擋在 Cassandra 等資料庫前面，存觀看紀錄、評分、推薦。不是必要的依賴（例如推薦）用 Hystrix 包起來，失敗時回預設清單。Netflix 跑在三個 AWS 區域，任何區域都能服務任何會員；Chaos Kong 演練會把整個區域的流量切到別區。原文提到，沒有跨區複製的話，流量切過去會遇到冷快取，大量沒命中會壓垮資料庫，所以 EVCache 用 Kafka 做跨區複製。來源：https://netflixtechblog.com/caching-for-a-global-netflix-7bcc457012f1 、https://github.com/Netflix/zuul/wiki 、https://github.com/Netflix/Hystrix/wiki 、https://openconnect.netflix.com/ 。參數是教學用的縮小值，不是 Netflix 的實際數字。",
+  "nodes": [
+    {
+      "id": "devices",
+      "kind": "client",
+      "label": "電視、手機（瀏覽、播放 API）",
+      "pos": [0, 380],
+      "params": { "weight": 1 }
+    },
+    {
+      "id": "streams",
+      "kind": "client",
+      "label": "影片串流",
+      "pos": [0, 900],
+      "params": { "weight": 2 }
+    },
+    {
+      "id": "route53",
+      "kind": "dns",
+      "label": "DNS（依區域分流）",
+      "pos": [270, 380],
+      "params": { "failover": "on", "detectS": 10, "ttlS": 60, "resolverCacheHit": 0.9 }
+    },
+    {
+      "id": "oc",
+      "kind": "cdn",
+      "label": "Open Connect（ISP 機房裡的快取）",
+      "pos": [270, 900],
+      "params": { "hitRatio": 0.98 }
+    },
+    { "id": "origin", "kind": "object_storage", "label": "影片母檔（S3）", "pos": [540, 900] },
+    {
+      "id": "zuul_e",
+      "kind": "api_gateway",
+      "label": "Zuul（us-east）",
+      "region": "us-east",
+      "pos": [540, 120],
+      "params": { "instances": 4, "concurrency": 128, "serviceMs": { "mean": 1, "cv": 1 } }
+    },
+    {
+      "id": "api_e",
+      "kind": "service",
+      "label": "API 服務（us-east）",
+      "region": "us-east",
+      "pos": [810, 120],
+      "params": { "instances": 6, "concurrency": 32, "serviceMs": { "mean": 8, "cv": 1 } }
+    },
+    {
+      "id": "evcache_e",
+      "kind": "cache",
+      "label": "EVCache（us-east）",
+      "region": "us-east",
+      "pos": [1080, 20],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 60000,
+        "instances": 4,
+        "concurrency": 64,
+        "opMs": { "mean": 0.3, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "cass_e",
+      "kind": "database",
+      "label": "Cassandra（us-east，觀看紀錄、書籤）",
+      "region": "us-east",
+      "pos": [1350, 20],
+      "params": {
+        "replicas": 2,
+        "readFrom": "replicas",
+        "connections": 16,
+        "readMs": { "mean": 4, "cv": 1 },
+        "writeMs": { "mean": 3, "cv": 1 }
+      }
+    },
+    {
+      "id": "hystrix_e",
+      "kind": "circuit_breaker",
+      "label": "Hystrix（us-east）",
+      "region": "us-east",
+      "pos": [1080, 210]
+    },
+    {
+      "id": "recs_e",
+      "kind": "service",
+      "label": "推薦／個人化（us-east）",
+      "region": "us-east",
+      "pos": [1350, 210],
+      "params": { "instances": 2, "concurrency": 16, "serviceMs": { "mean": 40, "cv": 1 } }
+    },
+    {
+      "id": "zuul_w",
+      "kind": "api_gateway",
+      "label": "Zuul（us-west）",
+      "region": "us-west",
+      "pos": [540, 560],
+      "params": { "instances": 4, "concurrency": 128, "serviceMs": { "mean": 1, "cv": 1 } }
+    },
+    {
+      "id": "api_w",
+      "kind": "service",
+      "label": "API 服務（us-west）",
+      "region": "us-west",
+      "pos": [810, 560],
+      "params": { "instances": 6, "concurrency": 32, "serviceMs": { "mean": 8, "cv": 1 } }
+    },
+    {
+      "id": "evcache_w",
+      "kind": "cache",
+      "label": "EVCache（us-west）",
+      "region": "us-west",
+      "pos": [1080, 460],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 60000,
+        "instances": 4,
+        "concurrency": 64,
+        "opMs": { "mean": 0.3, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "cass_w",
+      "kind": "database",
+      "label": "Cassandra（us-west，觀看紀錄、書籤）",
+      "region": "us-west",
+      "pos": [1350, 460],
+      "params": {
+        "replicas": 2,
+        "readFrom": "replicas",
+        "connections": 16,
+        "readMs": { "mean": 4, "cv": 1 },
+        "writeMs": { "mean": 3, "cv": 1 }
+      }
+    },
+    {
+      "id": "hystrix_w",
+      "kind": "circuit_breaker",
+      "label": "Hystrix（us-west）",
+      "region": "us-west",
+      "pos": [1080, 650]
+    },
+    {
+      "id": "recs_w",
+      "kind": "service",
+      "label": "推薦／個人化（us-west）",
+      "region": "us-west",
+      "pos": [1350, 650],
+      "params": { "instances": 2, "concurrency": 16, "serviceMs": { "mean": 40, "cv": 1 } }
+    }
+  ],
+  "edges": [
+    { "from": "devices", "to": "route53" },
+    { "from": "streams", "to": "oc" },
+    { "from": "oc", "to": "origin" },
+    { "from": "route53", "to": "zuul_e" },
+    { "from": "zuul_e", "to": "api_e" },
+    { "from": "api_e", "to": "evcache_e" },
+    { "from": "api_e", "to": "cass_e", "timeoutMs": 500 },
+    { "from": "api_e", "to": "hystrix_e", "on": "read" },
+    { "from": "hystrix_e", "to": "recs_e", "timeoutMs": 300 },
+    { "from": "route53", "to": "zuul_w" },
+    { "from": "zuul_w", "to": "api_w" },
+    { "from": "api_w", "to": "evcache_w" },
+    { "from": "api_w", "to": "cass_w", "timeoutMs": 500 },
+    { "from": "api_w", "to": "hystrix_w", "on": "read" },
+    { "from": "hystrix_w", "to": "recs_w", "timeoutMs": 300 }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "試試看：1) 先跑情境：第 30 秒關掉 us-east 60 秒（Chaos Kong）。影片串流走 Open Connect，完全沒失敗；出事的是瀏覽和播放前的 API，約 27% 失敗，整段錯誤率 9.1%。失敗有三種：DNS 要 10 秒才發現 us-east 死了，之後裝置的 DNS 快取（TTL 60 秒）還會把一部分請求送去死的區域（down 約 18,000）；全部流量擠到 us-west，推薦服務滿載，Hystrix 的 300 ms 逾時和保險絲跳開讓請求失敗（約 12,000）。2) 把兩條 API→Hystrix 的連線打開「降級回應」：推薦失敗時回預設清單，逾時和保險絲的失敗變成約 12,000 個降級回應，錯誤率 5.5%，剩下的都是打到死區的請求。3) 再把 DNS 的 TTL 改成 5 秒：打到死區的降到約 6,200，錯誤率 2.8%。但流量更快搬到 us-west，Zuul 和 API 排隊，p99 到約 2.8 秒。只改 TTL、不開降級反而更糟（約 9.9%）。4) 再把兩區推薦服務改成 4 台（像 Netflix 那樣每區預留能吃下全部流量的容量）：錯誤率 1.9%，p99 回到約 0.2 秒。剩下的失敗是偵測故障那 10 秒。",
+      "pos": [0, 1100],
+      "width": 660
+    },
+    {
+      "id": "n2",
+      "text": "簡化：Netflix 跑三個 AWS 區域，這裡只畫兩個。幾百個微服務合成一個 API 服務和一個推薦服務。EVCache 和 Cassandra 的跨區複製都沒有模擬，每區各自一份；切區時快取變冷造成的驚群也模擬不了。真實的切區是 Zuul 和 DNS 一起慢慢搬流量，這裡只有 DNS failover。Open Connect 的命中率 98% 和所有台數、毫秒都是縮小值。",
+      "pos": [720, 1100],
+      "width": 560
+    }
+  ]
+}

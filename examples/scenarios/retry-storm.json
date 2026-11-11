@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "重試風暴：第 20 秒流量 3 倍，持續 10 秒",
+  "seed": 3,
+  "durationS": 90,
+  "warmupS": 0,
+  "traffic": { "rps": 600, "readRatio": 0.9, "clientTimeoutMs": 1000 },
+  "events": [{ "type": "spike", "atS": 20, "forS": 10, "multiplier": 3 }]
+}

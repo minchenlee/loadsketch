@@ -1,0 +1,52 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "時間軸的寫入擴散（fan-out，參考 Twitter）",
+  "description": "Twitter 在發文時就把推文 ID 推進每個追蹤者的時間軸快取（fan-out on write），所以讀時間軸只要查一次快取。代價是寫入被放大：大事件時發文暴增，擴散佇列會積壓，追蹤者要過一陣子才看得到。這個模型讀取走快取，發文進佇列由擴散 worker 寫進時間軸儲存。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [270, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "時間軸 API",
+      "pos": [540, 200],
+      "params": { "instances": 6, "concurrency": 32, "serviceMs": { "mean": 3, "cv": 1 } }
+    },
+    {
+      "id": "tlcache",
+      "kind": "cache",
+      "label": "時間軸快取（Redis）",
+      "pos": [810, 60],
+      "params": { "hitRatio": 0.97, "instances": 4, "concurrency": 16 }
+    },
+    { "id": "fanout", "kind": "queue", "label": "擴散佇列", "pos": [810, 340] },
+    {
+      "id": "fanworker",
+      "kind": "worker",
+      "label": "擴散 worker",
+      "pos": [1080, 340],
+      "params": { "instances": 4, "concurrency": 4, "serviceMs": { "mean": 40, "cv": 1 } }
+    },
+    {
+      "id": "timelines",
+      "kind": "sharded_db",
+      "label": "時間軸儲存（分片）",
+      "pos": [1350, 200],
+      "params": {
+        "shards": 8,
+        "connections": 16,
+        "readMs": { "mean": 4, "cv": 1 },
+        "writeMs": { "mean": 3, "cv": 1 }
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "tlcache", "on": "read" },
+    { "from": "api", "to": "timelines", "on": "read", "timeoutMs": 500 },
+    { "from": "api", "to": "fanout", "on": "write" },
+    { "from": "fanout", "to": "fanworker" },
+    { "from": "fanworker", "to": "timelines" }
+  ]
+}

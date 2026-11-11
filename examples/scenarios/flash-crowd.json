@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "Flash crowd：第 5 分鐘流量 3 倍，持續 20 分鐘",
+  "seed": 1,
+  "durationS": 1800,
+  "warmupS": 0,
+  "traffic": { "rps": 300, "readRatio": 0.9, "clientTimeoutMs": 2000 },
+  "events": [{ "type": "spike", "atS": 300, "forS": 1200, "multiplier": 3 }]
+}

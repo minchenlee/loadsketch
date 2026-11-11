@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "memcache 第 25 秒停 5 秒，恢復時是冷的",
+  "seed": 1,
+  "durationS": 60,
+  "traffic": { "rps": 3000, "readRatio": 0.95 },
+  "keys": { "count": 100000, "zipf": 0.9 },
+  "events": [{ "type": "down", "atS": 25, "forS": 5, "node": "memcache" }]
+}

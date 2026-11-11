@@ -1,0 +1,46 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "慢的依賴拖垮整個服務",
+  "description": "商品頁 API 4 台，每台 32 個槽；每個請求先查 Postgres，再呼叫推薦服務（逾時 1 秒）。第 20 秒起推薦服務變慢 50 倍。API 的每個槽都卡在等推薦服務，連不需要等的部分也做不了：佇列滿了，約一半的請求失敗。推薦只是「加分」的內容，卻拖垮了整個商品頁。試試「隔艙＋降級回應」版本。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "商品頁 API",
+      "pos": [590, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 32,
+        "serviceMs": { "mean": 5, "cv": 0.5 },
+        "queueLimit": 100
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 100],
+      "params": { "connections": 64 }
+    },
+    {
+      "id": "recs",
+      "kind": "service",
+      "label": "推薦服務",
+      "pos": [920, 320],
+      "params": {
+        "instances": 2,
+        "concurrency": 64,
+        "serviceMs": { "mean": 20, "cv": 0.5 },
+        "queueLimit": 200
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" },
+    { "from": "api", "to": "recs", "timeoutMs": 1000 }
+  ]
+}

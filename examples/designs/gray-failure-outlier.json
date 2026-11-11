@@ -1,0 +1,39 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Gray failure：自動剔除（outlier detection）",
+  "description": "和「Gray failure」同一個設計，負載平衡器多開了自動剔除：同一台連續 5 個請求失敗，就 30 秒不送給它（最多同時剔除一半的實例）。變慢的那台幾乎一開始就被剔除，30 秒後放回來再試，又被剔除。存活檢查還是以為它健康，所以 health check 移出次數是 0。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "round_robin", "healthCheck": "liveness", "outlier": "on" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 8,
+        "serviceMs": { "mean": 20, "cv": 0.5 },
+        "queueLimit": 50
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 200],
+      "params": { "connections": 64 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api", "timeoutMs": 500 },
+    { "from": "api", "to": "db" }
+  ]
+}

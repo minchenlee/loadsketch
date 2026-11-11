@@ -1,0 +1,53 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "限時搶購：入口限流（參考 Shopify）",
+  "description": "熱門商家開賣時，結帳流量在幾秒內暴增，每個結帳步驟都要寫資料庫。Shopify 曾在邊緣層加上漏桶節流，把超過的人導到排隊頁。這個模型用限流器擋在最前面：多出來的請求立刻被拒（429），後面的結帳服務和資料庫維持正常速度。",
+  "nodes": [
+    { "id": "buyers", "kind": "client", "label": "搶購的人", "pos": [0, 200] },
+    {
+      "id": "limiter",
+      "kind": "rate_limiter",
+      "label": "邊緣節流",
+      "pos": [270, 200],
+      "params": { "ratePerSec": 1500, "burst": 300 }
+    },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [540, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "checkout",
+      "kind": "service",
+      "label": "結帳服務",
+      "pos": [810, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 16,
+        "serviceMs": { "mean": 8, "cv": 1 },
+        "queueLimit": 200
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "商店資料庫（MySQL）",
+      "pos": [1080, 200],
+      "params": {
+        "replicas": 1,
+        "connections": 16,
+        "readMs": { "mean": 3, "cv": 1 },
+        "writeMs": { "mean": 12, "cv": 1 },
+        "queueLimit": 300
+      }
+    }
+  ],
+  "edges": [
+    { "from": "buyers", "to": "limiter" },
+    { "from": "limiter", "to": "lb" },
+    { "from": "lb", "to": "checkout" },
+    { "from": "checkout", "to": "db", "timeoutMs": 1000 }
+  ]
+}

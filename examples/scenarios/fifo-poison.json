@@ -1,0 +1,8 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "每秒 200 筆帳戶異動，1000 個帳戶",
+  "seed": 1,
+  "durationS": 180,
+  "traffic": { "rps": 200, "readRatio": 0 },
+  "keys": { "count": 1000, "zipf": 0.8 }
+}

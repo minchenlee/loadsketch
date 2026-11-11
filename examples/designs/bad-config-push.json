@@ -1,0 +1,40 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "壞設定一次推到全部（全域推送）",
+  "description": "使用者經過 API 閘道和負載平衡器到 8 台 API 伺服器。情境在第 20 秒部署一份壞設定：新版本有 60% 的請求出錯，而且一次推到全部閘道和伺服器（像 2019 年 Cloudflare 的 WAF 規則、2025 年的設定檔推送）。全站一起壞，直到跑完。試試看：在情境裡把「部署新版本」改成 4 波、每波觀察 10 秒，打開「自動回滾門檻」5%。第一波只更新四分之一的機器，觀察期發現失敗就自動回滾：受影響的只有第一波那 10 秒的一小部分請求（爆炸半徑小）。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    {
+      "id": "gw",
+      "kind": "api_gateway",
+      "label": "API 閘道",
+      "pos": [250, 200],
+      "params": { "instances": 4, "concurrency": 200, "serviceMs": { "mean": 1, "cv": 0.3 } }
+    },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [500, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [750, 200],
+      "params": { "instances": 8, "concurrency": 32, "serviceMs": { "mean": 8, "cv": 0.5 } }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "資料庫",
+      "pos": [1000, 200],
+      "params": {
+        "connections": 64,
+        "readMs": { "mean": 3, "cv": 0.5 },
+        "writeMs": { "mean": 6, "cv": 0.5 }
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "gw" },
+    { "from": "gw", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db", "timeoutMs": 500 }
+  ]
+}

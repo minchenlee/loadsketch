@@ -1,0 +1,41 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "CDN 擋住新內容上線的流量（參考 Netflix）",
+  "description": "Netflix 把影片事先放到 ISP 機房裡的 Open Connect 快取設備，播放時大部分位元組不必回到 AWS。這個模型把 CDN 放在最前面，沒命中才回到來源服務和物件儲存。重點是：CDN 命中率決定來源要扛多少，流量突波主要落在 CDN 上。",
+  "nodes": [
+    { "id": "viewers", "kind": "client", "label": "觀眾", "pos": [0, 200] },
+    {
+      "id": "cdn",
+      "kind": "cdn",
+      "label": "Open Connect（CDN）",
+      "pos": [270, 200],
+      "params": { "hitRatio": 0.95, "edgeMs": { "mean": 5, "cv": 0.5 } }
+    },
+    { "id": "lb", "kind": "load_balancer", "label": "來源負載平衡器", "pos": [540, 200] },
+    {
+      "id": "origin",
+      "kind": "service",
+      "label": "來源服務",
+      "pos": [810, 200],
+      "params": {
+        "instances": 2,
+        "concurrency": 32,
+        "serviceMs": { "mean": 10, "cv": 1 },
+        "queueLimit": 200
+      }
+    },
+    {
+      "id": "s3",
+      "kind": "object_storage",
+      "label": "S3（影片檔）",
+      "pos": [1080, 200],
+      "params": { "getMs": { "mean": 40, "cv": 0.6 }, "concurrency": 400 }
+    }
+  ],
+  "edges": [
+    { "from": "viewers", "to": "cdn" },
+    { "from": "cdn", "to": "lb", "latencyMs": 30 },
+    { "from": "lb", "to": "origin" },
+    { "from": "origin", "to": "s3" }
+  ]
+}

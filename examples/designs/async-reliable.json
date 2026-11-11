@@ -1,0 +1,51 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "可靠的非同步處理（至少一次＋DLQ）",
+  "description": "和「上傳後非同步處理」一樣，但佇列改成「做完才刪」（像 SQS）：worker 故障時訊息不會遺失，會在 visibility timeout 後重送。1% 是毒訊息，收 3 次還失敗就移到 DLQ。訊息放 10 分鐘還沒做完就過期。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "gw", "kind": "api_gateway", "label": "API Gateway", "pos": [270, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "上傳 API",
+      "pos": [540, 200],
+      "params": { "instances": 2, "concurrency": 16 }
+    },
+    { "id": "blob", "kind": "object_storage", "label": "S3", "pos": [840, 60] },
+    {
+      "id": "jobs",
+      "kind": "queue",
+      "label": "工作佇列",
+      "pos": [840, 240],
+      "params": {
+        "delivery": "at_least_once",
+        "visibilityTimeoutMs": 2000,
+        "maxReceives": 3,
+        "messageTtlS": 600
+      }
+    },
+    {
+      "id": "thumb",
+      "kind": "worker",
+      "label": "縮圖 worker",
+      "pos": [1130, 240],
+      "params": {
+        "instances": 2,
+        "concurrency": 4,
+        "serviceMs": { "mean": 40, "cv": 0.5 },
+        "poisonRate": 0.01
+      }
+    },
+    { "id": "db", "kind": "database", "label": "Postgres", "pos": [1430, 240] }
+  ],
+  "edges": [
+    { "from": "users", "to": "gw" },
+    { "from": "gw", "to": "api" },
+    { "from": "api", "to": "blob", "on": "write" },
+    { "from": "api", "to": "jobs", "on": "write" },
+    { "from": "api", "to": "db", "on": "read" },
+    { "from": "jobs", "to": "thumb" },
+    { "from": "thumb", "to": "db" }
+  ]
+}

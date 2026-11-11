@@ -1,0 +1,47 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "一則壞訊息卡住整組（FIFO 的 head-of-line blocking）",
+  "description": "帳戶異動要依序處理，所以佇列設成 FIFO：同一個帳戶（同一組）的訊息一次只交出一則。少數訊息內容有問題（毒訊息，每 1000 則 1 則），每次處理都失敗；至少一次交付下，它要等 visibility timeout 後重新出現、再失敗，5 次後才進 DLQ。這段約 50 秒裡，同一組後面的訊息全部等著（看佇列的「排在同組後面等」和非同步延遲 p99）。試試看：(1) 把佇列的「訊息分組數」從 8 調到 256：一則毒訊息只卡住 1/256 的帳戶；(2) 把 visibility timeout 從 10 秒降到 2 秒，或「最多接收次數」從 5 降到 2：壞訊息更快進 DLQ；(3) 不需要順序的話改回「一般」，壞訊息就不擋別人。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [200, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "帳戶 API",
+      "pos": [450, 200],
+      "params": { "instances": 2, "concurrency": 32, "serviceMs": { "mean": 2, "cv": 0.5 } }
+    },
+    {
+      "id": "q",
+      "kind": "queue",
+      "label": "帳戶異動佇列（FIFO）",
+      "pos": [700, 200],
+      "params": {
+        "delivery": "at_least_once",
+        "visibilityTimeoutMs": 10000,
+        "maxReceives": 5,
+        "ordering": "fifo",
+        "groups": 8
+      }
+    },
+    {
+      "id": "ledger",
+      "kind": "worker",
+      "label": "記帳 worker",
+      "pos": [950, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 8,
+        "serviceMs": { "mean": 5, "cv": 0.5 },
+        "poisonRate": 0.001
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb", "timeoutMs": 2000 },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "q", "timeoutMs": 500 },
+    { "from": "q", "to": "ledger" }
+  ]
+}

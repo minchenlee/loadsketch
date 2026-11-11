@@ -1,0 +1,38 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Quorum 讀寫（3 份等 2 份）",
+  "description": "資料存 3 份（主庫加 2 個副本），像 Cassandra、DynamoDB：每次讀寫同時送給 3 份（扇出 3），2 份成功就回覆（quorum 2）。寫入直接寫到每一份，不另外複製。第 20 秒起第 3 份變慢 20 倍。等 2 份時幾乎看不出來：變慢期間 p99 約 63 ms，和平常差不多。把「Quorum」改成 0（等全部 3 份）：每個請求都等那份慢的，p50 升到約 128 ms、p99 約 359 ms。拿掉扇出（只送一份，讀取分給副本）：一半的讀取碰到慢的副本，p99 約 223 ms。沒等到的那份仍會做完，所以資料庫的負載是 3 倍。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [640, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 128,
+        "serviceMs": { "mean": 3, "cv": 0.3 },
+        "queueLimit": 500
+      }
+    },
+    {
+      "id": "store",
+      "kind": "database",
+      "label": "資料庫（3 份副本）",
+      "pos": [960, 200],
+      "params": {
+        "replicas": 2,
+        "connections": 128,
+        "readMs": { "mean": 4, "cv": 0.5 },
+        "writeMs": { "mean": 8, "cv": 0.5 }
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "store", "fanout": 3, "quorum": 2, "timeoutMs": 1000 }
+  ]
+}

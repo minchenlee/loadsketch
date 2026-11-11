@@ -1,0 +1,13 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "第 45 秒一半快取節點被換成空節點，10 秒後回來但是冷的",
+  "seed": 1,
+  "durationS": 140,
+  "traffic": { "rps": 8000, "readRatio": 0.85, "clientTimeoutMs": 2000 },
+  "keys": { "count": 200000, "zipf": 0.9 },
+  "events": [
+    { "type": "down", "atS": 45, "forS": 10, "node": "mcrouter", "instance": 0 },
+    { "type": "down", "atS": 45, "forS": 10, "node": "mcrouter", "instance": 1 }
+  ],
+  "warmupS": 30
+}

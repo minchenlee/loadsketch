@@ -1,0 +1,36 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Serverless 函式直連資料庫",
+  "description": "API Gateway 後面接一個函式（像 AWS Lambda），函式直接查 Postgres。突波時函式開很多新環境（冷啟動），每個環境各占一條資料庫連線，資料庫連線用完就開始排隊。試試看：把函式的併發上限調低（保留併發），或加讀副本、提高資料庫連線數，再比較延遲。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "gw", "kind": "api_gateway", "label": "API Gateway", "pos": [270, 200] },
+    {
+      "id": "fn",
+      "kind": "function",
+      "label": "訂單函式",
+      "pos": [540, 200],
+      "params": {
+        "maxConcurrency": 1000,
+        "serviceMs": { "mean": 15, "cv": 0.5 },
+        "coldStartMs": { "mean": 400, "cv": 0.4 }
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [840, 200],
+      "params": {
+        "connections": 40,
+        "readMs": { "mean": 20, "cv": 1 },
+        "writeMs": { "mean": 30, "cv": 1 }
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "gw" },
+    { "from": "gw", "to": "fn" },
+    { "from": "fn", "to": "db" }
+  ]
+}

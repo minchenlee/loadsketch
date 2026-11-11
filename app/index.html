@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/src/app/assets/favicon.svg" />
+    <title>loadsketch</title>
+    <script>
+      // Pick the theme before first paint: ?theme=, then the saved choice, then the system setting.
+      (function () {
+        var q = new URLSearchParams(location.search).get('theme');
+        var saved = null;
+        try { saved = localStorage.getItem('loadsketch-theme'); } catch (e) {}
+        var t = q || saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>

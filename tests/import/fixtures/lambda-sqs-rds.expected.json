@@ -1,0 +1,309 @@
+{
+  "$comment": "What the importer should make of lambda-sqs-rds/main.tf. Format as ecs-rds.expected.json. The environment variables map is unknown in the plan (one value references a resource), so DB_POOL_MAX cannot be read: each function environment keeps an estimated 1 connection. aws_sqs_queue.jobs_dlq is folded (a DLQ that nothing reads or writes).",
+  "components": [
+    {
+      "id": "client",
+      "kind": "client",
+      "from": "generated",
+      "note": "added and wired to the entry (the API Gateway throttle)"
+    },
+    {
+      "id": "api_gateway_rest_api_main",
+      "kind": "api_gateway",
+      "from": "aws_api_gateway_rest_api.main",
+      "note": "the REST API; its stage, method, integration and method settings are folded into it"
+    },
+    {
+      "id": "api_gateway_rest_api_main_throttle",
+      "kind": "rate_limiter",
+      "from": "aws_api_gateway_method_settings.all",
+      "params": {
+        "limit": "rate",
+        "ratePerSec": 5000,
+        "burst": 2000
+      },
+      "note": "the stage-wide method settings */*: throttling_rate_limit 5000, burst 2000 (iac)"
+    },
+    {
+      "id": "db_instance_main",
+      "kind": "database",
+      "from": "aws_db_instance.main",
+      "params": {
+        "failover": "off",
+        "replicas": 0,
+        "connections": 8,
+        "readMs": 3,
+        "writeMs": 10
+      },
+      "facts": {
+        "multiAz": false,
+        "engine": "mysql",
+        "instanceClass": "db.t3.small",
+        "allocatedStorage": 20,
+        "vcpu": 2,
+        "memoryGiB": 2,
+        "maxConnectionsAllMemory": 170,
+        "maxConnectionsAfterReserve": 157
+      },
+      "note": "MySQL db.t3.small has 2 GiB: max_connections = 2 GiB / 12582880 = 170 (157 after the 8% OS reserve)"
+    },
+    {
+      "id": "dynamodb_table_sessions",
+      "kind": "database",
+      "from": "aws_dynamodb_table.sessions",
+      "params": {
+        "connections": 1000,
+        "readMs": 5,
+        "writeMs": 10
+      },
+      "facts": {
+        "engine": "dynamodb",
+        "billingMode": "PROVISIONED",
+        "capacityAutoscaling": false
+      },
+      "note": "DynamoDB as a database with estimated connections and read/write times; no connection limit"
+    },
+    {
+      "id": "dynamodb_table_sessions_throttle",
+      "kind": "rate_limiter",
+      "from": "aws_dynamodb_table.sessions",
+      "params": {
+        "limit": "rate",
+        "ratePerSec": 150,
+        "burst": 150
+      },
+      "note": "PROVISIONED 100 RCU + 50 WCU = one limiter of 150 per second (approximation G5)"
+    },
+    {
+      "id": "lambda_function_api",
+      "kind": "function",
+      "from": "aws_lambda_function.api",
+      "params": {
+        "maxConcurrency": 1000,
+        "scalePer10s": 1000,
+        "serviceMs": 276.41
+      },
+      "facts": {
+        "timeoutS": 60,
+        "memoryMiB": 128,
+        "zones": "us-east-1a,us-east-1b"
+      },
+      "note": "no reserved concurrency: account default 1000 (estimate); memory_size unset = 128 MB (provider default); serviceMs = 20 x 1769/128 (estimate)"
+    },
+    {
+      "id": "lambda_function_worker",
+      "kind": "function",
+      "from": "aws_lambda_function.worker",
+      "params": {
+        "maxConcurrency": 20,
+        "scalePer10s": 1000,
+        "serviceMs": 34.55
+      },
+      "facts": {
+        "sourceMaxConcurrency": 20,
+        "batchSize": 10,
+        "timeoutS": 60,
+        "memoryMiB": 1024,
+        "zones": "us-east-1a,us-east-1b"
+      },
+      "note": "reserved 50, but only the event source mapping calls it and its maximum_concurrency is 20: the limit is 20"
+    },
+    {
+      "id": "sqs_queue_audit",
+      "kind": "queue",
+      "from": "aws_sqs_queue.audit",
+      "params": {
+        "delivery": "at_least_once",
+        "maxDepth": 100000000,
+        "visibilityTimeoutMs": 30000,
+        "messageTtlS": 345600,
+        "maxReceives": 0
+      },
+      "facts": {
+        "visibilityS": 30,
+        "redrive": false
+      },
+      "note": "no redrive_policy: no DLQ, maxReceives 0 (C7)"
+    },
+    {
+      "id": "sqs_queue_jobs",
+      "kind": "queue",
+      "from": "aws_sqs_queue.jobs",
+      "params": {
+        "delivery": "at_least_once",
+        "maxDepth": 100000000,
+        "visibilityTimeoutMs": 120000,
+        "messageTtlS": 86400,
+        "maxReceives": 5
+      },
+      "facts": {
+        "visibilityS": 120,
+        "redrive": true,
+        "maxReceiveCount": 5
+      },
+      "note": "redrive_policy is readable (the DLQ ARN is built from its name): maxReceiveCount 5"
+    }
+  ],
+  "notComponents": [
+    {
+      "address": "aws_sqs_queue.jobs_dlq",
+      "why": "the DLQ of jobs; maxReceives on jobs stands for it"
+    },
+    {
+      "address": "aws_lambda_event_source_mapping.jobs_worker",
+      "why": "becomes the jobs -> worker line and the worker limit"
+    },
+    {
+      "address": "aws_api_gateway_resource / method / integration / deployment / stage / method_settings",
+      "why": "read for the gateway, its throttle and the integration timeout"
+    },
+    {
+      "address": "aws_iam_role.fn",
+      "why": "a permission"
+    },
+    {
+      "address": "aws_vpc.main / aws_subnet.* / aws_security_group.* / aws_db_subnet_group.main",
+      "why": "network: read for AZs and candidate lines"
+    }
+  ],
+  "lines": [
+    {
+      "from": "api_gateway_rest_api_main_throttle",
+      "to": "api_gateway_rest_api_main",
+      "kind": "definite",
+      "why": "the throttle in front of its gateway"
+    },
+    {
+      "from": "dynamodb_table_sessions_throttle",
+      "to": "dynamodb_table_sessions",
+      "kind": "definite",
+      "why": "the provisioned-capacity limiter in front of its table"
+    },
+    {
+      "from": "sqs_queue_jobs",
+      "to": "lambda_function_worker",
+      "kind": "definite",
+      "why": "aws_lambda_event_source_mapping.jobs_worker"
+    },
+    {
+      "from": "api_gateway_rest_api_main",
+      "to": "lambda_function_api",
+      "kind": "definite",
+      "timeoutMs": 29000,
+      "why": "aws_api_gateway_integration.orders_post uri = invoke_arn; timeoutMs 29000 is the provider default"
+    },
+    {
+      "from": "lambda_function_api",
+      "to": "db_instance_main",
+      "kind": "presumed",
+      "why": "environment DB_HOST references aws_db_instance.main.address (Lambda to RDS presumed line)"
+    },
+    {
+      "from": "lambda_function_api",
+      "to": "sqs_queue_jobs",
+      "kind": "presumed",
+      "why": "environment JOBS_URL references aws_sqs_queue.jobs.url"
+    },
+    {
+      "from": "lambda_function_api",
+      "to": "sqs_queue_audit",
+      "kind": "presumed",
+      "why": "environment AUDIT_URL references aws_sqs_queue.audit.url"
+    },
+    {
+      "from": "lambda_function_api",
+      "to": "dynamodb_table_sessions_throttle",
+      "kind": "presumed",
+      "why": "environment SESSION_TABLE references the table; the line ends at its throttle"
+    },
+    {
+      "from": "lambda_function_worker",
+      "to": "db_instance_main",
+      "kind": "presumed",
+      "why": "environment DB_HOST references aws_db_instance.main.address"
+    },
+    {
+      "from": "client",
+      "to": "api_gateway_rest_api_main_throttle",
+      "kind": "definite",
+      "why": "generated entry line"
+    }
+  ],
+  "notLines": [
+    {
+      "from": "lambda_function_api",
+      "env": "FEATURE_FLAGS",
+      "why": "a fixed string"
+    }
+  ],
+  "findings": [
+    {
+      "check": "C2",
+      "evidence": "assumption",
+      "severity": "medium",
+      "on": "db_instance_main",
+      "why": "1000 (account default, estimate) x 1 + 20 x 1 = 1020 > 170; no RDS Proxy"
+    },
+    {
+      "check": "C3",
+      "evidence": "definite",
+      "severity": "medium",
+      "on": "db_instance_main",
+      "why": "multi_az = false (written in the configuration)"
+    },
+    {
+      "check": "C5",
+      "evidence": "definite",
+      "severity": "medium",
+      "on": "sqs_queue_jobs",
+      "why": "visibility 120 s < 6 x worker timeout 60 s = 360 s"
+    },
+    {
+      "check": "C5",
+      "evidence": "definite",
+      "severity": "medium",
+      "on": "lambda_function_api",
+      "why": "integration timeout 29 s < api timeout 60 s"
+    },
+    {
+      "check": "C6",
+      "evidence": "assumption",
+      "severity": "medium",
+      "on": "sqs_queue_jobs",
+      "why": "SDK 3 attempts (estimate) x maxReceiveCount 5 = 15 > 10"
+    },
+    {
+      "check": "C7",
+      "evidence": "definite",
+      "severity": "medium",
+      "on": "sqs_queue_audit",
+      "why": "no redrive_policy"
+    },
+    {
+      "check": "C8",
+      "evidence": "assumption",
+      "severity": "medium",
+      "on": "api_gateway_rest_api_main_throttle",
+      "why": "5000 rps > api 1000 / 276.41 ms = 3617 rps (serviceMs is an estimate)"
+    },
+    {
+      "check": "C11",
+      "evidence": "definite",
+      "severity": "low",
+      "on": "dynamodb_table_sessions",
+      "why": "PROVISIONED and no aws_appautoscaling_target for the table"
+    }
+  ],
+  "notFindings": [
+    {
+      "check": "C1",
+      "on": "db_instance_main",
+      "why": "only functions call it: that is C2"
+    },
+    {
+      "check": "C7",
+      "on": "lambda_function_api",
+      "why": "called synchronously (API Gateway): no async DLQ is needed"
+    }
+  ]
+}

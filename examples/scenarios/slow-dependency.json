@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "推薦服務變慢 50 倍",
+  "seed": 1,
+  "durationS": 80,
+  "warmupS": 0,
+  "traffic": { "rps": 1500, "readRatio": 0.9, "clientTimeoutMs": 3000 },
+  "events": [{ "type": "slow", "atS": 20, "forS": 40, "node": "recs", "multiplier": 50 }]
+}

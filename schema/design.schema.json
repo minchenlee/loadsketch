@@ -1,0 +1,2809 @@
+{
+  "$id": "loadsketch/design@1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": { "type": "string", "const": "loadsketch/design@1" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 8000 },
+    "interRegionMs": {
+      "description": "One-way latency of a call between nodes in different regions, ms (default 35). An edge's own latencyMs wins.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "apis": {
+      "description": "The APIs users call, with their share of the traffic. When set, every request calls one of them and the scenario's readRatio is not used: each API says whether it reads or writes. An edge with `apis` carries only those; a client calls only the APIs its edges carry, by their shares.",
+      "minItems": 1,
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+            "description": "A short name, like \"feed\" or \"upload\". Edges list it in their `apis`."
+          },
+          "op": {
+            "type": "string",
+            "enum": ["read", "write"],
+            "description": "Whether a call to this API reads or writes."
+          },
+          "share": {
+            "description": "Its weight in the traffic mix (default 1). Shares are relative: 7 and 3 mean 70% and 30%.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "label": { "type": "string", "maxLength": 120 }
+        },
+        "required": ["name", "op"],
+        "additionalProperties": false
+      }
+    },
+    "nodes": {
+      "maxItems": 300,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "client" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "weight": {
+                    "description": "流量權重。有多個使用者節點時，依權重分配情境的總流量。（預設 1）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "deadline": {
+                    "description": "Deadline 傳遞。往下傳：請求帶著「使用者放棄的時間點」。每一跳最多等到那時候；已經過期的請求在排隊時直接丟掉，不再白做；過期後也不再重試。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "propagate"]
+                  },
+                  "priority": {
+                    "description": "請求優先級。這個使用者送出的請求是哪一級。過載時，設了「降載門檻」的元件會先丟「可丟棄」的請求；限流器也可以只限「可丟棄」的請求。（預設 normal）",
+                    "type": "string",
+                    "enum": ["critical", "normal", "batch"]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Client：產生流量。流量大小在情境（scenario）設定。有多個使用者時，依權重分配流量。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "dns" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "lookupMs": {
+                    "description": "查詢時間（ms）。快取沒命中時，多等的查詢時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 20 ms、cv 0.5）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "resolverCacheHit": {
+                    "description": "客戶端快取命中率。不用重新查詢的請求比例。（0–1，預設 0.95）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "failover": {
+                    "description": "DNS failover。開啟後，DNS 每秒檢查每個目標（例如每個區域的負載平衡器）。目標連續故障到「偵測時間」，就不再出現在答案裡；恢復同樣久，再放回來。客戶端快取舊答案，所以改道要再等 TTL 才全部生效。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "detectS": {
+                    "description": "偵測時間（秒）。目標要連續故障（或恢復）多久，DNS 才改答案。（預設 10）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 600
+                  },
+                  "ttlS": {
+                    "description": "TTL（秒）。客戶端把 DNS 答案快取多久。DNS 改答案後，還拿著舊答案的客戶端會繼續送到故障的目標；TTL 內逐步換成新答案（快取沒命中、重新查詢的請求立刻拿到新答案）。TTL 短，改道快。查詢多少由「客戶端快取命中率」決定，這裡不跟著 TTL 變。（預設 60）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 86400
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "DNS：把網域名稱換成 IP。客戶端會快取結果，所以只有少數請求要多等一次查詢。有多條出線時依權重分流（例如分到兩個區域）。開啟 failover 時，會把故障的目標從答案裡拿掉。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "cdn" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "hitRatio": {
+                    "description": "命中率。讀取請求在 CDN 命中的比例。（0–1，預設 0.8）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "edgeMs": {
+                    "description": "邊緣延遲（ms）。CDN 節點本身的處理時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 10 ms、cv 0.5）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "CDN：離使用者近的快取。讀取命中就直接回應；沒命中才轉給後面的來源（origin）。寫入一律轉給來源。容量視為無限。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "api_gateway" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "instances": {
+                    "description": "實例數。同時跑幾台。流量平均分給每一台。（預設 2）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "concurrency": {
+                    "description": "每台同時處理數。每台同時處理幾個請求（執行緒、連線或 worker 數）。滿了就排隊。（預設 256）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "serviceMs": {
+                    "description": "處理時間（ms）。驗證和路由花的時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 1 ms、cv 0.5）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 1000）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "shedAt": {
+                    "description": "降載門檻（丟 batch）。一台的排隊數到「排隊上限 × 這個比例」時，新來的「可丟棄」請求直接拒絕（shed），把位置留給一般和關鍵請求。0 表示不分優先級。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "queueOrder": {
+                    "description": "排隊順序。從排隊中先拿哪個請求。過載時，排最久的請求，呼叫端多半已經放棄了；先做最新的請求，做完的才有人收。adaptive LIFO：平常 FIFO，排隊超過 100 ms 都沒清空時改成 LIFO。（預設 fifo）",
+                    "type": "string",
+                    "enum": ["fifo", "lifo", "adaptive_lifo"]
+                  },
+                  "codelTargetMs": {
+                    "description": "CoDel 排隊目標（ms）。控制排隊延遲（CoDel，Facebook 的做法）。排隊在最近 100 ms 內清空過：一個請求最多排 100 ms；一直沒清空（塞車）：最多排這麼久。超過的請求輪到時直接丟掉（CoDel），不做白工。Facebook 用 5 ms。0 表示不用。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 60000
+                  },
+                  "autoscale": {
+                    "description": "自動擴充。開啟後，「實例數」是最少台數。每隔一段時間看平均忙碌率：太忙就加機器，太閒就減一台。新機器要等開機時間才接請求，剛上線時比較慢（冷啟動）。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "maxInstances": {
+                    "description": "最多台數。自動擴充的上限。（預設 10）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "targetUtil": {
+                    "description": "目標忙碌率。希望每台平均多忙。需要的台數 = 現有台數 × 忙碌率 ÷ 目標（差不到 10% 就不動）。（0–1，預設 0.6）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "scaleEveryS": {
+                    "description": "偵測間隔（秒）。多久看一次忙碌率並決定加減。用 1 分鐘指標的雲端擴充約 1 分鐘一次；Kubernetes HPA 是 15 秒。（預設 60）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 3600
+                  },
+                  "scaleDownS": {
+                    "description": "縮減穩定窗（秒）。要減機器，得這段時間內每次檢查都不需要那麼多台；減的時候一次減到這段時間內需要的最多台數。像 Kubernetes HPA 的縮減穩定窗（預設 300 秒），避免流量一抖就減、又馬上加回來。0 表示一不需要就減。（預設 300）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "bootS": {
+                    "description": "開機時間（秒）。決定加機器後，要多久才開始接請求（開 VM、拉 image、通過 health check）。新 VM 約 1–3 分鐘；容器在已有的節點上只要數秒。（預設 120）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "warmS": {
+                    "description": "暖機時間（秒）。新機器上線後，處理時間從「冷啟動倍數」線性降回正常要多久（JIT、連線池、本機快取）。0 表示不暖機。（預設 20）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "coldFactor": {
+                    "description": "冷啟動倍數。新機器剛上線時，處理時間是平常的幾倍。（預設 3）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 100
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "API gateway：前門：驗證、依讀寫分流到後端。它是代理，會占著位置等後端回應。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "load_balancer" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "policy": {
+                    "description": "分配策略。怎麼選下一個實例。（預設 round_robin）",
+                    "type": "string",
+                    "enum": ["round_robin", "least_conn", "p2c", "random"]
+                  },
+                  "latencyMs": {
+                    "description": "轉送延遲（ms）。LB 自己的處理時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 0.3 ms、cv 0.3）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "healthCheck": {
+                    "description": "Health check。負載平衡器怎麼知道哪台壞了。「立刻知道」是理想情況。存活檢查只發現當機，看不到「還活著但變慢或一直出錯」的實例（gray failure）。深度檢查會發現出錯和太慢的實例。（預設 instant）",
+                    "type": "string",
+                    "enum": ["instant", "liveness", "deep"]
+                  },
+                  "hcIntervalS": {
+                    "description": "檢查間隔（秒）。每台多久檢查一次。（預設 5）",
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 600
+                  },
+                  "hcThreshold": {
+                    "description": "連續幾次才切換。連續失敗幾次才移出；移出後連續成功幾次才放回。（預設 2）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "hcTimeoutMs": {
+                    "description": "檢查逾時（ms）。深度檢查的請求超過這個時間沒回應，算一次失敗。（預設 1000）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 600000
+                  },
+                  "outlier": {
+                    "description": "自動剔除出錯的實例。看真實請求的回應：某台連續失敗（錯誤、逾時、故障）達到門檻，就暫時不送給它。最多同時剔除一半的實例。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "outlierErrors": {
+                    "description": "連續失敗幾次剔除。同一台連續幾個請求失敗就剔除。（預設 5）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "ejectS": {
+                    "description": "剔除多久（秒）。剔除後多久再放回來試。（預設 30）",
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 3600
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Load balancer：把請求分給後面所有節點的所有實例。可以選分配策略。會跳過它認為不健康的實例：預設立刻知道哪台故障；也可以改成定期 health check，或看回應自動剔除出錯的實例（outlier detection）。容量視為無限。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "rate_limiter" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "limit": {
+                    "description": "限制什麼。每秒請求數擋的是「來得太快」；同時處理中的請求數擋的是「佔著不放」（像 Stripe 的並行上限），下游變慢時它會先擋。（預設 rate）",
+                    "type": "string",
+                    "enum": ["rate", "concurrency", "both"]
+                  },
+                  "ratePerSec": {
+                    "description": "每秒上限（req/s）。長期平均每秒放行幾個請求。（預設 1000）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "burst": {
+                    "description": "突發額度。桶子最多存幾個令牌，也就是一次最多放行幾個。（預設 100）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000
+                  },
+                  "maxConcurrent": {
+                    "description": "同時處理上限。已經放行、還沒拿到回應的請求最多幾個。（預設 100）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000
+                  },
+                  "scope": {
+                    "description": "額度怎麼分。每個使用者各一個：一個大客戶用完自己的額度，不會吃掉別人的。（預設 global）",
+                    "type": "string",
+                    "enum": ["global", "per_client"]
+                  },
+                  "appliesTo": {
+                    "description": "限哪些請求。只限可丟棄的請求時，一般和關鍵請求直接放行。（預設 all）",
+                    "type": "string",
+                    "enum": ["all", "batch"]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Rate limiter：限流。令牌桶：每秒補固定數量的令牌，最多存「突發額度」個；也可以限制同時處理中的請求數。超過的請求立刻回 429（rate_limited）。可以全部共用一個額度，或每個使用者（租戶）各有一個。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "service" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "instances": {
+                    "description": "實例數。同時跑幾台。流量平均分給每一台。（預設 2）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "concurrency": {
+                    "description": "每台同時處理數。每台同時處理幾個請求（執行緒、連線或 worker 數）。滿了就排隊。（預設 32）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "serviceMs": {
+                    "description": "處理時間（ms）。自己的運算時間，不含等下游。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 5 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 500）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "shedAt": {
+                    "description": "降載門檻（丟 batch）。一台的排隊數到「排隊上限 × 這個比例」時，新來的「可丟棄」請求直接拒絕（shed），把位置留給一般和關鍵請求。0 表示不分優先級。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "queueOrder": {
+                    "description": "排隊順序。從排隊中先拿哪個請求。過載時，排最久的請求，呼叫端多半已經放棄了；先做最新的請求，做完的才有人收。adaptive LIFO：平常 FIFO，排隊超過 100 ms 都沒清空時改成 LIFO。（預設 fifo）",
+                    "type": "string",
+                    "enum": ["fifo", "lifo", "adaptive_lifo"]
+                  },
+                  "codelTargetMs": {
+                    "description": "CoDel 排隊目標（ms）。控制排隊延遲（CoDel，Facebook 的做法）。排隊在最近 100 ms 內清空過：一個請求最多排 100 ms；一直沒清空（塞車）：最多排這麼久。超過的請求輪到時直接丟掉（CoDel），不做白工。Facebook 用 5 ms。0 表示不用。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 60000
+                  },
+                  "errorRate": {
+                    "description": "錯誤率。處理完後隨機失敗的比例。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "calls": {
+                    "description": "呼叫下游的方式。有多個下游時，依序還是平行呼叫。（預設 sequential）",
+                    "type": "string",
+                    "enum": ["sequential", "parallel"]
+                  },
+                  "outbox": {
+                    "description": "寫入後送訊息（outbox）。寫入同時要寫 DB 和送訊息到 queue 時：關掉時兩件事分開做，一個成功一個失敗就不一致（dual write）。打開時訊息和資料在同一筆交易寫進 DB 的 outbox 表，再由 relay 送到 queue，失敗就重試到送達；請求在 DB 寫成功時就回成功。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "outboxRetryMs": {
+                    "description": "outbox 重試間隔（ms）。relay 送訊息失敗後，等多久再送一次。（預設 1000）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 600000
+                  },
+                  "autoscale": {
+                    "description": "自動擴充。開啟後，「實例數」是最少台數。每隔一段時間看平均忙碌率：太忙就加機器，太閒就減一台。新機器要等開機時間才接請求，剛上線時比較慢（冷啟動）。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "maxInstances": {
+                    "description": "最多台數。自動擴充的上限。（預設 10）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "targetUtil": {
+                    "description": "目標忙碌率。希望每台平均多忙。需要的台數 = 現有台數 × 忙碌率 ÷ 目標（差不到 10% 就不動）。（0–1，預設 0.6）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "scaleEveryS": {
+                    "description": "偵測間隔（秒）。多久看一次忙碌率並決定加減。用 1 分鐘指標的雲端擴充約 1 分鐘一次；Kubernetes HPA 是 15 秒。（預設 60）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 3600
+                  },
+                  "scaleDownS": {
+                    "description": "縮減穩定窗（秒）。要減機器，得這段時間內每次檢查都不需要那麼多台；減的時候一次減到這段時間內需要的最多台數。像 Kubernetes HPA 的縮減穩定窗（預設 300 秒），避免流量一抖就減、又馬上加回來。0 表示一不需要就減。（預設 300）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "bootS": {
+                    "description": "開機時間（秒）。決定加機器後，要多久才開始接請求（開 VM、拉 image、通過 health check）。新 VM 約 1–3 分鐘；容器在已有的節點上只要數秒。（預設 120）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "warmS": {
+                    "description": "暖機時間（秒）。新機器上線後，處理時間從「冷啟動倍數」線性降回正常要多久（JIT、連線池、本機快取）。0 表示不暖機。（預設 20）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "coldFactor": {
+                    "description": "冷啟動倍數。新機器剛上線時，處理時間是平常的幾倍。（預設 3）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 100
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "API server：處理請求，再呼叫下游。等下游時仍占著自己的位置（像 thread pool），所以下游變慢會連帶讓它排隊。同時連到 cache 和 DB 時，讀取走 cache-aside。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "circuit_breaker" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "failureRatio": {
+                    "description": "跳開門檻。統計視窗內失敗比例超過這個值就跳開。（0–1，預設 0.5）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "minCalls": {
+                    "description": "最少呼叫數。視窗內至少要有這麼多呼叫才判斷。（預設 20）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "windowS": {
+                    "description": "統計視窗（秒）。看最近幾秒的成功和失敗。（預設 10）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 600
+                  },
+                  "openMs": {
+                    "description": "跳開時間（ms）。跳開後等多久才開始試探。（預設 5000）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 600000
+                  },
+                  "halfOpenCalls": {
+                    "description": "試探請求數。試探時放行幾個請求；全部成功就恢復。（預設 5）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Circuit breaker：保險絲。最近一段時間下游失敗太多就「跳開」，之後的請求立刻失敗（circuit_open），不再等下游。過一陣子放少量請求試探，成功就恢復。通常搭配出線的逾時。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "cache" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "description": "命中率模式。固定：每次讀取依命中率隨機決定。LRU：真的記住 key，容量滿了淘汰最久沒用的；一開始是冷的。（預設 fixed）",
+                    "type": "string",
+                    "enum": ["fixed", "lru"]
+                  },
+                  "hitRatio": {
+                    "description": "命中率（固定模式）。讀取命中的比例。（0–1，預設 0.9）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "capacityKeys": {
+                    "description": "容量（key 數，LRU）。全部實例合計最多存幾個 key。（預設 10000）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000
+                  },
+                  "ttlS": {
+                    "description": "TTL（LRU）（秒）。存多久過期。0 表示不過期。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 86400
+                  },
+                  "ttlJitter": {
+                    "description": "TTL jitter。每次寫入時，TTL 隨機縮短 0 到這個比例（0.2 = 最多短 20%）。同時寫入的 key 就不會同時過期、同時去查 DB。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "stampede": {
+                    "description": "防擊穿（stampede）。熱門 key 過期時，很多請求同時沒命中，一起去查 DB。合併查詢：快取後面直接接 DB 時，同一個 key 只查一次，其他請求等結果。Lease：服務自己查 DB 時，第一個沒命中的拿到 lease 去查，其他的稍等再問一次快取。（預設 none）",
+                    "type": "string",
+                    "enum": ["none", "coalesce", "lease"]
+                  },
+                  "leaseMs": {
+                    "description": "Lease 有效時間（ms）。拿到 lease 的請求要在這段時間內把值寫回快取；過了還沒寫回，下一個沒命中的請求拿新的 lease。（預設 2000）",
+                    "type": "number",
+                    "minimum": 10,
+                    "maximum": 60000
+                  },
+                  "leaseWaitMs": {
+                    "description": "等待後重問（ms）。沒拿到 lease 的請求等多久再問一次快取。（預設 20）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 5000
+                  },
+                  "instances": {
+                    "description": "實例數。同時跑幾台。流量平均分給每一台。（預設 1）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "concurrency": {
+                    "description": "每台同時處理數。每台同時處理幾個操作（執行緒、連線或 worker 數）。滿了就排隊。（預設 8）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "opMs": {
+                    "description": "操作時間（ms）。一次 get／set 的時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 0.3 ms、cv 0.5）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 10000）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Cache：記憶體快取（像 Redis）。命中就不用查 DB。可以用固定命中率，或用 LRU 依容量和 key 的熱門程度算出命中率。key 依雜湊分到各實例。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "database" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "replicaRegion": {
+                "description": "Region of the read replicas when it differs from the primary's region. Replication to them takes interRegionMs longer; a region_down there takes only the replicas down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "replicas": {
+                    "description": "讀副本數。主庫之外的唯讀副本。讀取可以分給副本，寫入只到主庫。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  "connections": {
+                    "description": "每台同時處理數。每台同時處理幾個查詢（執行緒、連線或 worker 數）。滿了就排隊。（預設 50）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "readMs": {
+                    "description": "讀取時間（ms）。一次讀取查詢的處理時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 3 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "writeMs": {
+                    "description": "寫入時間（ms）。一次寫入的處理時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 10 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 500）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "errorRate": {
+                    "description": "錯誤率。處理完後隨機失敗的比例。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "readFrom": {
+                    "description": "讀取來源。讀取查詢送到哪裡。（預設 replicas）",
+                    "type": "string",
+                    "enum": ["replicas", "primary", "any"]
+                  },
+                  "replicaApplyRatio": {
+                    "description": "副本套用寫入成本。主庫每寫一次，每個副本也要花「寫入時間 × 這個比例」套用它。所以副本救不了寫入量。0 表示不計（也不計算讀到舊資料）。（0–1，預設 0.3）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "replicaDelayMs": {
+                    "description": "複製延遲（ms）。主庫寫完後，要多久才把這筆寫入送到副本（網路、批次傳送）。這段時間加上副本排隊和套用的時間，就是複製延遲（replication lag）。在這段時間讀副本，會讀到舊資料。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 600000
+                  },
+                  "maxLagMs": {
+                    "description": "副本延遲上限（ms）。副本落後超過這個時間，讀取就不送給它（像 proxy 的 max replication lag 檢查）。全部副本都太落後時，讀主庫。0 表示不檢查。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "localReplicas": {
+                    "description": "留在主庫區域的副本數。設了「副本所在區域」時，前幾個副本留在主庫的區域，其餘放到副本所在區域。讀取會先找呼叫端所在區域的副本。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  "failover": {
+                    "description": "自動 failover。主庫故障後，把最跟得上的副本升為主庫。複製是非同步的：主庫已經回覆成功、但還沒送到這個副本的寫入，就遺失了。需要讀副本，而且「副本套用寫入成本」大於 0（才追蹤複製進度）。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "auto"]
+                  },
+                  "failoverS": {
+                    "description": "failover 時間（秒）。主庫故障到副本接手要多久：偵測、確認、選新主庫、改連線。這段時間寫入全部失敗。RDS Multi-AZ 執行個體約 60–120 秒；Multi-AZ cluster 約 20–35 秒。（預設 90）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "fencing": {
+                    "description": "隔離舊主庫（fencing）。網路分區時，副本那一側以為主庫故障，升了新主庫。舊主庫其實還活著，它那一側的使用者還在寫：兩邊各自收寫入（split brain），分區結束後資料分歧。開啟 fencing（像 STONITH 或 epoch token）時，新主庫一升起，舊主庫就拒絕寫入。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "readYourWrites": {
+                    "description": "讀到自己的寫入。使用者剛寫入就讀，讀到還沒複製過去的副本，會看不到自己的寫入（read-your-writes 失敗）。開啟時，寫入後「視窗」內的讀取送到主庫。代價：主庫讀取變多。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "primary"]
+                  },
+                  "rywWindowMs": {
+                    "description": "讀主庫的視窗（ms）。寫入後多久之內的讀取送到主庫。應該大於一般的複製延遲。（預設 2000）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "locks": {
+                    "description": "列鎖。寫入同一列（同一個 key）要先拿到這一列的鎖。熱門 key 的寫入會一個接一個做：等鎖的寫入佔著連線，延遲和排隊變長。這個 key 的寫入量最多是 1 ÷（寫入時間＋握鎖時間）。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "row"]
+                  },
+                  "lockHoldMs": {
+                    "description": "寫完後再握鎖（ms）。寫入做完後，交易還要握著鎖多久才 commit（交易裡還有別的查詢、或應用程式在交易中呼叫別的服務）。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 600000
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Database：關聯式資料庫，一個主庫加可選的讀副本。寫入只到主庫；讀取依設定分給副本或主庫。每台的連線數就是它同時能處理的查詢數。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "sharded_db" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "replicaRegion": {
+                "description": "Region of the read replicas when it differs from the primary's region. Replication to them takes interRegionMs longer; a region_down there takes only the replicas down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "shards": {
+                    "description": "分片數。資料分成幾份。（預設 4）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 256
+                  },
+                  "replicas": {
+                    "description": "讀副本數。主庫之外的唯讀副本。讀取可以分給副本，寫入只到主庫。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  "connections": {
+                    "description": "每台同時處理數。每台同時處理幾個查詢（執行緒、連線或 worker 數）。滿了就排隊。（預設 50）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "readMs": {
+                    "description": "讀取時間（ms）。一次讀取查詢的處理時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 3 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "writeMs": {
+                    "description": "寫入時間（ms）。一次寫入的處理時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 10 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 500）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "errorRate": {
+                    "description": "錯誤率。處理完後隨機失敗的比例。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "readFrom": {
+                    "description": "讀取來源。讀取查詢送到哪裡。（預設 replicas）",
+                    "type": "string",
+                    "enum": ["replicas", "primary", "any"]
+                  },
+                  "replicaApplyRatio": {
+                    "description": "副本套用寫入成本。主庫每寫一次，每個副本也要花「寫入時間 × 這個比例」套用它。所以副本救不了寫入量。0 表示不計（也不計算讀到舊資料）。（0–1，預設 0.3）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "replicaDelayMs": {
+                    "description": "複製延遲（ms）。主庫寫完後，要多久才把這筆寫入送到副本（網路、批次傳送）。這段時間加上副本排隊和套用的時間，就是複製延遲（replication lag）。在這段時間讀副本，會讀到舊資料。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 600000
+                  },
+                  "maxLagMs": {
+                    "description": "副本延遲上限（ms）。副本落後超過這個時間，讀取就不送給它（像 proxy 的 max replication lag 檢查）。全部副本都太落後時，讀主庫。0 表示不檢查。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "localReplicas": {
+                    "description": "留在主庫區域的副本數。設了「副本所在區域」時，前幾個副本留在主庫的區域，其餘放到副本所在區域。讀取會先找呼叫端所在區域的副本。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  "failover": {
+                    "description": "自動 failover。主庫故障後，把最跟得上的副本升為主庫。複製是非同步的：主庫已經回覆成功、但還沒送到這個副本的寫入，就遺失了。需要讀副本，而且「副本套用寫入成本」大於 0（才追蹤複製進度）。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "auto"]
+                  },
+                  "failoverS": {
+                    "description": "failover 時間（秒）。主庫故障到副本接手要多久：偵測、確認、選新主庫、改連線。這段時間寫入全部失敗。RDS Multi-AZ 執行個體約 60–120 秒；Multi-AZ cluster 約 20–35 秒。（預設 90）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "fencing": {
+                    "description": "隔離舊主庫（fencing）。網路分區時，副本那一側以為主庫故障，升了新主庫。舊主庫其實還活著，它那一側的使用者還在寫：兩邊各自收寫入（split brain），分區結束後資料分歧。開啟 fencing（像 STONITH 或 epoch token）時，新主庫一升起，舊主庫就拒絕寫入。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "readYourWrites": {
+                    "description": "讀到自己的寫入。使用者剛寫入就讀，讀到還沒複製過去的副本，會看不到自己的寫入（read-your-writes 失敗）。開啟時，寫入後「視窗」內的讀取送到主庫。代價：主庫讀取變多。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "primary"]
+                  },
+                  "rywWindowMs": {
+                    "description": "讀主庫的視窗（ms）。寫入後多久之內的讀取送到主庫。應該大於一般的複製延遲。（預設 2000）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600000
+                  },
+                  "locks": {
+                    "description": "列鎖。寫入同一列（同一個 key）要先拿到這一列的鎖。熱門 key 的寫入會一個接一個做：等鎖的寫入佔著連線，延遲和排隊變長。這個 key 的寫入量最多是 1 ÷（寫入時間＋握鎖時間）。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "row"]
+                  },
+                  "lockHoldMs": {
+                    "description": "寫完後再握鎖（ms）。寫入做完後，交易還要握著鎖多久才 commit（交易裡還有別的查詢、或應用程式在交易中呼叫別的服務）。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 600000
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Sharded database：資料依 key 的雜湊分到多個分片，每個分片是一組主庫加副本。熱門 key 會讓某個分片特別忙（熱點）。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "queue" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "maxDepth": {
+                    "description": "最大深度。最多存幾則訊息。滿了就拒絕寫入（queue_full）。（預設 100000）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "enqueueMs": {
+                    "description": "寫入延遲（ms）。寫入並確認收到的時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 2 ms、cv 0.5）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "delivery": {
+                    "description": "交付方式。最多一次：worker 失敗或故障，訊息就遺失。至少一次（像 SQS）：worker 成功才刪除；失敗或太慢，訊息在 visibility timeout 後重新出現，可能被處理兩次。（預設 at_most_once）",
+                    "type": "string",
+                    "enum": ["at_most_once", "at_least_once"]
+                  },
+                  "visibilityTimeoutMs": {
+                    "description": "Visibility timeout（ms）。訊息交給 worker 後隱藏多久。這段時間內沒做完（或失敗），訊息會重新出現給別的 worker。比處理時間短，就會重複處理。（預設 30000）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 43200000
+                  },
+                  "maxReceives": {
+                    "description": "最多接收次數（DLQ）。一則訊息被拿走這麼多次還沒成功，就移到 dead-letter queue（DLQ），不再重試。0 表示沒有 DLQ，會一直重試。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "messageTtlS": {
+                    "description": "訊息保留時間（秒）。訊息放了這麼久還沒處理完就丟掉（過期）。0 表示永遠保留。（預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1209600
+                  },
+                  "ordering": {
+                    "description": "順序。FIFO（像 SQS FIFO、Kafka 的 partition）：同一組（同一個 key）的訊息一次只交出一則，前一則做完、失敗丟掉或進 DLQ 才交下一則。前一則卡住（處理很慢、毒訊息一直重試），後面整組都等（head-of-line blocking）。（預設 standard）",
+                    "type": "string",
+                    "enum": ["standard", "fifo"]
+                  },
+                  "groups": {
+                    "description": "訊息分組數。FIFO 時，訊息依 key 分成幾組（像 message group 或 partition 數）。組越少，越容易互相卡住；也限制同時能處理的訊息數。（預設 16）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Queue：訊息佇列（像 SQS、Kafka）。收到訊息就回應，訊息排著等 worker 拿。接在它後面的所有 worker 一起分攤訊息。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "worker" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "instances": {
+                    "description": "實例數。同時跑幾台。流量平均分給每一台。（預設 2）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "concurrency": {
+                    "description": "每台同時處理數。每台同時處理幾則訊息（執行緒、連線或 worker 數）。滿了就排隊。（預設 4）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "serviceMs": {
+                    "description": "處理時間（ms）。處理一則訊息的運算時間，不含等下游。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 50 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 100）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "errorRate": {
+                    "description": "錯誤率。處理完後隨機失敗的比例。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "poisonRate": {
+                    "description": "毒訊息比例。這個比例的訊息內容有問題，每次處理都失敗。搭配 queue 的「至少一次」和 DLQ 看效果。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "calls": {
+                    "description": "呼叫下游的方式。有多個下游時，依序還是平行呼叫。（預設 sequential）",
+                    "type": "string",
+                    "enum": ["sequential", "parallel"]
+                  },
+                  "outbox": {
+                    "description": "寫入後送訊息（outbox）。寫入同時要寫 DB 和送訊息到 queue 時：關掉時兩件事分開做，一個成功一個失敗就不一致（dual write）。打開時訊息和資料在同一筆交易寫進 DB 的 outbox 表，再由 relay 送到 queue，失敗就重試到送達；請求在 DB 寫成功時就回成功。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "outboxRetryMs": {
+                    "description": "outbox 重試間隔（ms）。relay 送訊息失敗後，等多久再送一次。（預設 1000）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 600000
+                  },
+                  "autoscale": {
+                    "description": "自動擴充。開啟後，「實例數」是最少台數。每隔一段時間看平均忙碌率：太忙就加機器，太閒就減一台。新機器要等開機時間才接請求，剛上線時比較慢（冷啟動）。（預設 off）",
+                    "type": "string",
+                    "enum": ["off", "on"]
+                  },
+                  "maxInstances": {
+                    "description": "最多台數。自動擴充的上限。（預設 10）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "targetUtil": {
+                    "description": "目標忙碌率。希望每台平均多忙。需要的台數 = 現有台數 × 忙碌率 ÷ 目標（差不到 10% 就不動）。（0–1，預設 0.6）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "scaleEveryS": {
+                    "description": "偵測間隔（秒）。多久看一次忙碌率並決定加減。用 1 分鐘指標的雲端擴充約 1 分鐘一次；Kubernetes HPA 是 15 秒。（預設 60）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 3600
+                  },
+                  "scaleDownS": {
+                    "description": "縮減穩定窗（秒）。要減機器，得這段時間內每次檢查都不需要那麼多台；減的時候一次減到這段時間內需要的最多台數。像 Kubernetes HPA 的縮減穩定窗（預設 300 秒），避免流量一抖就減、又馬上加回來。0 表示一不需要就減。（預設 300）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "bootS": {
+                    "description": "開機時間（秒）。決定加機器後，要多久才開始接請求（開 VM、拉 image、通過 health check）。新 VM 約 1–3 分鐘；容器在已有的節點上只要數秒。（預設 120）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "warmS": {
+                    "description": "暖機時間（秒）。新機器上線後，處理時間從「冷啟動倍數」線性降回正常要多久（JIT、連線池、本機快取）。0 表示不暖機。（預設 20）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "coldFactor": {
+                    "description": "冷啟動倍數。新機器剛上線時，處理時間是平常的幾倍。（預設 3）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 100
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Worker：背景工人。從前面的 queue 拿訊息來處理，可以再呼叫 DB 或 object storage。它的速度決定 queue 會不會越積越多。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "function" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "maxConcurrency": {
+                    "description": "併發上限。同時最多幾個執行環境（每個 1 個請求）。到上限後同步呼叫被拒（429）。AWS 帳號每個區域預設 1000，可以用保留併發（reserved concurrency）設得更低。（預設 1000）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "provisioned": {
+                    "description": "預先備好的環境。一開始就備好、不會被收回的環境數（provisioned concurrency）。用到它們的請求沒有冷啟動。算在併發上限裡。（預設 0）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "serviceMs": {
+                    "description": "處理時間（ms）。一個請求自己的運算時間，不含等下游。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 50 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "coldStartMs": {
+                    "description": "冷啟動時間（ms）。開一個新環境要多久（下載程式碼、啟動執行環境、跑初始化程式）。這段時間算在觸發它的請求的延遲裡。Node.js、Python 約 100–500 ms；Java 沒有 SnapStart 時常常超過 1 秒。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 300 ms、cv 0.5）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "idleS": {
+                    "description": "閒置回收時間（秒）。環境沒有請求這麼久就被收回，下一個請求要再冷啟動。AWS 沒有公布，實際約 5–15 分鐘。（預設 600）",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 7200
+                  },
+                  "scalePer10s": {
+                    "description": "擴充速率（每 10 秒）。每 10 秒最多開幾個新環境。超過的請求被拒（429）。AWS Lambda 每個函式每 10 秒最多 1000 個。（預設 1000）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "errorRate": {
+                    "description": "錯誤率。處理完後隨機失敗的比例。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "calls": {
+                    "description": "呼叫下游的方式。有多個下游時，依序還是平行呼叫。（預設 sequential）",
+                    "type": "string",
+                    "enum": ["sequential", "parallel"]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Function：無伺服器函式（像 AWS Lambda）。每個執行環境一次只處理 1 個請求。沒有空的環境就開一個新的（冷啟動，這個請求要多等）；用完閒置一段時間後收回。同時的環境數到上限、或開新環境的速度超過擴充速率時，新請求被拒（throttle，429）；從 queue 來的訊息則留在 queue 裡等。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "kind": { "type": "string", "const": "object_storage" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "getMs": {
+                    "description": "GET 時間（ms）。讀一個物件到第一個位元組的時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 30 ms、cv 0.6）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "putMs": {
+                    "description": "PUT 時間（ms）。寫一個物件的時間。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 60 ms、cv 0.6）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "concurrency": {
+                    "description": "每台同時處理數。每台同時處理幾個請求（執行緒、連線或 worker 數）。滿了就排隊。（預設 2000）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 10000）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "errorRate": {
+                    "description": "錯誤率。處理完後隨機失敗的比例。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Object storage：物件儲存（像 S3）。容量很大但每次存取比較慢。讀取是 GET，寫入是 PUT。"
+          }
+        ]
+      }
+    },
+    "edges": {
+      "maxItems": 2000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Optional. Default: \"<from>-><to>\", plus \":read\", \":write\" or \":boot\" when filtered.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+            "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+            "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+          },
+          "on": {
+            "description": "走哪些請求。這條線只給讀取、只給寫入，或全部。「只在開機時用」：自動擴充的新機器開機時呼叫一次（拿設定、註冊、拉映像檔），全部成功才上線；平常的請求不走這條線。「控制面」：自動擴充、資料庫自動 failover、DNS failover 每次做決定前先呼叫它（拿監控數字、問協調服務）；失敗就看不到，這次不動作。平常的請求也不走。（預設 all）",
+            "type": "string",
+            "enum": ["all", "read", "write", "boot", "control"]
+          },
+          "weight": {
+            "description": "權重。節點從多條線選一條時，依權重選。（預設 1）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "latencyMs": {
+            "description": "網路延遲（單程）（ms）。從使用者出發的線預設 20 ms（網際網路），其他預設 0.5 ms（同機房）。（預設 0.5）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60000
+          },
+          "timeoutMs": {
+            "description": "逾時（ms）。呼叫方最多等多久。0 表示不設。逾時後下游仍會做完（白工）。（預設 0）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 600000
+          },
+          "retries": {
+            "description": "重試次數。失敗後最多再試幾次。限流（429）和保險絲跳開不重試。（預設 0）",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "backoffMs": {
+            "description": "重試等待基準（ms）。第 n 次重試前隨機等 0 到 基準 × 2^(n−1) 毫秒（full jitter）。（預設 50）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60000
+          },
+          "retryBudget": {
+            "description": "重試預算。最近 10 秒內，這條線的重試數最多是首次呼叫數的幾倍（Google 建議 0.1 = 10%）。超過就不重試，直接回報失敗。0 表示不限。（預設 0）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "throttleK": {
+            "description": "自適應限流 K。呼叫端自己限流（Google SRE 的 adaptive throttling）。看最近 10 秒：送出 requests 次、成功 accepts 次；新的呼叫以 max(0, (requests − K × accepts) ÷ (requests + 1)) 的機率直接在本地失敗，不送出去。K = 2 是書上的建議值，越小擋得越早。0 表示不用。（預設 0）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "bulkhead": {
+            "description": "隔艙（同時呼叫上限）。呼叫端每台最多同時有幾個呼叫走這條線（bulkhead）。滿了就直接失敗（隔艙已滿），不再佔用更多執行緒。這樣一個變慢的下游只會卡住這幾個名額，不會卡住整台。0 表示不限。（預設 0）",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "hedgeMs": {
+            "description": "對沖請求（ms）。讀取送出後這麼久還沒回應，就再送一份（hedged request），先成功的那份算數。通常設成 p95 延遲，用多送約 5% 的請求壓低長尾延遲。輸的那份下游仍會做完。只用在讀取（寫入重送不安全）。0 表示不用。（預設 0）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 600000
+          },
+          "fanout": {
+            "description": "扇出（同時送幾份）。每個呼叫同時送給終點的幾份，等它們回來才算完成（scatter-gather）。分片資料庫：送給幾個分片（例如搜尋要問每個分片）；資料庫：送給主庫和副本裡的幾台（寫入直接寫到每一份）；其他節點：送給幾台不同的實例。大於可用的數量時，就送給全部。份數越多，越可能碰到一台慢的，所以長尾延遲會被放大。0 表示只送一份。（預設 0）",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 256
+          },
+          "quorum": {
+            "description": "Quorum（等幾份）。扇出時，成功的份數到這個數字就回覆，不等其他份（像 Cassandra、DynamoDB 的 quorum：3 份等 2 份）。失敗太多、湊不到這個數字時就失敗。沒等到的份數仍會做完。0 表示等全部。（預設 0）",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 256
+          },
+          "connectMs": {
+            "description": "建立連線（ms）。開一條新連線要多久（TCP＋TLS 握手，跨區時常要好幾個來回）。連線用完會留著給下一個呼叫（keep-alive），閒置太久就關掉；同時呼叫變多、或閒置後的第一個呼叫，要先付這段時間。0 表示不算。（預設 0）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60000
+          },
+          "keepAlive": {
+            "description": "連線重用（keep-alive）。關掉時，每個呼叫都要付一次建立連線的時間。只在「建立連線」大於 0 時有作用。（預設 on）",
+            "type": "string",
+            "enum": ["on", "off"]
+          },
+          "idleS": {
+            "description": "閒置多久關連線（秒）。一條連線閒置這麼久就關掉；下一個呼叫要重新建立。只在「建立連線」大於 0 時有作用。（預設 60）",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 3600
+          },
+          "fallback": {
+            "description": "降級回應。這條線的呼叫最後還是失敗時（重試用完、逾時、保險絲跳開、隔艙已滿），呼叫端改用備用回應（fallback，例如預設推薦清單），請求照樣成功，但算「降級回應」。適合不是必要的下游。（預設 off）",
+            "type": "string",
+            "enum": ["off", "on"]
+          },
+          "source": {
+            "description": "Set by `loadsketch import`: what the line is based on.",
+            "type": "object",
+            "properties": {
+              "line": {
+                "type": "string",
+                "enum": ["definite", "presumed", "candidate", "generated", "answer"],
+                "description": "definite: explicit wiring; presumed: an environment variable references it; candidate: only a security group allows it; generated: the client; answer: added by the answer file."
+              },
+              "confirmed": {
+                "description": "The answer file confirms this line.",
+                "type": "boolean",
+                "const": true
+              },
+              "via": {
+                "maxItems": 20,
+                "type": "array",
+                "items": { "type": "string", "minLength": 1, "maxLength": 2000 }
+              },
+              "params": {
+                "type": "object",
+                "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "evidence": {
+                      "type": "string",
+                      "enum": ["iac", "aws-default", "estimate", "answer", "loadsketch-default"]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": ["setting", "assumption"],
+                      "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                    },
+                    "from": {
+                      "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    "ref": {
+                      "description": "Where an aws-default or a table value is written down.",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "measured": {
+                      "description": "The answer file says the value was measured.",
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": ["evidence", "role"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["line"],
+            "additionalProperties": false
+          },
+          "apis": {
+            "description": "Only requests to these APIs (names from the design's `apis`) take this edge. Omit: every API. Like path-based routing in a gateway or a service that calls different stores per endpoint.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+              "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+            }
+          }
+        },
+        "required": ["from", "to"],
+        "additionalProperties": false
+      }
+    },
+    "notes": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+            "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+          },
+          "text": { "type": "string", "maxLength": 4000 },
+          "pos": {
+            "type": "array",
+            "prefixItems": [{ "type": "number" }, { "type": "number" }],
+            "items": false,
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Canvas position [x, y] in pixels."
+          },
+          "width": { "type": "number", "minimum": 80, "maximum": 2000 }
+        },
+        "required": ["id", "text", "pos"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schema", "name", "nodes", "edges"],
+  "additionalProperties": false,
+  "description": "A system design: components (nodes) and the calls between them (edges)."
+}

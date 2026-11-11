@@ -1,0 +1,8 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "突波：第 20 秒流量變 3 倍",
+  "seed": 1,
+  "durationS": 60,
+  "traffic": { "rps": 600, "readRatio": 0.9 },
+  "events": [{ "type": "spike", "atS": 20, "forS": 15, "multiplier": 3 }]
+}

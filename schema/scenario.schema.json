@@ -1,0 +1,474 @@
+{
+  "$id": "loadsketch/scenario@1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": { "type": "string", "const": "loadsketch/scenario@1" },
+    "name": { "type": "string", "maxLength": 120 },
+    "seed": {
+      "description": "Random seed (default 1). Same seed + same design = same result.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483648
+    },
+    "durationS": {
+      "description": "Seconds of traffic (default 60).",
+      "type": "number",
+      "minimum": 1,
+      "maximum": 3600
+    },
+    "warmupS": {
+      "description": "Seconds excluded from summary stats (default 5).",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 3600
+    },
+    "windowS": {
+      "description": "Seconds per time-series window (default 1).",
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 60
+    },
+    "traffic": {
+      "type": "object",
+      "properties": {
+        "rps": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Requests per second across all clients."
+        },
+        "readRatio": {
+          "description": "Share of reads (default 0.9).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "clientTimeoutMs": {
+          "description": "End-to-end timeout per request (default 3000).",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 600000
+        },
+        "arrivals": {
+          "description": "Random (default) or evenly spaced arrivals.",
+          "type": "string",
+          "enum": ["poisson", "constant"]
+        },
+        "followReads": {
+          "description": "Share of successful writes the same user follows with a read of the same key (read-your-writes check; default 0). With APIs, the read calls the first read API in the client's mix.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "followAfterMs": {
+          "description": "How long after its write the follow-up read is sent (default 100).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600000
+        }
+      },
+      "required": ["rps"],
+      "additionalProperties": false
+    },
+    "keys": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000,
+          "description": "Number of distinct keys (default 100000)."
+        },
+        "zipf": {
+          "description": "Popularity skew: 0 uniform, ~1 a few keys are very hot (default 0.8).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3
+        }
+      },
+      "required": ["count"],
+      "additionalProperties": false
+    },
+    "events": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "spike" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "multiplier": { "type": "number", "minimum": 0, "maximum": 1000 }
+            },
+            "required": ["type", "atS", "multiplier"],
+            "additionalProperties": false,
+            "description": "Multiply traffic by `multiplier` during the window."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "ramp" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "toMultiplier": { "type": "number", "minimum": 0, "maximum": 1000 }
+            },
+            "required": ["type", "atS", "forS", "toMultiplier"],
+            "additionalProperties": false,
+            "description": "Raise traffic linearly from 1× to `toMultiplier` over forS seconds, then hold."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "down" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "node": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "instance": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+            },
+            "required": ["type", "atS", "node"],
+            "additionalProperties": false,
+            "description": "Take a node (or one instance; for databases 0 is the primary, 1.. replicas) down."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "region_down" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "region": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              }
+            },
+            "required": ["type", "atS", "region"],
+            "additionalProperties": false,
+            "description": "Take every node of a region down (a whole data center fails). Clients are users and stay up."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "slow" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "node": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "instance": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+              "multiplier": { "type": "number", "minimum": 0, "maximum": 1000 }
+            },
+            "required": ["type", "atS", "node", "multiplier"],
+            "additionalProperties": false,
+            "description": "Multiply the node's processing times (or one instance's: a gray failure)."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "errors" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "node": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "instance": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+              "rate": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "required": ["type", "atS", "node", "rate"],
+            "additionalProperties": false,
+            "description": "Override the node's error rate (or one instance's: a gray failure)."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "wave" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "periodS": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 86400,
+                "description": "Seconds per cycle (a compressed day)."
+              },
+              "amplitude": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Swing around 1×: 0.5 means 0.5× to 1.5×."
+              }
+            },
+            "required": ["type", "atS", "periodS", "amplitude"],
+            "additionalProperties": false,
+            "description": "Daily (diurnal) traffic: multiply by 1 + amplitude × sin(2π(t − atS) / periodS)."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "cron" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "everyS": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 86400,
+                "description": "Seconds between bursts."
+              },
+              "burstS": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 3600,
+                "description": "Seconds the burst lasts when every client fires at once."
+              },
+              "multiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1000,
+                "description": "Traffic multiplier during an unjittered burst."
+              },
+              "jitterS": {
+                "description": "Spread each burst over burstS + jitterS seconds; same extra requests, lower peak.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 3600
+              }
+            },
+            "required": ["type", "atS", "everyS", "burstS", "multiplier"],
+            "additionalProperties": false,
+            "description": "Scheduled jobs that all fire at the same time (for example every hour)."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "shift" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "description": "Seconds the weight takes to move, linearly (a gradual rollout). Omit or 0: at once.",
+                "type": "number",
+                "minimum": 0
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "description": "The new weight of the edge (every edge from → to)."
+              }
+            },
+            "required": ["type", "atS", "from", "to", "weight"],
+            "additionalProperties": false,
+            "description": "Move traffic: change the weight of the edge from → to. A client, DNS, load balancer or router splits its traffic by the weights of its edges, so this is a canary, a blue-green cutover or a region evacuation. The weight stays after forS."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "rollout" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "node": {
+                "description": "The component to update. Omit: a global push to every API gateway, API server and worker at once (like a config file pushed everywhere).",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "waves": {
+                "description": "Waves of the staged rollout (default 1: every instance at once). Wave w updates the first ceil(w / waves) of each target's instances.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20
+              },
+              "waveS": {
+                "description": "Seconds each wave bakes before the next one (and before the halt check; default 60).",
+                "type": "number",
+                "minimum": 1,
+                "maximum": 3600
+              },
+              "slow": {
+                "description": "The new version is this many times slower (default 1).",
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "errorRate": {
+                "description": "Extra error rate of the new version (default 0).",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "crash": {
+                "description": "The new version crashes at start: updated instances go down.",
+                "type": "boolean"
+              },
+              "haltAt": {
+                "description": "Automatic rollback: after a wave bakes, if the updated instances failed more than this share of their requests (a crash always counts), every update is rolled back and the rollout stops. Omit: no check.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": ["type", "atS"],
+            "additionalProperties": false,
+            "description": "Deploy a new version (code or config), wave by wave. A bad version is slower, fails more, or crashes. Staged waves with a halt check limit the blast radius; one wave to everything is a global push."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "reshard" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "description": "Seconds the data copy to the new layout takes (default 60). Keys move at the end (the cutover).",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 86400
+              },
+              "node": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "A sharded database."
+              },
+              "toShards": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "description": "Shards after the cutover."
+              },
+              "copyLoad": {
+                "description": "Extra work of the copy while it runs: every shard is this much slower (0.5: 1.5 times the time; default 0.5).",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10
+              }
+            },
+            "required": ["type", "atS", "node", "toShards"],
+            "additionalProperties": false,
+            "description": "Resharding: split or merge the shards of a sharded database while it serves. The copy makes every shard slower for forS; then the keys are spread over toShards shards (a key goes to key mod toShards)."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "partition" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "regions": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                    "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                    "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "The two regions the network between is cut."
+              }
+            },
+            "required": ["type", "atS", "regions"],
+            "additionalProperties": false,
+            "description": "Network partition: calls and replication between the two regions are lost (callers time out); users reach both sides. A database with automatic failover and replicas on the other side promotes one there after failoverS while the old primary keeps taking writes from its side (split brain), unless its fencing is on."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "pause" },
+              "atS": { "type": "number", "minimum": 0, "description": "Start time in seconds." },
+              "forS": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Duration in seconds. Omit for \"until the end\"."
+              },
+              "node": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
+              "everyS": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 3600,
+                "description": "Seconds between pauses."
+              },
+              "pauseMs": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 60000,
+                "description": "Length of each stop-the-world pause."
+              }
+            },
+            "required": ["type", "atS", "node", "everyS", "pauseMs"],
+            "additionalProperties": false,
+            "description": "Periodic stop-the-world pauses (garbage collection): the node does no work while paused."
+          }
+        ]
+      }
+    },
+    "scale": {
+      "description": "Simulate 1/k of the traffic on 1/k of the capacity, then multiply the counts by k. auto (default): pick k so the run has about 300 000 requests. k stops where slots per instance reach 32, then instances reach 10. 1: full size.",
+      "anyOf": [
+        { "type": "number", "minimum": 1, "maximum": 1000 },
+        { "type": "string", "const": "auto" }
+      ]
+    }
+  },
+  "required": ["schema", "traffic"],
+  "additionalProperties": false,
+  "description": "Traffic and events to run a design against."
+}

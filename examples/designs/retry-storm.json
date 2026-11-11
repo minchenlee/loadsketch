@@ -1,0 +1,42 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "重試風暴（metastable failure）",
+  "description": "三層式網站，每一跳都設逾時 150 ms、重試 3 次。第 20–30 秒流量變 3 倍。突波結束後流量回到正常，但系統再也沒有恢復：每個請求試 4 次，API 一直收到約 4 倍流量，全部逾時。試試把連線的「重試預算」設成 0.1，或把重試改成 0。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": { "instances": 3, "concurrency": 4, "serviceMs": { "mean": 6, "cv": 1 } }
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "label": "Redis",
+      "pos": [920, 80],
+      "params": { "hitRatio": 0.85 }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 320],
+      "params": { "replicas": 1, "connections": 12 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api", "timeoutMs": 150, "retries": 3, "backoffMs": 10 },
+    { "from": "api", "to": "cache", "timeoutMs": 150, "retries": 3, "backoffMs": 10 },
+    { "from": "api", "to": "db", "timeoutMs": 150, "retries": 3, "backoffMs": 10 }
+  ]
+}

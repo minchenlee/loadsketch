@@ -1,0 +1,35 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "位置更新：寫入量大只能靠分片（參考 Uber）",
+  "description": "Uber 的司機 App 每幾秒回報一次位置，系統要一直寫入、再讓叫車請求找附近司機。Uber 用 Ringpop 的一致性雜湊把這些資料分到很多台機器。這個模型把位置存在分片資料庫，看尖峰時寫入讓分片主庫滿載；讀副本救不了寫入。",
+  "nodes": [
+    { "id": "drivers", "kind": "client", "label": "司機 App", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [270, 200] },
+    {
+      "id": "loc",
+      "kind": "service",
+      "label": "位置服務",
+      "pos": [540, 200],
+      "params": { "instances": 4, "concurrency": 32, "serviceMs": { "mean": 2, "cv": 1 } }
+    },
+    {
+      "id": "geo",
+      "kind": "sharded_db",
+      "label": "位置資料（分片）",
+      "pos": [810, 200],
+      "params": {
+        "shards": 4,
+        "replicas": 1,
+        "connections": 4,
+        "readMs": { "mean": 3, "cv": 1 },
+        "writeMs": { "mean": 5, "cv": 1 },
+        "queueLimit": 300
+      }
+    }
+  ],
+  "edges": [
+    { "from": "drivers", "to": "lb" },
+    { "from": "lb", "to": "loc" },
+    { "from": "loc", "to": "geo", "timeoutMs": 500 }
+  ]
+}

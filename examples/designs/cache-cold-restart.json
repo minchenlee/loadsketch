@@ -1,0 +1,53 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "快取停掉又冷啟動後的驚群（參考 Instagram）",
+  "description": "Instagram 的資料主要放在 PostgreSQL（一個主庫、各區域有副本），前面用 memcache 擋讀取。當快取被清空或失效，所有 Django 伺服器同時去查資料庫（thundering herd），他們用 memcache lease 解決。這個模型讓快取停 5 秒，恢復後是冷的，看資料庫副本被灌爆。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [270, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "django",
+      "kind": "service",
+      "label": "Django",
+      "pos": [540, 200],
+      "params": {
+        "instances": 6,
+        "concurrency": 32,
+        "serviceMs": { "mean": 5, "cv": 1 },
+        "queueLimit": 300
+      }
+    },
+    {
+      "id": "memcache",
+      "kind": "cache",
+      "label": "memcache",
+      "pos": [810, 80],
+      "params": { "mode": "lru", "capacityKeys": 30000, "instances": 3, "concurrency": 16 }
+    },
+    {
+      "id": "pg",
+      "kind": "database",
+      "label": "PostgreSQL",
+      "pos": [810, 320],
+      "params": {
+        "replicas": 2,
+        "connections": 8,
+        "readMs": { "mean": 6, "cv": 1 },
+        "writeMs": { "mean": 10, "cv": 1 },
+        "queueLimit": 300
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "django" },
+    { "from": "django", "to": "memcache" },
+    { "from": "django", "to": "pg", "timeoutMs": 500 }
+  ]
+}

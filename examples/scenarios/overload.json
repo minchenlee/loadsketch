@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "過載：第 20 秒起流量 2 倍，持續 40 秒",
+  "seed": 1,
+  "durationS": 80,
+  "warmupS": 0,
+  "traffic": { "rps": 1000, "readRatio": 0.9, "clientTimeoutMs": 1000 },
+  "events": [{ "type": "spike", "atS": 20, "forS": 40, "multiplier": 2 }]
+}

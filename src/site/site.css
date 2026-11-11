@@ -1,0 +1,661 @@
+/* The intro site. It uses the app's tokens and classes (src/app/index.css, docs/design-system.md);
+   only what a scrolling page needs is added here. Every animation is off at the end of this file
+   under prefers-reduced-motion. */
+
+/* the app fills the window and never scrolls; this page scrolls */
+html.site,
+html.site body,
+html.site #root {
+  height: auto;
+}
+html.site body {
+  /* the canvas dot grid, so the page and the simulator in it read as one surface */
+  background-image: radial-gradient(var(--grid) 1.2px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+
+.site-wrap {
+  width: 100%;
+  max-width: 1160px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+.site-wrap-wide {
+  max-width: 1320px;
+}
+
+/* floats over the page while it scrolls: glass */
+.site-nav {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---- type */
+
+.site-h1 {
+  font-size: clamp(44px, 9.2vw, 112px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  font-weight: 750;
+  word-break: keep-all;
+}
+.site-h1-end {
+  font-size: clamp(40px, 7.4vw, 88px);
+}
+.site-h2 {
+  font-size: clamp(28px, 4vw, 46px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  text-wrap: balance;
+}
+/* beside a simulator the column is narrow: smaller, so a Chinese title takes two lines, not four */
+.site-feature .site-h2 {
+  font-size: clamp(28px, 3.1vw, 40px);
+}
+.site-h3 {
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+.site-lead {
+  font-size: clamp(17px, 1.9vw, 21px);
+  line-height: 1.55;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+/* "breaks": the status colour of a failure, the same red a failed request has on the canvas */
+.site-h1 em {
+  font-style: normal;
+  color: var(--bad);
+}
+.site-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.site-link svg {
+  transition: transform 0.3s var(--spring);
+}
+.site-link:hover svg {
+  transform: translateX(4px);
+}
+.btn.site-cta {
+  height: auto;
+  gap: 8px;
+  padding: 11px 20px;
+  font-size: 17px;
+  border-radius: 12px;
+}
+/* the primary call to action, on hover: the same gradient, a little brighter, and the arrow moves on.
+   (.btn-primary:hover changes the gradient to a flat darker colour; a gradient cannot ease, so on a
+   button this large it jumps.) */
+.btn-primary.site-cta {
+  transition:
+    filter var(--dur),
+    transform 0.3s var(--spring);
+}
+.btn-primary.site-cta:hover:not(:disabled) {
+  background: linear-gradient(to bottom, var(--accent-top), var(--accent));
+  filter: brightness(1.12);
+}
+.btn-primary.site-cta svg {
+  transition: transform 0.3s var(--spring);
+}
+.btn-primary.site-cta:hover svg {
+  transform: translateX(3px);
+}
+.btn.site-round {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+/* ---- entrance: the headline comes in line by line, then the rest rises */
+
+.site-line {
+  display: block;
+  animation: site-line 0.8s var(--spring) both;
+}
+.site-line:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.site-line:nth-child(3) {
+  animation-delay: 0.24s;
+}
+@keyframes site-line {
+  0% {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateY(0.35em) scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+.site-rise {
+  animation: site-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) 0.42s both;
+}
+@keyframes site-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+.site-reveal {
+  opacity: 0;
+  transform: translateY(26px) scale(0.985);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.8s var(--spring);
+}
+.site-reveal[data-seen] {
+  opacity: 1;
+  transform: none;
+}
+.site-caption {
+  animation: site-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* ---- a window frame: the live simulator, a screenshot, the terminal. Solid: what is inside is data */
+
+.site-window {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow:
+    0 30px 60px -20px rgb(0 0 0 / 0.28),
+    0 12px 24px -12px rgb(0 0 0 / 0.18);
+  text-align: left;
+}
+.site-live iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.site-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line);
+}
+.site-bar i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.site-bar-url {
+  flex: 1;
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.site-bar-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ok);
+}
+.site-bar-live::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: site-pulse 1.6s ease-out infinite;
+}
+@keyframes site-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+/* the hero simulator: it leans back, and stands up as the page scrolls */
+.site-stage {
+  position: relative;
+}
+.site-stage-tilt {
+  position: relative;
+  transform-origin: 50% 0;
+  will-change: transform;
+}
+
+/* ---- a feature: words on one side, the simulator on the other */
+
+.site-feature {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 9fr);
+  gap: 48px;
+  align-items: center;
+}
+.site-feature[data-flip] > :first-child {
+  order: 2;
+}
+.site-feature[data-flip] {
+  grid-template-columns: minmax(0, 9fr) minmax(0, 4fr);
+}
+@media (max-width: 960px) {
+  .site-feature,
+  .site-feature[data-flip] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .site-feature[data-flip] > :first-child {
+    order: 0;
+  }
+}
+
+/* ---- the feature carousel: screenshots side by side; the one in the middle is the current one */
+
+.site-slides {
+  /* no wider than lets the whole screenshot and its words show in one window */
+  --slide: min(1040px, 84vw, max(420px, calc((100svh - 370px) * 1.6)));
+  display: flex;
+  gap: 28px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 8px calc((100% - var(--slide)) / 2) 36px;
+  scrollbar-width: none;
+  outline: none;
+}
+.site-slides::-webkit-scrollbar {
+  display: none;
+}
+.site-slides:focus-visible .site-slide[data-on] {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.site-slide {
+  flex: none;
+  width: var(--slide);
+  scroll-snap-align: center;
+  opacity: 0.45;
+  transform: scale(0.94);
+  cursor: pointer;
+  transition:
+    opacity 0.35s,
+    transform 0.6s var(--spring);
+}
+.site-slide[data-on] {
+  opacity: 1;
+  transform: none;
+  cursor: zoom-in;
+}
+.site-bar-zoom {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--ink-3);
+  cursor: zoom-in;
+}
+.site-bar-zoom:hover {
+  color: var(--ink);
+  background: var(--line);
+}
+/* the current screenshot, large, over the page */
+.site-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  overflow: auto;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.8);
+  cursor: zoom-out;
+}
+.site-zoom img {
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+}
+.site-zoom-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+}
+.site-slide img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+.site-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  transition:
+    transform 0.35s var(--spring),
+    background var(--dur);
+}
+.site-dot[data-on] {
+  background: var(--ink);
+  transform: scale(1.35);
+}
+
+/* ---- example names that drift past */
+
+.site-marquee {
+  display: grid;
+  gap: 12px;
+  /* room for a chip that grows on hover: the mask cuts at the edge of this box */
+  padding-block: 6px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.site-marquee-row {
+  display: flex;
+  width: max-content;
+  animation: site-marquee 60s linear infinite;
+}
+.site-marquee-row[data-back] {
+  animation-direction: reverse;
+}
+.site-marquee:hover .site-marquee-row {
+  animation-play-state: paused;
+}
+.site-marquee-set {
+  display: flex;
+  gap: 12px;
+  padding-right: 12px;
+}
+@keyframes site-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.site-chip {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 15px;
+  white-space: nowrap;
+  transition:
+    transform 0.3s var(--spring),
+    color var(--dur),
+    border-color var(--dur);
+}
+.site-chip:hover {
+  transform: scale(1.07);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- the terminal */
+
+.site-term pre {
+  margin: 0;
+  padding: 18px 20px 22px;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.site-term-cmd {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---- small screens */
+
+/* a small screen cannot work a canvas inside a scrolling page: the simulator plays, the page scrolls */
+@media (max-width: 720px) {
+  .site-live iframe {
+    pointer-events: none;
+  }
+  /* the simulator's phone layout: as tall as a phone, inside one window */
+  .site-live-phone {
+    height: min(600px, 72svh);
+  }
+  /* .btn sets its own display, so a utility class cannot hide it */
+  .btn.site-wide {
+    display: none;
+  }
+  .site-wrap {
+    padding-inline: 14px;
+  }
+  /* unlayered, so it wins over the utility classes on the nav */
+  .site-nav {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+  .site-nav .btn {
+    padding-inline: 7px;
+  }
+  .site-slides {
+    --slide: 90vw;
+    gap: 14px;
+  }
+  /* full height; the picture is wider than the screen and pans sideways */
+  .site-zoom {
+    padding: 0;
+  }
+  .site-zoom img {
+    max-width: none;
+    height: 82svh;
+    max-height: none;
+    margin: auto 12px;
+  }
+  .site-term pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: 14px;
+    font-size: 11.5px;
+  }
+  .site-chip {
+    padding: 7px 13px;
+    font-size: 13.5px;
+  }
+  .site-bar {
+    height: 28px;
+  }
+  .site-bar i {
+    width: 8px;
+    height: 8px;
+  }
+}
+
+/* ---- the footer: it can be broken and fixed (Footer in main.tsx) */
+.site-foot {
+  padding-bottom: 40px;
+}
+.site-foot-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 14px;
+  font-size: 14px;
+}
+.site-foot-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  transition: background var(--dur);
+}
+.site-foot-chart path {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.site-foot[data-broken] .site-foot-chart path {
+  stroke: var(--bad);
+}
+.site-foot-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+  font-size: 14px;
+  transform-origin: 0 0;
+  transition: transform 0.7s var(--spring), border-color var(--dur);
+}
+.site-foot-part {
+  position: relative;
+  display: inline-block;
+  transition: transform 0.7s var(--spring);
+}
+.site-foot[data-broken] .site-foot-dot {
+  background: var(--bad);
+}
+.site-foot[data-broken] .site-foot-row {
+  border-color: var(--bad);
+}
+/* links dropped: the rule hangs from its left end, and every part drops out of line */
+.site-foot[data-fault='drop'] .site-foot-row {
+  transform: rotate(1.2deg);
+}
+.site-foot[data-fault='drop'] .site-foot-part {
+  transform: translateY(var(--y)) rotate(var(--r));
+}
+.site-foot[data-fault='drop'] .site-foot-part:nth-child(3) { transition-delay: 60ms; }
+.site-foot[data-fault='drop'] .site-foot-part:nth-child(4) { transition-delay: 120ms; }
+.site-foot[data-fault='drop'] .site-foot-part:nth-child(5) { transition-delay: 180ms; }
+/* retry storm: every link is sent again and again (two more copies), and shakes under the load */
+.site-foot a.site-foot-part::before,
+.site-foot a.site-foot-part::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0 auto auto 0;
+  white-space: nowrap;
+  color: var(--bad);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.5s var(--spring), opacity var(--dur);
+}
+.site-foot[data-fault='storm'] a.site-foot-part::before {
+  opacity: 0.55;
+  transform: translate(-7px, -9px);
+}
+.site-foot[data-fault='storm'] a.site-foot-part::after {
+  opacity: 0.3;
+  transform: translate(8px, -18px);
+}
+.site-foot[data-fault='storm'] a.site-foot-part {
+  animation: site-foot-shake 0.32s linear infinite;
+}
+.site-foot[data-fault='storm'] a.site-foot-part:nth-child(4) { animation-delay: -0.1s; }
+.site-foot[data-fault='storm'] a.site-foot-part:nth-child(5) { animation-delay: -0.2s; }
+@keyframes site-foot-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(1.5px, -1px); }
+  50% { transform: translate(-1px, 1.5px); }
+  75% { transform: translate(-1.5px, -0.5px); }
+}
+/* network partition: the two sides move apart, and the rule between them is cut */
+.site-foot[data-fault='partition'] .site-foot-row {
+  border-top-style: dashed;
+}
+.site-foot[data-fault='partition'] .site-foot-part {
+  transform: translate(calc(var(--side) * 14px), calc((var(--side) + 1) * 7px)) rotate(calc(var(--side) * 1.6deg));
+}
+/* the incident log: what happened, in time order */
+.site-foot-log {
+  margin-top: 30px;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.site-foot-line {
+  display: flex;
+  gap: 12px;
+  animation: site-foot-in 0.3s ease-out;
+}
+.site-foot-line > .num {
+  width: 40px;
+  flex: none;
+  text-align: right;
+}
+.site-foot-line[data-ok] {
+  color: var(--ok);
+}
+@keyframes site-foot-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary.site-cta svg,
+  .btn-primary.site-cta {
+    transition: none;
+  }
+  .site-foot-row,
+  .site-foot-part,
+  .site-foot a.site-foot-part::before,
+  .site-foot a.site-foot-part::after {
+    transition: none;
+  }
+  .site-foot[data-fault='storm'] a.site-foot-part,
+  .site-foot-line {
+    animation: none;
+  }
+  .site-line,
+  .site-rise,
+  .site-caption,
+  .site-bar-live::before,
+  .site-marquee-row {
+    animation: none;
+  }
+  .site-marquee {
+    overflow-x: auto;
+  }
+  .site-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .site-slide,
+  .site-dot,
+  .site-chip,
+  .site-link svg {
+    transition: none;
+  }
+  .site-chip:hover,
+  .site-link:hover svg {
+    transform: none;
+  }
+}

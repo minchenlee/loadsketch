@@ -1,0 +1,48 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "網路分區：兩個主庫（split brain）",
+  "description": "東西兩區各有一組 API，DNS 把使用者平均分到兩區。資料庫的主庫在東區，副本在西區，開了自動 failover。情境在第 20 秒切斷兩區之間的網路 40 秒。西區連不到主庫，以為它故障：failover 時間過後，西區的副本升為新主庫。可是舊主庫還活著，東區的使用者還在寫它：兩邊各自收寫入，分區結束後資料分歧（看資料庫的「分歧寫入」和時間軸）。試試看：把資料庫的「隔離舊主庫（fencing）」打開再跑一次。不再分歧，代價是分區期間東區的寫入失敗。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 250] },
+    { "id": "dns", "kind": "dns", "label": "DNS", "pos": [250, 250] },
+    {
+      "id": "api_e",
+      "kind": "service",
+      "label": "API（東區）",
+      "region": "us-east",
+      "pos": [500, 100],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 0.5 } }
+    },
+    {
+      "id": "api_w",
+      "kind": "service",
+      "label": "API（西區）",
+      "region": "us-west",
+      "pos": [500, 400],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 0.5 } }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "資料庫（主庫東區，副本西區）",
+      "region": "us-east",
+      "replicaRegion": "us-west",
+      "pos": [800, 250],
+      "params": {
+        "replicas": 1,
+        "connections": 64,
+        "readMs": { "mean": 3, "cv": 0.5 },
+        "writeMs": { "mean": 6, "cv": 0.5 },
+        "failover": "auto",
+        "failoverS": 10
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "dns" },
+    { "from": "dns", "to": "api_e" },
+    { "from": "dns", "to": "api_w" },
+    { "from": "api_e", "to": "db", "timeoutMs": 500 },
+    { "from": "api_w", "to": "db", "timeoutMs": 500 }
+  ]
+}

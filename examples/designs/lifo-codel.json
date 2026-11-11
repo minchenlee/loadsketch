@@ -1,0 +1,35 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "過載時的排隊：adaptive LIFO + CoDel",
+  "description": "API 伺服器 2 台，每台 16 個位置、每個請求約 20 ms，最多每秒處理約 1600 個。第 20 秒起流量變成 2000/秒，超過容量。一般的先來先做（FIFO）佇列越排越長，輪到的請求早就逾時：80% 的請求失敗。這裡用 Facebook 的做法：塞車時改成後來先做（adaptive LIFO），排太久的請求輪到時直接丟掉（CoDel）。伺服器一樣滿載，但做的都是有人在等的請求：只有 24% 失敗，大約就是超過容量的那部分，而且是馬上失敗，不是等 1 秒逾時。把「排隊順序」改回 FIFO、「CoDel 排隊目標」改成 0 比較看看。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [320, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [620, 200],
+      "params": {
+        "instances": 2,
+        "concurrency": 16,
+        "serviceMs": { "mean": 20, "cv": 1 },
+        "queueLimit": 5000,
+        "queueOrder": "adaptive_lifo",
+        "codelTargetMs": 5
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [950, 200],
+      "params": { "connections": 64 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" }
+  ]
+}

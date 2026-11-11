@@ -1,0 +1,39 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "週期流量（每日高峰、整點排程、GC）",
+  "description": "API 伺服器 5 台，每台 8 個槽，最多約 2,000 rps。流量照一天的起伏變化（壓縮成 120 秒一輪），尖峰是平日的 1.5 倍，離峰是 0.5 倍。每 60 秒有一次排程工作（cron），所有使用者在同 1 秒內一起送出，那 1 秒流量變 6 倍，佇列滿了就開始失敗（約 4%）。API 伺服器每 2 秒做一次 GC，停 120 ms；每台的 GC 時間錯開。試試「排程加上 jitter」情境：同樣的請求分散到 10 秒內送出，就沒有失敗。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": {
+        "instances": 5,
+        "concurrency": 8,
+        "serviceMs": { "mean": 20, "cv": 1 },
+        "queueLimit": 100
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 200],
+      "params": { "replicas": 1, "connections": 64 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" }
+  ]
+}

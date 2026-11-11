@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "尖峰時段：第 10 秒起 30 秒內流量爬到 2.5 倍",
+  "seed": 1,
+  "durationS": 60,
+  "traffic": { "rps": 1500, "readRatio": 0.2 },
+  "keys": { "count": 100000, "zipf": 0 },
+  "events": [{ "type": "ramp", "atS": 10, "forS": 30, "toMultiplier": 2.5 }]
+}

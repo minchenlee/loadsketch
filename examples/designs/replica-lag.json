@@ -1,0 +1,28 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "讀取副本的複製延遲",
+  "description": "讀取全部送到兩個資料庫副本。主庫寫完後，約 300 ms 才把寫入送到副本，所以剛寫完的資料，讀副本會讀到舊的（replication lag）。試試把「副本延遲上限」設成 200 ms：太落後的副本不接讀取，改讀主庫，舊資料變少，但主庫變忙。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [600, 200],
+      "params": { "instances": 3, "concurrency": 8, "serviceMs": { "mean": 5, "cv": 1 } }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 200],
+      "params": { "replicas": 2, "connections": 20, "readFrom": "replicas", "replicaDelayMs": 300 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "上傳後非同步處理（佇列＋worker）",
+  "description": "API 收到上傳先存進物件儲存，再丟一則訊息到佇列就回應；worker 從佇列拿訊息慢慢做（例如產生縮圖），寫回資料庫。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "gw", "kind": "api_gateway", "label": "API Gateway", "pos": [270, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "上傳 API",
+      "pos": [540, 200],
+      "params": { "instances": 2, "concurrency": 16 }
+    },
+    { "id": "blob", "kind": "object_storage", "label": "S3", "pos": [840, 60] },
+    { "id": "jobs", "kind": "queue", "label": "工作佇列", "pos": [840, 240] },
+    {
+      "id": "thumb",
+      "kind": "worker",
+      "label": "縮圖 worker",
+      "pos": [1130, 240],
+      "params": { "instances": 2, "concurrency": 4, "serviceMs": { "mean": 40, "cv": 0.5 } }
+    },
+    { "id": "db", "kind": "database", "label": "Postgres", "pos": [1430, 240] }
+  ],
+  "edges": [
+    { "from": "users", "to": "gw" },
+    { "from": "gw", "to": "api" },
+    { "from": "api", "to": "blob", "on": "write" },
+    { "from": "api", "to": "jobs", "on": "write" },
+    { "from": "api", "to": "db", "on": "read" },
+    { "from": "jobs", "to": "thumb" },
+    { "from": "thumb", "to": "db" }
+  ]
+}

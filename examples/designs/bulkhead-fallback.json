@@ -1,0 +1,46 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "隔艙＋降級回應",
+  "description": "和「慢的依賴拖垮整個服務」同一個設計，API 到推薦服務的線加上：隔艙（每台最多同時 4 個呼叫）和降級回應（失敗時改用預設推薦清單）。推薦服務變慢時，最多只有 4 個槽卡住，其他呼叫立刻改用備用回應：沒有請求失敗，約 8 成的請求是降級回應。只開其中一個都不夠：只有降級回應，槽還是被卡滿；只有隔艙，被擋下的呼叫直接讓請求失敗。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "商品頁 API",
+      "pos": [590, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 32,
+        "serviceMs": { "mean": 5, "cv": 0.5 },
+        "queueLimit": 100
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 100],
+      "params": { "connections": 64 }
+    },
+    {
+      "id": "recs",
+      "kind": "service",
+      "label": "推薦服務",
+      "pos": [920, 320],
+      "params": {
+        "instances": 2,
+        "concurrency": 64,
+        "serviceMs": { "mean": 20, "cv": 0.5 },
+        "queueLimit": 200
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" },
+    { "from": "api", "to": "recs", "timeoutMs": 1000, "bulkhead": 4, "fallback": "on" }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "分片資料庫與熱點",
+  "description": "寫入量大到一台主庫撐不住時，把資料按 key 分到 4 個分片。key 的熱門程度不平均（Zipf），最熱的 key 會讓某個分片特別忙。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [270, 200],
+      "params": { "policy": "p2c" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [540, 200],
+      "params": { "instances": 4, "concurrency": 16 }
+    },
+    {
+      "id": "db",
+      "kind": "sharded_db",
+      "label": "分片資料庫",
+      "pos": [860, 200],
+      "params": { "shards": 4, "connections": 8, "writeMs": { "mean": 8, "cv": 1 } }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "流量暴增時開不了新機器（開機依賴）",
+  "description": "API 伺服器開了自動擴充：忙的時候加機器，每台新機器開機時要向「機器設定服務」拿設定（線設成「只在開機時用」）。情境在第 20 秒流量變 3 倍，同一時間機器設定服務也被擠爆（90% 出錯），像 2021 年 1 月 Slack 假期後的第一個上班日：流量暴增，而開新機器要走的網路和服務正是被擠爆的那些。新機器一直開機失敗（看 API 的「開機失敗」和時間軸），只剩原本 4 台扛 3 倍的流量。試試看：把 API → 機器設定服務那條線刪掉（把設定打包進映像檔，開機不必呼叫別人），再跑一次：新機器 15 秒後上線。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [250, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器（自動擴充）",
+      "pos": [500, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 16,
+        "serviceMs": { "mean": 20, "cv": 0.5 },
+        "queueLimit": 2000,
+        "autoscale": "on",
+        "maxInstances": 16,
+        "targetUtil": 0.6,
+        "scaleEveryS": 5,
+        "bootS": 15,
+        "warmS": 0,
+        "scaleDownS": 60
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "資料庫",
+      "pos": [800, 120],
+      "params": {
+        "connections": 128,
+        "readMs": { "mean": 3, "cv": 0.5 },
+        "writeMs": { "mean": 6, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "prov",
+      "kind": "service",
+      "label": "機器設定服務",
+      "pos": [800, 320],
+      "params": { "instances": 2, "concurrency": 8, "serviceMs": { "mean": 50, "cv": 0.3 } }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb", "timeoutMs": 2000 },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db", "timeoutMs": 500 },
+    { "from": "api", "to": "prov", "on": "boot", "timeoutMs": 2000 }
+  ]
+}

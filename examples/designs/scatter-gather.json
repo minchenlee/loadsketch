@@ -1,0 +1,38 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "扇出查詢（scatter-gather）",
+  "description": "搜尋要問每個分片：搜尋 API 把每個查詢同時送給 16 個分片（扇出 16），等全部回來才合併結果。一個分片讀一次平均 8 ms，但查詢要等 16 個裡最慢的那個，所以長尾被放大：只問一個分片時 p50 51 ms、p99 82 ms；問 16 個時 p50 71 ms、p99 106 ms（含使用者來回 40 ms）。第 20 秒起分片 5 變慢 10 倍。每個查詢都會碰到它，變慢期間 p99 升到約 413 ms。把這條線的「Quorum」設成 15（少一個分片也先回結果，像 Google 的 good-enough 回應）：p99 降到約 99 ms，代價是少數結果缺一個分片。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "搜尋 API",
+      "pos": [640, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 128,
+        "serviceMs": { "mean": 3, "cv": 0.3 },
+        "queueLimit": 500
+      }
+    },
+    {
+      "id": "index",
+      "kind": "sharded_db",
+      "label": "搜尋索引（16 個分片）",
+      "pos": [960, 200],
+      "params": {
+        "shards": 16,
+        "connections": 64,
+        "readMs": { "mean": 8, "cv": 1 },
+        "writeMs": { "mean": 20, "cv": 1 }
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "index", "fanout": 16, "timeoutMs": 1000 }
+  ]
+}

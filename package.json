@@ -1,0 +1,66 @@
+{
+  "name": "loadsketch",
+  "version": "0.1.0",
+  "description": "System design simulator: sketch an architecture, send traffic through it, and see what breaks first.",
+  "license": "MIT",
+  "author": "Minchen Lee",
+  "homepage": "https://loadsketch.mclee.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minchenlee/loadsketch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/minchenlee/loadsketch/issues"
+  },
+  "keywords": [
+    "system-design",
+    "simulator",
+    "discrete-event-simulation",
+    "queueing-theory",
+    "distributed-systems",
+    "terraform"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "type": "module",
+  "bin": {
+    "loadsketch": "./cli/loadsketch.ts"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p . && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "test:engine": "vitest run tests",
+    "test:quick": "vitest run --exclude tests/format.test.ts --exclude tests/learn.test.ts --exclude tests/timescale.test.ts --exclude tests/constraints.test.ts --exclude tests/components.test.ts --exclude tests/oncall.test.ts --exclude tests/queueing.test.ts --exclude tests/golden.test.ts --exclude tests/import/limit.test.ts && node scripts/i18n-extract.ts --check",
+    "test:slow": "vitest run tests/format.test.ts tests/learn.test.ts tests/timescale.test.ts tests/constraints.test.ts tests/components.test.ts tests/oncall.test.ts tests/queueing.test.ts tests/golden.test.ts tests/import/limit.test.ts",
+    "i18n:check": "node scripts/i18n-extract.ts --check",
+    "e2e": "playwright test",
+    "loadsketch": "node cli/loadsketch.ts",
+    "schema": "node cli/loadsketch.ts schema --write"
+  },
+  "dependencies": {
+    "@xyflow/react": "12.12.1",
+    "lucide-react": "1.70.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "uplot": "1.6.32",
+    "zod": "4.6.7",
+    "zustand": "5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.0",
+    "@tailwindcss/vite": "4.3.5",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "rolldown": "1.2.16",
+    "tailwindcss": "4.3.5",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  }
+}

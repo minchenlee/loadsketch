@@ -1,0 +1,15 @@
+.DS_Store
+*.log
+dist/
+node_modules/
+playwright-report/
+runs/
+test-results/
+
+# Terraform fixture work files (the lock file is committed)
+tests/import/fixtures/*/.terraform/
+tests/import/fixtures/*/plan.bin
+tests/import/fixtures/*/plan.raw.json
+
+# TypeScript build cache
+*.tsbuildinfo

@@ -1,0 +1,39 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Hedged requests（壓低長尾延遲）",
+  "description": "API 伺服器 4 台。第 20 秒起，第 1 台變慢 6 倍（還沒壞到會失敗，只是慢）。負載平衡器照樣把四分之一的請求給它，沒有對沖時 p99 從 84 ms 跳到 218 ms。這條線開了對沖請求（hedged request）：讀取送出 40 ms 還沒回應，就再送一份給另一台，先成功的算數。p99 降到 114 ms，代價是多送約 15% 的請求，輸的那份下游仍會做完。對沖只用在讀取，寫入重送不安全。把「對沖請求」改成 0 比較看看。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "round_robin" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [640, 360],
+      "params": {
+        "instances": 4,
+        "concurrency": 64,
+        "serviceMs": { "mean": 20, "cv": 0.3 },
+        "queueLimit": 200
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [960, 360],
+      "params": { "connections": 64 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api", "timeoutMs": 1000, "hedgeMs": 40 },
+    { "from": "api", "to": "db" }
+  ]
+}

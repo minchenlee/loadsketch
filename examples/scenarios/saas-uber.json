@@ -1,0 +1,13 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "跨年夜：流量爬到 3 倍，第 60 秒一台地理索引副本變慢 5 倍",
+  "seed": 1,
+  "durationS": 90,
+  "warmupS": 5,
+  "traffic": { "rps": 2000, "readRatio": 0.3 },
+  "keys": { "count": 50000, "zipf": 0.6 },
+  "events": [
+    { "type": "ramp", "atS": 10, "forS": 30, "toMultiplier": 3 },
+    { "type": "slow", "atS": 60, "node": "geo", "instance": 1, "multiplier": 5 }
+  ]
+}

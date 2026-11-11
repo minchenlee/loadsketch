@@ -1,0 +1,78 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "整區撤出：流量移到另一區，快取要先熱",
+  "description": "兩個區域各有一組 API 和快取，資料庫在東區。DNS 先把全部流量送到東區。情境在第 30 秒把流量整個移到西區（流量移轉事件）。兩個快取之間的線是跨區複製：一邊寫入或刪除快取，會在跨區延遲之後套到另一邊，所以西區快取一直是熱的。試試看：刪掉兩條快取之間的線再跑一次，西區接手後命中率掉下來，資料庫的讀取量突然變大。沒有跨區複製時，另一個做法是把移轉時間改長（例如 20 秒）：西區先接一小部分流量，快取自己慢慢熱起來。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 250] },
+    { "id": "dns", "kind": "dns", "label": "DNS", "pos": [250, 250] },
+    {
+      "id": "api_e",
+      "kind": "service",
+      "label": "API（東區）",
+      "region": "us-east",
+      "pos": [500, 100],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 0.5 } }
+    },
+    {
+      "id": "api_w",
+      "kind": "service",
+      "label": "API（西區）",
+      "region": "us-west",
+      "pos": [500, 400],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 0.5 } }
+    },
+    {
+      "id": "cache_e",
+      "kind": "cache",
+      "label": "快取（東區）",
+      "region": "us-east",
+      "pos": [780, 100],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 20000,
+        "ttlS": 600,
+        "instances": 2,
+        "concurrency": 64,
+        "opMs": { "mean": 0.3, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "cache_w",
+      "kind": "cache",
+      "label": "快取（西區）",
+      "region": "us-west",
+      "pos": [780, 400],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 20000,
+        "ttlS": 600,
+        "instances": 2,
+        "concurrency": 64,
+        "opMs": { "mean": 0.3, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "資料庫（東區）",
+      "region": "us-east",
+      "pos": [1060, 250],
+      "params": {
+        "connections": 32,
+        "readMs": { "mean": 4, "cv": 0.5 },
+        "writeMs": { "mean": 4, "cv": 0.5 }
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "dns" },
+    { "from": "dns", "to": "api_e", "weight": 1 },
+    { "from": "dns", "to": "api_w", "weight": 0 },
+    { "from": "api_e", "to": "cache_e" },
+    { "from": "api_e", "to": "db" },
+    { "from": "api_w", "to": "cache_w" },
+    { "from": "api_w", "to": "db" },
+    { "from": "cache_e", "to": "cache_w" },
+    { "from": "cache_w", "to": "cache_e" }
+  ]
+}

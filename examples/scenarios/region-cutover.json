@@ -1,0 +1,12 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "第 30 秒把流量從東區整個移到西區",
+  "seed": 1,
+  "durationS": 60,
+  "traffic": { "rps": 400, "readRatio": 0.9 },
+  "keys": { "count": 5000, "zipf": 0.8 },
+  "events": [
+    { "type": "shift", "atS": 30, "from": "dns", "to": "api_e", "weight": 0 },
+    { "type": "shift", "atS": 30, "from": "dns", "to": "api_w", "weight": 1 }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "熱門頻道造成熱分片（參考 Discord）",
+  "description": "Discord 把訊息依頻道（和時間區段）分到資料庫的分割區；一個超大伺服器在發公告時，所有人讀同一個頻道，這個分割區所在的節點就變成熱點，連帶拖慢同節點上的其他查詢。這個模型用 8 個分片和很集中的 key，看一個分片忙到滿、其他分片很閒。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [270, 200],
+      "params": { "policy": "p2c" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API",
+      "pos": [540, 200],
+      "params": { "instances": 4, "concurrency": 32, "serviceMs": { "mean": 3, "cv": 1 } }
+    },
+    {
+      "id": "data",
+      "kind": "service",
+      "label": "Data service",
+      "pos": [810, 200],
+      "params": { "instances": 4, "concurrency": 32, "serviceMs": { "mean": 1, "cv": 1 } }
+    },
+    {
+      "id": "messages",
+      "kind": "sharded_db",
+      "label": "訊息資料庫（分片）",
+      "pos": [1080, 200],
+      "params": {
+        "shards": 8,
+        "connections": 4,
+        "readMs": { "mean": 4, "cv": 1 },
+        "writeMs": { "mean": 6, "cv": 1 },
+        "queueLimit": 300
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "data" },
+    { "from": "data", "to": "messages", "timeoutMs": 1000 }
+  ]
+}

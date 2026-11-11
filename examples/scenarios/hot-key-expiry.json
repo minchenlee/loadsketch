@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "熱門 key 過期：3,000 rps，少數 key 特別熱",
+  "seed": 1,
+  "durationS": 60,
+  "warmupS": 0,
+  "traffic": { "rps": 3000, "readRatio": 1, "clientTimeoutMs": 1000 },
+  "keys": { "count": 200, "zipf": 1.2 }
+}

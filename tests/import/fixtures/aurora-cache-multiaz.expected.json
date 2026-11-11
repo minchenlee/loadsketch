@@ -1,0 +1,223 @@
+{
+  "$comment": "What the importer should make of aurora-cache-multiaz/main.tf. Format as ecs-rds.expected.json. Mostly the side where the checks do not fire. user_data references other resources, so it is unknown in the plan and DB_POOL_SIZE=20 cannot be read: the pool is the estimate 10.",
+  "components": [
+    {
+      "id": "client",
+      "kind": "client",
+      "from": "generated",
+      "note": "added and wired to the entry (the Route 53 record); CloudFront and the ALB are behind it"
+    },
+    {
+      "id": "autoscaling_group_app",
+      "kind": "service",
+      "from": "aws_autoscaling_group.app",
+      "params": {
+        "instances": 6,
+        "concurrency": 64,
+        "serviceMs": 5
+      },
+      "facts": {
+        "minInstances": 6,
+        "maxSize": 6,
+        "instanceType": "c6g.xlarge",
+        "zones": "us-east-1a,us-east-1b,us-east-1c",
+        "gracePeriodS": 90,
+        "vcpu": 4
+      },
+      "note": "min = max = desired = 6 and no scaling policy: autoscale off; c6g.xlarge = 4 vCPU (EC2 table)"
+    },
+    {
+      "id": "cloudfront_distribution_web",
+      "kind": "cdn",
+      "from": "aws_cloudfront_distribution.web",
+      "facts": {
+        "defaultTtlS": 60
+      },
+      "note": "hit ratio cannot be read: the cdn default"
+    },
+    {
+      "id": "elasticache_replication_group_cache",
+      "kind": "cache",
+      "from": "aws_elasticache_replication_group.cache",
+      "params": {
+        "instances": 2,
+        "concurrency": 4,
+        "opMs": 0.3
+      },
+      "facts": {
+        "numCacheClusters": 2,
+        "nodeType": "cache.r6g.large",
+        "engine": "redis",
+        "automaticFailover": true,
+        "multiAz": true,
+        "zones": "us-east-1a,us-east-1b,us-east-1c",
+        "vcpu": 2,
+        "memoryGiB": 16
+      },
+      "note": "num_cache_clusters 2, automatic failover and Multi-AZ on"
+    },
+    {
+      "id": "lb_web",
+      "kind": "load_balancer",
+      "from": "aws_lb.web",
+      "params": {
+        "healthCheck": "liveness",
+        "hcIntervalS": 10,
+        "hcThreshold": 2,
+        "hcTimeoutMs": 6000,
+        "policy": "round_robin"
+      },
+      "facts": {
+        "internal": false
+      },
+      "note": "health check interval 10 x unhealthy_threshold 2 (iac); internet-facing but behind CloudFront"
+    },
+    {
+      "id": "rds_cluster_main",
+      "kind": "database",
+      "from": "aws_rds_cluster.main",
+      "params": {
+        "replicas": 2,
+        "failover": "auto",
+        "failoverS": 30,
+        "readFrom": "replicas",
+        "connections": 8,
+        "readMs": 3,
+        "writeMs": 10
+      },
+      "facts": {
+        "instanceCount": 3,
+        "engine": "aurora-postgresql",
+        "instanceClass": "db.r6g.large",
+        "proxyMaxConnectionsPercent": 50,
+        "vcpu": 2,
+        "memoryGiB": 16,
+        "maxConnectionsAllMemory": 1802,
+        "maxConnectionsAfterReserve": 1658
+      },
+      "note": "3 instances = writer + 2 replicas; Aurora failover 30 s (AWS docs); RDS Proxy folded in (50%); aurora-postgresql db.r6g.large 16 GiB: max_connections 1802 (1658 after the reserve)"
+    },
+    {
+      "id": "route53_record_primary",
+      "kind": "dns",
+      "from": "aws_route53_record.primary",
+      "params": {
+        "failover": "on",
+        "ttlS": 60,
+        "detectS": 90
+      },
+      "facts": {
+        "requestInterval": 30,
+        "failureThreshold": 3
+      },
+      "note": "failover PRIMARY with a health check: detectS = 30 x 3 = 90"
+    }
+  ],
+  "notComponents": [
+    {
+      "address": "aws_rds_cluster_instance.main[0..2]",
+      "why": "folded into the cluster (replicas)"
+    },
+    {
+      "address": "aws_db_proxy.main / aws_db_proxy_default_target_group.main / aws_db_proxy_target.main",
+      "why": "folded into the cluster: the proxy limit for C1"
+    },
+    {
+      "address": "aws_launch_template.app",
+      "why": "read for the ASG: instance type and user_data"
+    },
+    {
+      "address": "aws_route53_health_check.web",
+      "why": "read for the record: detection time"
+    },
+    {
+      "address": "aws_lb_listener.http / aws_lb_target_group.app",
+      "why": "folded into the ALB -> ASG line"
+    },
+    {
+      "address": "aws_secretsmanager_secret.db / aws_iam_role.proxy",
+      "why": "permissions and secrets"
+    },
+    {
+      "address": "aws_vpc.main / aws_subnet.az[*] / aws_security_group.* / aws_elasticache_subnet_group.main",
+      "why": "network"
+    }
+  ],
+  "lines": [
+    {
+      "from": "lb_web",
+      "to": "autoscaling_group_app",
+      "kind": "definite",
+      "why": "listener -> target group <- ASG target_group_arns"
+    },
+    {
+      "from": "cloudfront_distribution_web",
+      "to": "lb_web",
+      "kind": "definite",
+      "why": "origin domain_name = aws_lb.web.dns_name"
+    },
+    {
+      "from": "route53_record_primary",
+      "to": "cloudfront_distribution_web",
+      "kind": "definite",
+      "why": "records = the distribution domain name"
+    },
+    {
+      "from": "autoscaling_group_app",
+      "to": "rds_cluster_main",
+      "kind": "presumed",
+      "through": "aws_db_proxy.main",
+      "why": "launch template user_data references aws_db_proxy.main.endpoint: the line goes through the proxy to the cluster"
+    },
+    {
+      "from": "autoscaling_group_app",
+      "to": "elasticache_replication_group_cache",
+      "kind": "presumed",
+      "why": "launch template user_data references the cache primary endpoint"
+    },
+    {
+      "from": "client",
+      "to": "route53_record_primary",
+      "kind": "definite",
+      "why": "generated entry line"
+    }
+  ],
+  "notLines": [
+    {
+      "from": "client",
+      "to": "lb_web",
+      "why": "the ALB is internet-facing, but CloudFront already sends to it"
+    }
+  ],
+  "findings": [
+    {
+      "check": "C4",
+      "evidence": "assumption",
+      "severity": "info",
+      "on": "autoscaling_group_app",
+      "why": "no peak rps given: report the most rps 6 instances can take; per-instance capacity is an estimate"
+    }
+  ],
+  "notFindings": [
+    {
+      "check": "C1",
+      "on": "rds_cluster_main",
+      "why": "through RDS Proxy: 6 x 10 = 60 < 50% of 1802 = 901"
+    },
+    {
+      "check": "C3",
+      "on": "*",
+      "why": "three AZs, cache with failover, Aurora with 3 instances"
+    },
+    {
+      "check": "C9",
+      "on": "*",
+      "why": "ALB 10 x 2 = 20 s; Route 53 30 x 3 = 90 s, not over 90"
+    },
+    {
+      "check": "C10",
+      "on": "rds_cluster_main",
+      "why": "the caller does not autoscale, and it has replicas"
+    }
+  ]
+}

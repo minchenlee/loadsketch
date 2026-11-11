@@ -1,0 +1,8 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "第 20 秒東西兩區之間網路分區 40 秒",
+  "seed": 1,
+  "durationS": 90,
+  "traffic": { "rps": 400, "readRatio": 0.7 },
+  "events": [{ "type": "partition", "atS": 20, "forS": 40, "regions": ["us-east", "us-west"] }]
+}

@@ -1,0 +1,39 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Gray failure（存活檢查看不到）",
+  "description": "API 伺服器 4 台。第 20 秒起，第 1 台變慢 15 倍，但程序還活著。負載平衡器只做存活檢查（liveness），所以一直以為它健康，照樣用輪流（round robin）分四分之一的請求給它：那台的佇列滿了，請求逾時或被拒絕。試試「自動剔除出錯的實例」版本：負載平衡器看到那台連續失敗，就暫時不送給它。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "round_robin", "healthCheck": "liveness" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 8,
+        "serviceMs": { "mean": 20, "cv": 0.5 },
+        "queueLimit": 50
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 200],
+      "params": { "connections": 64 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api", "timeoutMs": 500 },
+    { "from": "api", "to": "db" }
+  ]
+}

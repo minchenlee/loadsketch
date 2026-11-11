@@ -1,0 +1,125 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "GitHub 風格：43 秒網路分區，主庫被切到美西（2018-10-21）",
+  "description": "網頁與 API 的路徑：使用者 → DNS → GLB Director（L4）→ HAProxy（L7）→ Rails 應用 → 授權服務、Memcached、MySQL。寫入另外排進 webhook 佇列，由 worker 送給外部接收端。MySQL 主庫和兩個副本在美東，另兩個副本在美西，複製是非同步的；orchestrator 會在主庫失聯時把副本升為主庫。2018-10-21 UTC 22:52 更換光學設備的維護讓美東資料中心和網路樞紐斷線 43 秒。orchestrator 把美西的副本升為主庫；美東主庫上有幾秒還沒複製到美西的寫入（一個忙碌的叢集有 954 筆），無法安全地切回。網路恢復後，美東的應用每次寫入都要跨國往返，頁面變慢，降級持續 24 小時 11 分鐘。來源：https://github.blog/news-insights/company-news/oct21-post-incident-analysis/ 、https://github.blog/engineering/infrastructure/glb-director-open-source-load-balancer/ 、https://github.blog/engineering/infrastructure/mitigating-replication-lag-and-reducing-read-load-with-freno/ 、https://github.blog/engineering/infrastructure/stretching-spokes/ 。參數是教學用的縮小值。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者（網頁、API）", "pos": [0, 240] },
+    { "id": "dns", "kind": "dns", "label": "DNS", "pos": [270, 240] },
+    {
+      "id": "glb",
+      "kind": "load_balancer",
+      "label": "GLB Director（L4）",
+      "region": "us-east",
+      "pos": [540, 240]
+    },
+    {
+      "id": "haproxy",
+      "kind": "load_balancer",
+      "label": "HAProxy（L7）",
+      "region": "us-east",
+      "pos": [810, 240],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "web",
+      "kind": "service",
+      "label": "Rails 應用",
+      "region": "us-east",
+      "pos": [1080, 240],
+      "params": {
+        "instances": 6,
+        "concurrency": 16,
+        "serviceMs": { "mean": 15, "cv": 1 },
+        "queueLimit": 200
+      }
+    },
+    {
+      "id": "authz",
+      "kind": "service",
+      "label": "授權服務",
+      "region": "us-east",
+      "pos": [1350, 60],
+      "params": { "instances": 3, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 0.5 } }
+    },
+    {
+      "id": "memcached",
+      "kind": "cache",
+      "label": "Memcached",
+      "region": "us-east",
+      "pos": [1350, 240],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 60000,
+        "instances": 3,
+        "concurrency": 32,
+        "opMs": { "mean": 0.3, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "mysql",
+      "kind": "database",
+      "label": "MySQL 叢集（orchestrator 管理）",
+      "region": "us-east",
+      "replicaRegion": "us-west",
+      "pos": [1620, 240],
+      "params": {
+        "replicas": 4,
+        "localReplicas": 2,
+        "connections": 40,
+        "readMs": { "mean": 2, "cv": 1 },
+        "writeMs": { "mean": 4, "cv": 1 },
+        "replicaDelayMs": 3000,
+        "failover": "auto",
+        "failoverS": 20
+      }
+    },
+    {
+      "id": "hookq",
+      "kind": "queue",
+      "label": "Webhook 佇列",
+      "region": "us-east",
+      "pos": [1350, 460]
+    },
+    {
+      "id": "hooks",
+      "kind": "worker",
+      "label": "Webhook 遞送 worker",
+      "region": "us-east",
+      "pos": [1620, 460],
+      "params": { "instances": 4, "concurrency": 16, "serviceMs": { "mean": 5, "cv": 0.5 } }
+    },
+    {
+      "id": "receivers",
+      "kind": "service",
+      "label": "外部 webhook 接收端",
+      "pos": [1890, 460],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 80, "cv": 1 } }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "dns" },
+    { "from": "dns", "to": "glb" },
+    { "from": "glb", "to": "haproxy" },
+    { "from": "haproxy", "to": "web" },
+    { "from": "web", "to": "authz", "timeoutMs": 300 },
+    { "from": "web", "to": "memcached" },
+    { "from": "web", "to": "mysql", "timeoutMs": 1000 },
+    { "from": "web", "to": "hookq", "on": "write" },
+    { "from": "hookq", "to": "hooks" },
+    { "from": "hooks", "to": "receivers", "timeoutMs": 3000 }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "試試看：1) 跑情境：第 30 秒美東斷線，30–73 秒所有請求失敗（應用也在美東）。第 50 秒 orchestrator 把美西的副本升為主庫，遺失 932 筆還沒複製過去的寫入（真實事故：954 筆）。73 秒網路恢復，但主庫留在美西：每次寫入都要跨國往返，Rails 從 67% 忙到 90%，p99 從約 120 ms 變成約 165 ms。2) 把 MySQL 的 failover 時間改成 60 秒（比斷線久）：不會 failover，沒有遺失寫入，73 秒後一切恢復正常。斷線期間使用者的體驗一樣，因為應用也在斷線的那一區。3) 改回 20 秒，把複製延遲從 3000 ms 改成 300 ms：遺失降到約 110 筆。4) 把 Rails 改成 8 台：吸收得了跨國延遲，但寫入還是遺失了。",
+      "pos": [0, 680],
+      "width": 600
+    },
+    {
+      "id": "n2",
+      "text": "簡化：真實事故是網路分區，美東的主庫其實還活著、還收了幾秒寫入；這裡用「整區故障」表示。舊主庫回來後直接當副本，沒有模擬資料比對、從備份還原（真實事故花了 24 小時）。沒有半同步複製，也沒有「只在同一區 failover」的規則。webhook 在事故中被暫停、積壓超過 500 萬個，這裡只放了佇列和 worker。",
+      "pos": [660, 680],
+      "width": 560
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "第 20 秒一次把壞設定推到全部伺服器",
+  "seed": 1,
+  "durationS": 90,
+  "traffic": { "rps": 500, "readRatio": 0.8 },
+  "events": [{ "type": "rollout", "atS": 20, "waves": 1, "waveS": 10, "errorRate": 0.6 }]
+}

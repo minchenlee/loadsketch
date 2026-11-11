@@ -1,0 +1,50 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "過載時先丟 bot（優先級降載）",
+  "description": "三種流量進同一組 API：結帳（關鍵）、瀏覽（一般）、爬蟲 bot（可丟棄）。第 20 秒流量變 3 倍，API 排不下。API 設了降載門檻 0.2：排隊到上限的 20% 時，先拒絕 bot，結帳和瀏覽幾乎不受影響。把降載門檻改成 0 再跑一次，比較三個使用者的失敗數。",
+  "nodes": [
+    {
+      "id": "shop",
+      "kind": "client",
+      "label": "結帳",
+      "pos": [0, 60],
+      "params": { "weight": 1, "priority": "critical" }
+    },
+    { "id": "browse", "kind": "client", "label": "瀏覽", "pos": [0, 220], "params": { "weight": 3 } },
+    {
+      "id": "bots",
+      "kind": "client",
+      "label": "爬蟲 bot",
+      "pos": [0, 380],
+      "params": { "weight": 2, "priority": "batch" }
+    },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [340, 220] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [640, 220],
+      "params": {
+        "instances": 2,
+        "concurrency": 10,
+        "serviceMs": { "mean": 12, "cv": 1 },
+        "queueLimit": 300,
+        "shedAt": 0.2
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [980, 220],
+      "params": { "replicas": 1, "connections": 40 }
+    }
+  ],
+  "edges": [
+    { "from": "shop", "to": "lb" },
+    { "from": "browse", "to": "lb" },
+    { "from": "bots", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" }
+  ]
+}

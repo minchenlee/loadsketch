@@ -1,0 +1,11 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "一台實例變慢（gray failure）",
+  "seed": 1,
+  "durationS": 90,
+  "warmupS": 0,
+  "traffic": { "rps": 800, "readRatio": 0.9, "clientTimeoutMs": 2000 },
+  "events": [
+    { "type": "slow", "atS": 20, "forS": 60, "node": "api", "instance": 1, "multiplier": 15 }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "一台實例變慢 6 倍（長尾延遲，只有讀取）",
+  "seed": 1,
+  "durationS": 80,
+  "warmupS": 0,
+  "traffic": { "rps": 800, "readRatio": 1, "clientTimeoutMs": 2000 },
+  "events": [
+    { "type": "slow", "atS": 20, "forS": 40, "node": "api", "instance": 1, "multiplier": 6 }
+  ]
+}

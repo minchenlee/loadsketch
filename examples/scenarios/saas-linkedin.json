@@ -1,0 +1,12 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "負載測試：第 20–50 秒流量 1.25 倍，同時一台儲存節點變慢 10 倍",
+  "seed": 1,
+  "durationS": 80,
+  "warmupS": 10,
+  "traffic": { "rps": 3500, "readRatio": 0.9, "clientTimeoutMs": 2000 },
+  "events": [
+    { "type": "spike", "atS": 20, "forS": 30, "multiplier": 1.25 },
+    { "type": "slow", "atS": 20, "forS": 30, "node": "storage", "instance": 0, "multiplier": 10 }
+  ]
+}

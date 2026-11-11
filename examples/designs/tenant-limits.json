@@ -1,0 +1,42 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "每個租戶各自的額度",
+  "description": "SaaS API：大客戶的流量是小客戶的 9 倍。限流器設成「每個使用者（租戶）各一個額度」，每個租戶每秒最多 500 個，同時處理最多 40 個。大客戶超量只擋大客戶自己，小客戶不受影響。把「額度怎麼分」改成「全部共用一個」，看小客戶一起被擋。",
+  "nodes": [
+    { "id": "big", "kind": "client", "label": "大客戶", "pos": [0, 100], "params": { "weight": 9 } },
+    { "id": "small", "kind": "client", "label": "小客戶", "pos": [0, 300], "params": { "weight": 1 } },
+    {
+      "id": "rl",
+      "kind": "rate_limiter",
+      "label": "租戶限流",
+      "pos": [320, 200],
+      "params": {
+        "limit": "both",
+        "ratePerSec": 500,
+        "burst": 50,
+        "maxConcurrent": 40,
+        "scope": "per_client"
+      }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [640, 200],
+      "params": { "instances": 4, "concurrency": 32 }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [960, 200],
+      "params": { "connections": 40 }
+    }
+  ],
+  "edges": [
+    { "from": "big", "to": "rl" },
+    { "from": "small", "to": "rl" },
+    { "from": "rl", "to": "api" },
+    { "from": "api", "to": "db" }
+  ]
+}

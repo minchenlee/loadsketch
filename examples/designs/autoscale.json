@@ -1,0 +1,43 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "自動擴充（開機要時間）",
+  "description": "API 伺服器平常 2 台，忙碌率超過 60% 就自動加機器（最多 12 台）。每 1 分鐘看一次；新機器開機要 2 分鐘，上線後前 20 秒處理比較慢（冷啟動）。第 5 分鐘流量變 3 倍，加的機器 3 分鐘後才追上，這段時間約三成請求失敗。開機期間還在判斷「不夠」，所以會多加幾台；之後要連續 5 分鐘都用不到，才減回去（縮減穩定窗）。試試把開機時間改成 10 秒（預熱好的機器）或 5 分鐘。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": {
+        "instances": 2,
+        "concurrency": 8,
+        "serviceMs": { "mean": 20, "cv": 1 },
+        "queueLimit": 200,
+        "autoscale": "on",
+        "maxInstances": 12,
+        "targetUtil": 0.6,
+        "coldFactor": 3
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 200],
+      "params": { "replicas": 1, "connections": 64 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db" }
+  ]
+}

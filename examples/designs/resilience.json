@@ -1,0 +1,32 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "慢的下游：逾時、重試、保險絲",
+  "description": "訂單服務要呼叫付款服務。付款服務變慢時，沒有逾時和保險絲，訂單服務的執行緒會被卡住，整個網站跟著變慢。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [270, 200] },
+    {
+      "id": "orders",
+      "kind": "service",
+      "label": "訂單服務",
+      "pos": [540, 200],
+      "params": { "instances": 2, "concurrency": 16, "serviceMs": { "mean": 3, "cv": 1 } }
+    },
+    { "id": "cb", "kind": "circuit_breaker", "label": "保險絲", "pos": [840, 200] },
+    {
+      "id": "payments",
+      "kind": "service",
+      "label": "付款服務",
+      "pos": [1130, 200],
+      "params": { "instances": 2, "concurrency": 32, "serviceMs": { "mean": 20, "cv": 0.5 } }
+    },
+    { "id": "db", "kind": "database", "label": "訂單資料庫", "pos": [840, 360] }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "orders" },
+    { "from": "orders", "to": "db" },
+    { "from": "orders", "to": "cb", "on": "write" },
+    { "from": "cb", "to": "payments", "timeoutMs": 200, "retries": 1, "backoffMs": 50 }
+  ]
+}

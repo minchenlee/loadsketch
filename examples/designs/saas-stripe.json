@@ -1,0 +1,191 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Stripe 風格：一個 shard 選不出主庫，拖垮整個付款 API（2019-07-10）",
+  "description": "建立 PaymentIntent 的路徑：商家 SDK（指數退避 + jitter 重試）→ LB → 四層限流與降載（每個使用者的請求速率、每個使用者的並行數、保留機群給關鍵請求、worker 忙碌時先丟測試模式流量）→ 付款 API → idempotency 記錄 → DocDB proxy → 分片資料庫（每個 shard 是 replica set）→ 保險絲 → 卡組織授權。成功後非同步寫帳本（ledger）和送 webhook。2019-07-10 一個被 API 和多個應用共用的 shard 選不出主庫、停止接受寫入，API 的運算資源被卡住，大多數 API 請求失敗。來源：https://stripe.com/rcas/2019-07-10 、https://stripe.com/blog/rate-limiters 、https://stripe.com/blog/idempotency 、https://stripe.dev/blog/how-stripes-document-databases-supported-99.999-uptime-with-zero-downtime-data-migrations 、https://stripe.dev/blog/ledger-stripe-system-for-tracking-and-validating-money-movement 。參數是教學用的縮小值；卡組織呼叫方式與 idempotency 儲存位置 Stripe 未公開。",
+  "nodes": [
+    {
+      "id": "merchants",
+      "kind": "client",
+      "label": "商家伺服器（live mode）",
+      "pos": [0, 160],
+      "params": { "weight": 4, "priority": "critical" }
+    },
+    {
+      "id": "testmode",
+      "kind": "client",
+      "label": "測試模式腳本",
+      "pos": [0, 400],
+      "params": { "weight": 1, "priority": "batch" }
+    },
+    { "id": "dns", "kind": "dns", "label": "DNS", "pos": [250, 280] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "邊緣 LB",
+      "pos": [480, 280],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "reqlimit",
+      "kind": "rate_limiter",
+      "label": "請求速率限制（每個使用者，Redis）",
+      "pos": [710, 280],
+      "params": { "limit": "rate", "ratePerSec": 1500, "burst": 300, "scope": "per_client" }
+    },
+    {
+      "id": "conclimit",
+      "kind": "rate_limiter",
+      "label": "並行請求限制（每個使用者）",
+      "pos": [940, 280],
+      "params": { "limit": "concurrency", "maxConcurrent": 150, "scope": "per_client" }
+    },
+    {
+      "id": "fleetshed",
+      "kind": "rate_limiter",
+      "label": "Fleet usage 降載（非關鍵請求）",
+      "pos": [1170, 280],
+      "params": { "limit": "concurrency", "maxConcurrent": 40, "appliesTo": "batch" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "付款 API",
+      "pos": [1400, 280],
+      "params": {
+        "instances": 6,
+        "concurrency": 40,
+        "serviceMs": { "mean": 5, "cv": 1 },
+        "queueLimit": 200,
+        "shedAt": 0.5
+      }
+    },
+    {
+      "id": "idem",
+      "kind": "database",
+      "label": "Idempotency key 記錄",
+      "pos": [1660, 60],
+      "params": {
+        "replicas": 1,
+        "connections": 64,
+        "readMs": { "mean": 1, "cv": 1 },
+        "writeMs": { "mean": 2, "cv": 1 }
+      }
+    },
+    {
+      "id": "docproxy",
+      "kind": "service",
+      "label": "DocDB proxy（依 chunk 路由）",
+      "pos": [1660, 280],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 0.5, "cv": 0.5 } }
+    },
+    {
+      "id": "docdb",
+      "kind": "sharded_db",
+      "label": "DocDB（分片，每片 1 主 2 副本）",
+      "pos": [1920, 280],
+      "params": {
+        "shards": 4,
+        "replicas": 2,
+        "connections": 32,
+        "readMs": { "mean": 2, "cv": 1 },
+        "writeMs": { "mean": 5, "cv": 1 },
+        "queueLimit": 2000
+      }
+    },
+    {
+      "id": "cb",
+      "kind": "circuit_breaker",
+      "label": "保險絲（卡組織）",
+      "pos": [1660, 480],
+      "params": { "failureRatio": 0.5, "minCalls": 20, "windowS": 5, "openMs": 3000 }
+    },
+    {
+      "id": "network",
+      "kind": "service",
+      "label": "卡組織／發卡行授權（外部）",
+      "pos": [1920, 480],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 120, "cv": 0.6 } }
+    },
+    {
+      "id": "ledgerq",
+      "kind": "queue",
+      "label": "帳本事件（Kafka）",
+      "pos": [1660, 680],
+      "params": { "delivery": "at_least_once", "visibilityTimeoutMs": 30000, "maxReceives": 5 }
+    },
+    {
+      "id": "ledger",
+      "kind": "worker",
+      "label": "Ledger 記帳 worker（雙分錄）",
+      "pos": [1920, 680],
+      "params": { "instances": 3, "concurrency": 8, "serviceMs": { "mean": 4, "cv": 1 } }
+    },
+    {
+      "id": "ledgerdb",
+      "kind": "database",
+      "label": "Ledger（只追加）",
+      "pos": [2180, 680],
+      "params": { "connections": 32, "writeMs": { "mean": 3, "cv": 1 } }
+    },
+    {
+      "id": "hookq",
+      "kind": "queue",
+      "label": "Webhook 佇列",
+      "pos": [1660, 860],
+      "params": { "delivery": "at_least_once", "visibilityTimeoutMs": 30000, "maxReceives": 8 }
+    },
+    {
+      "id": "hooks",
+      "kind": "worker",
+      "label": "Webhook 投遞 worker",
+      "pos": [1920, 860],
+      "params": { "instances": 6, "concurrency": 32, "serviceMs": { "mean": 2, "cv": 1 } }
+    },
+    {
+      "id": "endpoint",
+      "kind": "service",
+      "label": "商家 webhook 端點（外部）",
+      "pos": [2180, 860],
+      "params": {
+        "instances": 4,
+        "concurrency": 64,
+        "serviceMs": { "mean": 150, "cv": 1 },
+        "errorRate": 0.02
+      }
+    }
+  ],
+  "edges": [
+    { "from": "merchants", "to": "dns", "retries": 2, "backoffMs": 500 },
+    { "from": "testmode", "to": "dns", "retries": 2, "backoffMs": 500 },
+    { "from": "dns", "to": "lb" },
+    { "from": "lb", "to": "reqlimit" },
+    { "from": "reqlimit", "to": "conclimit" },
+    { "from": "conclimit", "to": "fleetshed" },
+    { "from": "fleetshed", "to": "api" },
+    { "from": "api", "to": "idem", "on": "write" },
+    { "from": "api", "to": "docproxy" },
+    { "from": "api", "to": "cb", "on": "write" },
+    { "from": "api", "to": "ledgerq", "on": "write" },
+    { "from": "api", "to": "hookq", "on": "write" },
+    { "from": "docproxy", "to": "docdb" },
+    { "from": "cb", "to": "network", "latencyMs": 15, "timeoutMs": 1500 },
+    { "from": "ledgerq", "to": "ledger" },
+    { "from": "ledger", "to": "ledgerdb" },
+    { "from": "hookq", "to": "hooks" },
+    { "from": "hooks", "to": "endpoint", "latencyMs": 30, "timeoutMs": 2000 }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "試試看：1) 跑情境：第 20 秒起 shard 0 的主庫幾乎不回應（變慢 300 倍）。沒有逾時，等那個 shard 的請求佔著 API 和 DocDB proxy 的位置，並行限制器開始回 429，其他 shard 的付款也失敗（20–47 秒約 85% 失敗）。2) 只在 api→docproxy 加逾時 300 ms：更糟（約 95%），因為 proxy 還在等 DB，位置沒放出來。3) 再在 docproxy→docdb 加逾時 250 ms：失敗降到約 18%，大約就是落在 shard 0 的寫入（70% 寫入 × 1/4）。這就是 Stripe 事後說的「隔離單一 shard 故障」。4) 把商家重試改成 5 次，看重試放大負載。",
+      "pos": [0, 1040],
+      "width": 560
+    },
+    {
+      "id": "n2",
+      "text": "簡化：真實事故是 shard 選不出主庫（寫入不可用），模擬器沒有選主過程，這裡用「主庫極慢」表示。隔艙（bulkhead）是每條線一個上限，不是每個 shard 一個，所以不能用它隔離單一 shard。也沒有 idempotency 語意（同一個 key 重送不會重複扣款），重試在這裡會真的再跑一次。",
+      "pos": [620, 1040],
+      "width": 560
+    }
+  ]
+}

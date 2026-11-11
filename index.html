@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" class="site">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/src/app/assets/favicon.svg" />
+    <title>loadsketch: sketch a system, send traffic, see what breaks first</title>
+    <meta name="description" content="loadsketch is a system design simulator. Put components on a canvas, connect them, send traffic, and see where requests queue, how latency grows, and what breaks first." />
+    <meta property="og:title" content="loadsketch" />
+    <meta property="og:description" content="Sketch a system. Send traffic. See what breaks first." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://loadsketch.mclee.dev/" />
+    <script>
+      // A share link (#s=…) made before the simulator moved to /app/: open it there.
+      if (location.hash.indexOf('#s=') === 0) location.replace('./app/' + location.search + location.hash);
+    </script>
+    <script>
+      // Pick the theme before first paint: ?theme=, then the saved choice, then the system setting.
+      (function () {
+        var q = new URLSearchParams(location.search).get('theme');
+        var saved = null;
+        try { saved = localStorage.getItem('loadsketch-theme'); } catch (e) {}
+        var t = q || saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/site/main.tsx"></script>
+  </body>
+</html>

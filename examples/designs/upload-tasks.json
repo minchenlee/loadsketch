@@ -1,0 +1,52 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "上傳＋非同步任務：同步路徑上的慢依賴（參考 Dropbox）",
+  "description": "Dropbox 的 ATF 讓各團隊排程背景任務：前端收到請求寫進任務儲存，再經佇列交給 executor 執行，保證至少執行一次。這個模型的上傳 API 同步寫物件儲存，再丟任務到佇列；executor 處理後寫回資料庫。重點是：同步路徑上的依賴變慢，會卡住前台；非同步路徑變慢只會讓任務晚一點完成。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "gw", "kind": "api_gateway", "label": "API Gateway", "pos": [270, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "上傳 API",
+      "pos": [540, 200],
+      "params": {
+        "instances": 2,
+        "concurrency": 32,
+        "serviceMs": { "mean": 5, "cv": 1 },
+        "queueLimit": 300
+      }
+    },
+    {
+      "id": "blob",
+      "kind": "object_storage",
+      "label": "物件儲存（檔案區塊）",
+      "pos": [810, 60],
+      "params": { "putMs": { "mean": 60, "cv": 0.6 }, "getMs": { "mean": 30, "cv": 0.6 } }
+    },
+    { "id": "tasks", "kind": "queue", "label": "任務佇列（SQS）", "pos": [810, 340] },
+    {
+      "id": "exec",
+      "kind": "worker",
+      "label": "Executor",
+      "pos": [1080, 340],
+      "params": { "instances": 4, "concurrency": 8, "serviceMs": { "mean": 50, "cv": 1 } }
+    },
+    {
+      "id": "meta",
+      "kind": "database",
+      "label": "中繼資料庫",
+      "pos": [1350, 200],
+      "params": { "replicas": 1, "connections": 16 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "gw" },
+    { "from": "gw", "to": "api" },
+    { "from": "api", "to": "blob", "on": "write", "timeoutMs": 2000 },
+    { "from": "api", "to": "tasks", "on": "write" },
+    { "from": "api", "to": "meta", "on": "read" },
+    { "from": "tasks", "to": "exec" },
+    { "from": "exec", "to": "meta" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "Chaos Kong：第 30 秒關掉 us-east 60 秒",
+  "seed": 1,
+  "durationS": 120,
+  "warmupS": 10,
+  "traffic": { "rps": 3000, "readRatio": 0.9 },
+  "keys": { "count": 100000, "zipf": 0.9 },
+  "events": [{ "type": "region_down", "atS": 30, "forS": 60, "region": "us-east" }]
+}

@@ -1,0 +1,41 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "短網址轉址：讀多寫少、LRU 快取（參考 Bitly）",
+  "description": "短網址服務每建立一個網址，之後會被點上千次，所以幾乎全是讀取（查 code → 原網址）。這個模型用 LRU 快取記住熱門短網址，沒命中才查資料庫副本。重點是：命中率由快取容量和熱門程度決定，它決定資料庫要扛多少。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "點擊短網址的人", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [270, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "轉址 API",
+      "pos": [540, 200],
+      "params": { "instances": 4, "concurrency": 32, "serviceMs": { "mean": 2, "cv": 1 } }
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "label": "Redis（短碼 → 網址）",
+      "pos": [810, 80],
+      "params": { "mode": "lru", "capacityKeys": 20000, "instances": 2, "concurrency": 16 }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "網址資料庫",
+      "pos": [810, 320],
+      "params": {
+        "replicas": 1,
+        "connections": 8,
+        "readMs": { "mean": 5, "cv": 1 },
+        "writeMs": { "mean": 8, "cv": 1 }
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "cache" },
+    { "from": "api", "to": "db", "timeoutMs": 300 }
+  ]
+}

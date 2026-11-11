@@ -1,0 +1,11 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "第 20 秒起 shard 0 主庫幾乎不回應，持續 27 秒（把 27 分鐘壓縮成 27 秒）",
+  "seed": 1,
+  "durationS": 80,
+  "warmupS": 10,
+  "traffic": { "rps": 1000, "readRatio": 0.3, "clientTimeoutMs": 5000 },
+  "events": [
+    { "type": "slow", "atS": 20, "forS": 27, "node": "docdb", "instance": 0, "multiplier": 300 }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Instagram 2011：Django＋分片 PostgreSQL＋Memcached",
+  "description": "Instagram 上線一年後（2011 年，1,400 萬用戶、3 個工程師）的整套架構。App 的請求經 Route53 → Amazon ELB（在這裡終結 SSL）→ 3 台 NGINX → 25 台以上的 Django（gunicorn）。大部分資料（用戶、照片資訊、tag）放在分片的 PostgreSQL：12 台主庫，另一個可用區有 12 台副本，用串流複製。前面有 6 台 Memcached。Redis 存首頁 feed、動態、session。地理搜尋改用 Apache Solr。照片直接存 S3，用 CloudFront 當 CDN。分享到 Twitter／Facebook、通知訂閱者、feed 的 fan-out 都丟進 Gearman 佇列，約 200 個 Python worker 在背景處理；推播用 pyapns。來源：https://instagram-engineering.com/what-powers-instagram-hundreds-of-instances-dozens-of-technologies-adf2e22da2ad 、https://instagram-engineering.com/sharding-ids-at-instagram-1cf5a71e5a5c 。lease 的作法出自 Facebook 的論文 Scaling Memcache at Facebook（NSDI 2013）：https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala 。參數是教學用的縮小值，不是 Instagram 的實際數字。",
+  "apis": [
+    { "name": "feed", "op": "read", "share": 81, "label": "首頁 feed、個人頁" },
+    { "name": "search", "op": "read", "share": 9, "label": "地理搜尋" },
+    { "name": "post", "op": "write", "share": 10, "label": "上傳、按讚、留言" },
+    { "name": "photo", "op": "read", "share": 1, "label": "載入照片" }
+  ],
+  "nodes": [
+    {
+      "id": "app",
+      "kind": "client",
+      "label": "Instagram App（API）",
+      "pos": [0, 300],
+      "params": { "weight": 3 }
+    },
+    {
+      "id": "viewers",
+      "kind": "client",
+      "label": "App 載入照片",
+      "pos": [0, 760],
+      "params": { "weight": 2 }
+    },
+    { "id": "route53", "kind": "dns", "label": "Route53", "pos": [270, 300] },
+    { "id": "elb", "kind": "load_balancer", "label": "Amazon ELB（終結 SSL）", "pos": [540, 300] },
+    { "id": "nginx", "kind": "load_balancer", "label": "NGINX ×3", "pos": [810, 300] },
+    {
+      "id": "django",
+      "kind": "service",
+      "label": "Django (gunicorn) ×27",
+      "pos": [1080, 300],
+      "params": {
+        "instances": 27,
+        "concurrency": 8,
+        "serviceMs": { "mean": 6, "cv": 1 },
+        "queueLimit": 100
+      }
+    },
+    {
+      "id": "memcached",
+      "kind": "cache",
+      "label": "Memcached ×6",
+      "pos": [1350, 0],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 50000,
+        "instances": 6,
+        "concurrency": 64,
+        "opMs": { "mean": 0.3, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "redis",
+      "kind": "service",
+      "label": "Redis（feed、動態、session）",
+      "pos": [1350, 180],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 0.5, "cv": 0.5 } }
+    },
+    {
+      "id": "postgres",
+      "kind": "sharded_db",
+      "label": "PostgreSQL（12 個分片，副本在另一個可用區）",
+      "pos": [1620, 120],
+      "params": {
+        "shards": 12,
+        "replicas": 1,
+        "readFrom": "primary",
+        "connections": 1,
+        "readMs": { "mean": 10, "cv": 1 },
+        "writeMs": { "mean": 10, "cv": 1 },
+        "queueLimit": 200
+      }
+    },
+    {
+      "id": "solr",
+      "kind": "service",
+      "label": "Apache Solr（地理搜尋）",
+      "pos": [1350, 340],
+      "params": { "instances": 2, "concurrency": 16, "serviceMs": { "mean": 15, "cv": 1 } }
+    },
+    { "id": "s3", "kind": "object_storage", "label": "Amazon S3（照片）", "pos": [1620, 620] },
+    {
+      "id": "cloudfront",
+      "kind": "cdn",
+      "label": "CloudFront",
+      "pos": [270, 760],
+      "params": { "hitRatio": 0.95 }
+    },
+    { "id": "gearman", "kind": "queue", "label": "Gearman 任務佇列", "pos": [1350, 480] },
+    {
+      "id": "workers",
+      "kind": "worker",
+      "label": "Python worker（fan-out、分享）",
+      "pos": [1620, 400],
+      "params": { "instances": 10, "concurrency": 20, "serviceMs": { "mean": 5, "cv": 1 } }
+    },
+    {
+      "id": "social",
+      "kind": "service",
+      "label": "Twitter／Facebook API",
+      "pos": [1890, 340],
+      "params": { "instances": 4, "concurrency": 50, "serviceMs": { "mean": 120, "cv": 1 } }
+    },
+    {
+      "id": "pyapns",
+      "kind": "service",
+      "label": "pyapns（推播）",
+      "pos": [1890, 480],
+      "params": { "instances": 2, "concurrency": 50, "serviceMs": { "mean": 20, "cv": 1 } }
+    }
+  ],
+  "edges": [
+    { "from": "app", "to": "route53", "apis": ["feed", "search", "post"] },
+    { "from": "route53", "to": "elb" },
+    { "from": "elb", "to": "nginx" },
+    { "from": "nginx", "to": "django" },
+    { "from": "django", "to": "memcached", "apis": ["feed"] },
+    { "from": "django", "to": "postgres", "apis": ["feed", "post"], "timeoutMs": 1000 },
+    { "from": "django", "to": "redis", "apis": ["feed"], "timeoutMs": 200 },
+    { "from": "django", "to": "solr", "apis": ["search"], "timeoutMs": 1000 },
+    { "from": "django", "to": "s3", "apis": ["post"], "timeoutMs": 3000 },
+    { "from": "django", "to": "gearman", "apis": ["post"] },
+    { "from": "gearman", "to": "workers" },
+    { "from": "workers", "to": "redis" },
+    { "from": "workers", "to": "social", "timeoutMs": 5000 },
+    { "from": "workers", "to": "pyapns", "timeoutMs": 2000 },
+    { "from": "viewers", "to": "cloudfront", "apis": ["photo"] },
+    { "from": "cloudfront", "to": "s3" }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "試試看：1) 先跑情境：第 30 秒部署時重啟 6 台 Memcached 裡的 3 台，回來是空的。命中率掉到約 66%，沒命中的讀取全部打到 PostgreSQL，分片忙到滿載；Django 的執行緒都在等資料庫。整段錯誤率約 7.3%，p99 約 0.85 秒。看右欄每個 API 的結果：feed 和上傳各失敗約 13%，因為它們共用同一組資料庫；地理搜尋走 Solr，沒有失敗，但 p99 也拉長到約 0.9 秒：它和 feed 共用同一組 Django 執行緒，排在等資料庫的請求後面。載入照片走 CloudFront，完全沒受影響。2) 把 PostgreSQL 的「連線數」改成 2（像加大 pgbouncer 的連線池，或換更大的機器）：錯誤歸零。3) 改回 1，把 Memcached 的防擊穿改成 lease：沒有解決。錯誤降到約 4%，但 p99 從 0.85 秒拉長到約 1.8 秒。lease 解決的是很多請求同時查「同一個」熱門 key；這裡是半個快取都空了，各查各的 key，等 lease 的請求只是多佔住執行緒。",
+      "pos": [0, 960],
+      "width": 620
+    },
+    {
+      "id": "n2",
+      "text": "簡化：Django 是同一組伺服器，NGINX 把所有請求交給它；Django 依 API 呼叫不同的下游（每條線上標了它走哪些 API）。Redis 用一般服務表示，每次讀 feed 都會查。pgbouncer、Munin、Sentry、Fabric 沒有畫。12 個分片是原文的數字；台數、毫秒都是縮小值。真實的 Memcached 重啟後怎麼暖機（例如先導一小部分流量）模擬器做不到。",
+      "pos": [680, 960],
+      "width": 560
+    }
+  ]
+}

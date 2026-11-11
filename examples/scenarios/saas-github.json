@@ -1,0 +1,9 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "第 30 秒美東資料中心斷線 43 秒",
+  "seed": 1,
+  "durationS": 150,
+  "warmupS": 10,
+  "traffic": { "rps": 3000, "readRatio": 0.9, "clientTimeoutMs": 5000 },
+  "events": [{ "type": "region_down", "atS": 30, "forS": 43, "region": "us-east" }]
+}

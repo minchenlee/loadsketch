@@ -1,0 +1,53 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "快取 lease＋TTL jitter",
+  "description": "和「快取擊穿」一樣，只多了兩個設定。Lease：熱門 key 過期時，第一個沒命中的請求拿到 lease 去查 DB，其他的每 20 ms 再問一次 Redis，等它寫回。每次過期只查 DB 一次，DB 從約 78 rps 降到約 23 rps，沒有失敗。TTL jitter 0.2：一開始一起寫入的 key 不會在第 10、20、30 秒一起過期，DB 的尖峰變低、變平均。代價：等待的請求多花幾十 ms。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [600, 200],
+      "params": {
+        "instances": 4,
+        "concurrency": 64,
+        "serviceMs": { "mean": 5, "cv": 1 },
+        "queueLimit": 200
+      }
+    },
+    {
+      "id": "redis",
+      "kind": "cache",
+      "label": "Redis",
+      "pos": [940, 60],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 2000,
+        "ttlS": 10,
+        "concurrency": 64,
+        "ttlJitter": 0.2,
+        "stampede": "lease"
+      }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [940, 340],
+      "params": {
+        "replicas": 0,
+        "connections": 16,
+        "readMs": { "mean": 100, "cv": 0.5 },
+        "queueLimit": 300
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "redis" },
+    { "from": "api", "to": "db" }
+  ]
+}

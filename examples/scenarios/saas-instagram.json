@@ -1,0 +1,14 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "部署時第 30 秒重啟 3 台 Memcached，回來是冷的",
+  "seed": 1,
+  "durationS": 90,
+  "warmupS": 20,
+  "traffic": { "rps": 3000, "readRatio": 0.9 },
+  "keys": { "count": 100000, "zipf": 1 },
+  "events": [
+    { "type": "down", "atS": 30, "forS": 3, "node": "memcached", "instance": 0 },
+    { "type": "down", "atS": 30, "forS": 3, "node": "memcached", "instance": 1 },
+    { "type": "down", "atS": 30, "forS": 3, "node": "memcached", "instance": 2 }
+  ]
+}

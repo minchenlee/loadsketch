@@ -1,0 +1,143 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Uber 2015：新的派單系統（DISCO、S2 地理索引、ringpop）",
+  "description": "Uber 2015 年改寫後的派單系統。司機 App 大約每 4 秒回報一次位置，寫進「依供給查的地理索引」：地球用 Google S2 切成 cell，cell ID 當分片鍵，每筆位置寫到負責的分片，再送到幾個副本。乘客叫車時，DISCO（dispatch optimization）先向地理索引查附近的供給（讀副本），再請路線／ETA 服務依道路算到達時間，排序後透過 Supply 服務把單子派給司機；Demand 服務記錄乘客的需求。派單系統用 Node.js 寫，用 ringpop（一致性雜湊環＋SWIM gossip）在幾千個節點之間分片，部分狀態存在 Riak。行程結束後的工作（評分、email、更新資料庫、排程付款）由 Python 的 post-trip 流程處理；最舊的系統用 Postgres。設計目標是地理索引每秒一百萬筆寫入、讀取是好幾倍。扇出（fan-out）讓偶爾變慢的節點拉高長尾延遲，所以 TChannel 內建 backup request（對沖請求）。來源：https://highscalability.com/how-uber-scales-their-real-time-market-platform/ （Matt Ranney 在 QCon London 2015 的演講整理）、https://www.infoq.com/presentations/uber-market-platform/ 、https://www.uber.com/blog/ringpop-open-source-nodejs-library/ 。參數是教學用的縮小值，不是 Uber 的實際數字。",
+  "nodes": [
+    { "id": "apps", "kind": "client", "label": "司機 App（每 4 秒回報位置）＋乘客 App", "pos": [0, 300] },
+    {
+      "id": "gateway",
+      "kind": "api_gateway",
+      "label": "API 閘道",
+      "pos": [270, 300],
+      "params": { "instances": 4, "concurrency": 256, "serviceMs": { "mean": 0.5, "cv": 0.5 } }
+    },
+    {
+      "id": "loc",
+      "kind": "service",
+      "label": "位置更新（Dispatch，Node.js）",
+      "pos": [540, 80],
+      "params": { "instances": 10, "concurrency": 64, "serviceMs": { "mean": 1, "cv": 1 } }
+    },
+    {
+      "id": "disco",
+      "kind": "service",
+      "label": "DISCO（派單最佳化）",
+      "pos": [540, 320],
+      "params": { "instances": 6, "concurrency": 64, "serviceMs": { "mean": 3, "cv": 1 } }
+    },
+    {
+      "id": "trips",
+      "kind": "service",
+      "label": "行程 API（Python）",
+      "pos": [540, 620],
+      "params": { "instances": 3, "concurrency": 32, "serviceMs": { "mean": 8, "cv": 1 } }
+    },
+    {
+      "id": "geo",
+      "kind": "sharded_db",
+      "label": "地理索引（S2 cell 分片，ringpop）",
+      "pos": [810, 80],
+      "params": {
+        "shards": 8,
+        "replicas": 2,
+        "readFrom": "replicas",
+        "connections": 1,
+        "readMs": { "mean": 1, "cv": 1 },
+        "writeMs": { "mean": 1.5, "cv": 1 },
+        "replicaApplyRatio": 0.5,
+        "replicaDelayMs": 50
+      }
+    },
+    {
+      "id": "eta",
+      "kind": "service",
+      "label": "路線／ETA",
+      "pos": [810, 260],
+      "params": { "instances": 6, "concurrency": 32, "serviceMs": { "mean": 12, "cv": 1 } }
+    },
+    {
+      "id": "supply",
+      "kind": "service",
+      "label": "Supply 服務（車輛狀態）",
+      "pos": [810, 400],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 1 } }
+    },
+    {
+      "id": "demand",
+      "kind": "service",
+      "label": "Demand 服務（乘客需求）",
+      "pos": [810, 520],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 1 } }
+    },
+    {
+      "id": "riak",
+      "kind": "database",
+      "label": "Riak（派單狀態）",
+      "pos": [1080, 460],
+      "params": {
+        "replicas": 2,
+        "connections": 32,
+        "readMs": { "mean": 2, "cv": 1 },
+        "writeMs": { "mean": 3, "cv": 1 }
+      }
+    },
+    {
+      "id": "postgres",
+      "kind": "database",
+      "label": "Postgres（行程，最舊的系統）",
+      "pos": [810, 660],
+      "params": {
+        "replicas": 1,
+        "connections": 16,
+        "readMs": { "mean": 3, "cv": 1 },
+        "writeMs": { "mean": 5, "cv": 1 }
+      }
+    },
+    { "id": "tripq", "kind": "queue", "label": "行程結束後的工作", "pos": [810, 800] },
+    {
+      "id": "posttrip",
+      "kind": "worker",
+      "label": "Post-trip worker（評分、email、付款）",
+      "pos": [1080, 800],
+      "params": { "instances": 3, "concurrency": 16, "serviceMs": { "mean": 20, "cv": 1 } }
+    },
+    {
+      "id": "payments",
+      "kind": "service",
+      "label": "金流供應商",
+      "pos": [1350, 800],
+      "params": { "instances": 2, "concurrency": 64, "serviceMs": { "mean": 150, "cv": 1 } }
+    }
+  ],
+  "edges": [
+    { "from": "apps", "to": "gateway" },
+    { "from": "gateway", "to": "loc", "on": "write", "weight": 30 },
+    { "from": "gateway", "to": "trips", "on": "write", "weight": 1 },
+    { "from": "gateway", "to": "disco", "on": "read" },
+    { "from": "loc", "to": "geo", "timeoutMs": 500 },
+    { "from": "disco", "to": "geo", "timeoutMs": 500 },
+    { "from": "disco", "to": "eta", "timeoutMs": 500 },
+    { "from": "disco", "to": "supply", "timeoutMs": 500 },
+    { "from": "disco", "to": "demand", "timeoutMs": 500 },
+    { "from": "supply", "to": "riak", "timeoutMs": 300 },
+    { "from": "demand", "to": "riak", "timeoutMs": 300 },
+    { "from": "trips", "to": "postgres", "timeoutMs": 1000 },
+    { "from": "trips", "to": "tripq" },
+    { "from": "tripq", "to": "posttrip" },
+    { "from": "posttrip", "to": "payments", "timeoutMs": 5000, "retries": 2 }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "試試看：1) 先跑情境：流量從第 10 秒爬到 3 倍，七成是司機的位置寫入。每筆寫入都落在一個分片的主庫，再複製到 2 個副本；最忙的分片到約 92%。第 60 秒分片 0 的一台副本變慢 5 倍：它除了回答讀取，還要套用每一筆複製過來的寫入，很快就跟不上，排隊滿了，讀到它的請求逾時或被拒，失敗約 3,400 個。2) 把地理索引的分片數改成 16（先把第 60 秒的事件刪掉）：最忙的分片降到約 50%。寫入量只能靠加分片分攤。3) 改回 8 個分片、把副本改成 4：最忙的還是約 91%，因為加副本只分攤讀取，每個副本仍要套用所有寫入。4) 放回第 60 秒的事件，把地理索引的「最大可接受延遲」設成 500 ms：DISCO 會跳過落後的副本，失敗降到約 50 個。",
+      "pos": [0, 960],
+      "width": 640
+    },
+    {
+      "id": "n2",
+      "text": "簡化：司機和乘客 App 合成一個使用者節點，用讀取比例 30% 表示；寫入裡有一小部分是建立行程。真實的附近查詢會依 S2 coverage 同時查好幾個 cell（扇出），這裡一次讀取只查一個分片。ringpop 的 gossip、轉送、節點加入和離開時的重新分配都沒有模擬。資料中心故障時用司機手機上的狀態摘要（state digest）復原，也沒有對應元件。",
+      "pos": [700, 960],
+      "width": 560
+    }
+  ]
+}

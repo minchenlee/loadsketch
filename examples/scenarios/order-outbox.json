@@ -1,0 +1,8 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "每秒 300 張訂單，第 20 秒佇列故障 20 秒",
+  "seed": 1,
+  "durationS": 90,
+  "traffic": { "rps": 300, "readRatio": 0 },
+  "events": [{ "type": "down", "node": "q", "atS": 20, "forS": 20 }]
+}

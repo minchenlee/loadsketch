@@ -1,0 +1,7 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "平穩流量",
+  "seed": 1,
+  "durationS": 60,
+  "traffic": { "rps": 800, "readRatio": 0.9 }
+}

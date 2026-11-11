@@ -1,0 +1,968 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Colour tokens. Values follow the kumo design system (github.com/cloudflare/kumo, MIT):
+   theme-kumo.css semantic colours, re-expressed here as opaque hex (oklch -> sRGB) so canvas
+   charts can read them. Mapping (ours <- kumo):
+     --bg <- canvas, --chrome <- elevated, --panel <- base, --panel-2 <- tint,
+     --recessed <- recessed, --control <- control, --line <- hairline, --line-strong <- line,
+     --ink <- text-default, --ink-strong <- text-strong, --ink-3 <- text-subtle,
+     --accent <- brand, --accent-hover <- brand-hover, --accent-soft <- info-tint,
+     --focus <- focus, --ok/--warn/--bad <- success/warning/danger,
+     --ok-ink/--warn-ink/--bad-ink <- text-success/-warning/-danger.
+   --ink-2 has no kumo token: it sits between text-default and text-subtle (neutral-600 / neutral-300).
+   Category colours keep the usual cloud-diagram families: compute amber, data magenta,
+   messaging pink, networking purple, resilience red, traffic slate. Read/write chart series
+   stay blue/orange. */
+:root {
+  --bg: #fbfbfb;
+  --chrome: #f8f8f8;
+  --panel: #ffffff;
+  --panel-2: #f5f5f5;
+  --recessed: #f2f2f2;
+  --control: #ffffff;
+  --fill: #e5e5e5;
+  --line: #e9e9e9;
+  --line-strong: #e7e7e7;
+  --ink: #18181b;
+  --ink-strong: #0a0a0a;
+  --ink-2: #525252;
+  --ink-3: #737373;
+  --accent: #056dff;
+  --accent-hover: #1447e6;
+  --accent-ring: #045ede;
+  --accent-top: #2a83ff;
+  --accent-soft: #eff6ff;
+  --focus: #0b0b0b;
+  --focus-ring: #858585;
+  --grid: #d4d4d4;
+  --edge: #a1a1a1;
+  --ok: #009966;
+  --warn: #fa8900;
+  --bad: #fb2c36;
+  --ok-ink: #006045;
+  --warn-ink: #bd6500;
+  --bad-ink: #c10007;
+  --read: #056dff;
+  --write: #ea580c;
+  --cat-traffic: #64748b;
+  --cat-edge: #7c3aed;
+  --cat-compute: #e07a00;
+  --cat-resilience: #dc2626;
+  --cat-data: #c026d3;
+  --cat-messaging: #db2777;
+  /* kumo uses Tailwind shadow-xs / shadow-sm / shadow-lg */
+  --shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --dur: 100ms;
+  /* a curve that goes a little past its end and comes back: for transforms only, never for layout */
+  --spring: cubic-bezier(0.3, 1.55, 0.5, 1);
+  --glass-bg: color-mix(in srgb, var(--panel) 74%, transparent);
+  --glass-blur: blur(14px) saturate(1.6);
+  --dim: rgb(0 0 0 / 0.28);
+  color-scheme: light;
+}
+:root.dark {
+  --bg: #030303;
+  --chrome: #060606;
+  --panel: #0f0f0f;
+  --panel-2: #262626;
+  --recessed: #0b0b0b;
+  --control: #18181b;
+  --fill: #262626;
+  --line: #262626;
+  --line-strong: #333333;
+  --ink: #f5f5f5;
+  --ink-strong: #fafafa;
+  --ink-2: #d4d4d4;
+  --ink-3: #a1a1a1;
+  --accent: #045ede;
+  --accent-hover: #1447e6;
+  --accent-ring: #0350c0;
+  --accent-top: #2a76e8;
+  --accent-soft: #12182b;
+  --focus: #e9e9e9;
+  --focus-ring: #7c7c7c;
+  --grid: #262626;
+  --edge: #525252;
+  --ok: #00d492;
+  --warn: #db6809;
+  --bad: #e7000b;
+  --ok-ink: #a4f4cf;
+  --warn-ink: #ff8904;
+  --bad-ink: #ff6467;
+  --read: #51a2ff;
+  --write: #fb923c;
+  --cat-traffic: #94a3b8;
+  --cat-edge: #a78bfa;
+  --cat-compute: #fbab45;
+  --cat-resilience: #f87171;
+  --cat-data: #e07af0;
+  --cat-messaging: #f472b6;
+  --shadow: none;
+  --glass-bg: color-mix(in srgb, var(--panel) 68%, transparent);
+  --dim: rgb(0 0 0 / 0.45);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible {
+  outline-color: var(--accent);
+}
+
+.panel {
+  background: var(--chrome);
+  border-color: var(--line);
+}
+.muted {
+  color: var(--ink-2);
+}
+.faint {
+  color: var(--ink-3);
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card (kumo LayerCard / Surface): base background, 1px line ring, shadow-xs, radius lg */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+/* Button (kumo Button size sm, variant secondary): 26px, radius md, 12px medium,
+   base background + line ring + shadow-xs; hover tint; focus-visible 2px brand ring */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color var(--dur),
+    border-color var(--dur),
+    color var(--dur),
+    transform 0.3s var(--spring);
+}
+/* pressed: the button goes down fast, and springs back when it is let go */
+.btn:active:not(:disabled) {
+  transform: scale(0.955);
+  transition-duration: var(--dur), var(--dur), var(--dur), 0.07s;
+}
+.btn:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Primary (kumo emphasis): brand fill with a soft top-to-bottom gradient and a darker ring */
+.btn-primary {
+  background: linear-gradient(to bottom, var(--accent-top), var(--accent));
+  border-color: var(--accent-ring);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.18);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.btn-primary:focus-visible {
+  box-shadow:
+    0 0 0 1px var(--panel),
+    0 0 0 3px var(--accent);
+}
+.btn-on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root.dark .btn-on {
+  color: var(--read);
+  border-color: var(--accent);
+}
+
+/* Segmented control (kumo Tabs variant segmented, size sm): recessed track with a hairline ring;
+   the active item is a base pill with shadow-sm and a line ring; text subtle -> default */
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: 26px;
+  padding: 0 2px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--recessed);
+}
+.seg > .btn {
+  height: 20px;
+  padding: 0 6px;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-3);
+}
+.seg > .btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: transparent;
+}
+.seg > .btn.btn-on {
+  border-color: var(--line-strong);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+}
+:root.dark .seg > .btn.btn-on {
+  background: var(--panel-2);
+  border-color: var(--line-strong);
+}
+.seg > .btn:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Status pill (kumo Badge, outline variant with dot): full radius, 12px medium, hairline ring */
+.sd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+.sd-pill::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pill, var(--ink-3));
+}
+.sd-pill.no-dot {
+  /* kumo Badge secondary: neutral fill */
+  border-color: transparent;
+  background: var(--fill);
+}
+.sd-pill.no-dot::before {
+  display: none;
+}
+.sd-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex-shrink: 0;
+}
+
+/* Input (kumo Input size sm): control background, line ring, radius md;
+   focus: 1.5px ring of the neutral focus colour at 50% */
+.field {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--control);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 14px;
+  min-width: 0;
+  transition: border-color var(--dur), box-shadow var(--dur);
+}
+.field::placeholder {
+  color: var(--ink-3);
+}
+.field:focus,
+.field:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 0.5px var(--focus-ring);
+}
+select.field {
+  padding-right: 4px;
+}
+
+/* React Flow theming */
+.react-flow {
+  /* the canvas sets its own text size: card sizes set the layout, and the canvas zooms */
+  font-size: 14px;
+  --xy-background-color: var(--bg);
+  --xy-node-border-radius: 8px;
+  --xy-edge-stroke: var(--edge);
+  --xy-handle-background-color: var(--panel);
+  --xy-handle-border-color: var(--line-strong);
+  --xy-controls-button-background-color: transparent;
+  --xy-controls-button-background-color-hover: color-mix(in srgb, var(--panel-2) 70%, transparent);
+  --xy-controls-button-color: var(--ink-2);
+  --xy-controls-button-border-color: var(--line);
+  --xy-minimap-background-color: var(--panel);
+  --xy-attribution-background-color: transparent;
+}
+/* Handle: a ring in the card's category colour, with a dot in the middle */
+.react-flow__handle {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--cat, var(--line-strong));
+  background: radial-gradient(circle, var(--cat, var(--ink-3)) 0 1.6px, var(--bg) 2.2px);
+}
+.react-flow__controls {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow);
+}
+.react-flow__controls-button svg {
+  transition: transform 0.3s var(--spring);
+}
+.react-flow__controls-button:active svg {
+  transform: scale(0.8);
+  transition-duration: 0.07s;
+}
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+/* Graph node: a smoked-glass card. Its light comes from its category colour (--cat, set on the
+   card): a soft glow behind it and a tint that fades away from the icon. The canvas stays plain.
+   The live block below the header row is split off by a rule. */
+.sd-node {
+  --glass: color-mix(in srgb, var(--panel) 76%, transparent);
+  --glow: 3%;
+  --rim: inset 0 1px 0 0 rgb(255 255 255 / 0.9);
+  --lift: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 10px 22px -14px color-mix(in srgb, var(--cat) 18%, transparent);
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--cat) 20%, var(--line-strong));
+  border-radius: 12px;
+  background: linear-gradient(105deg, color-mix(in srgb, var(--cat) 5%, var(--glass)) 0%, var(--glass) 62%);
+  -webkit-backdrop-filter: blur(10px) saturate(1.5);
+  backdrop-filter: blur(10px) saturate(1.5);
+  box-shadow: var(--rim), var(--lift);
+  transition: border-color var(--dur), box-shadow 0.2s;
+}
+:root.dark .sd-node {
+  --glass: color-mix(in srgb, var(--panel) 72%, transparent);
+  --glow: 4%;
+  --rim: inset 0 1px 0 0 rgb(255 255 255 / 0.07);
+  --lift: 0 12px 26px -16px rgb(0 0 0 / 0.9);
+}
+/* the glow: centred on the icon, and wider than the card */
+.sd-node::before {
+  content: '';
+  position: absolute;
+  inset: -34px -30px;
+  z-index: -1;
+  pointer-events: none;
+  /* closest-side: the glow is gone before the edge of this box, so the box never shows */
+  background: radial-gradient(ellipse closest-side at 32% 50%, color-mix(in srgb, var(--cat) var(--glow), transparent), transparent);
+}
+/* more than one instance: two more cards show behind */
+.sd-node[data-stacked] {
+  box-shadow:
+    var(--rim),
+    4px 4px 0 -1px var(--panel),
+    4px 4px 0 0 var(--line-strong),
+    8px 8px 0 -1px var(--panel),
+    8px 8px 0 0 var(--line),
+    var(--lift);
+}
+/* imported with a guessed value */
+.sd-node[data-guessed] {
+  border-style: dashed;
+}
+.sd-node:hover {
+  border-color: color-mix(in srgb, var(--cat) 50%, var(--line-strong));
+}
+.react-flow__node.selected .sd-node {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+}
+.sd-node [data-live] {
+  margin: 8px -10px 0;
+  padding: 8px 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.sd-icon {
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  background: linear-gradient(160deg, color-mix(in srgb, currentColor 20%, transparent), color-mix(in srgb, currentColor 9%, transparent));
+  box-shadow: 0 0 14px -5px color-mix(in srgb, currentColor 28%, transparent), inset 0 1px 0 0 rgb(255 255 255 / 0.08);
+}
+/* the dot of a part that starts a line falls outside this box, and is cut off */
+.sd-edge-label > div {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.9em;
+  overflow: hidden;
+}
+/* a part stays on one line while it fits; a part wider than the label breaks inside, so no
+   value is cut off */
+.sd-edge-label > div > span {
+  position: relative;
+  overflow-wrap: anywhere;
+}
+.sd-edge-label > div > span + span::before {
+  content: '·';
+  position: absolute;
+  left: -0.62em;
+  color: var(--ink-3);
+}
+/* a card that is held: lifted. Canvas.tsx sets its turn and scale. */
+.sd-node.sd-held {
+  --lift: 0 22px 36px -18px rgb(0 0 0 / 0.45);
+  will-change: transform;
+}
+/* Edge label: a small glass tag. Its parts stay whole, with a dot between two parts; when the
+   two cards are near, the parts go onto more lines so the cards do not cover the label. */
+.sd-edge-label {
+  width: max-content;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+}
+/* Entrance (motion.ts): a line draws from its source; its label and the next card follow */
+/* The card is at its full size at 0%: React Flow measures the handles when the card mounts (in
+   the delay, or in the first frame), and a scaled card gives it wrong handle places. The card
+   goes small while it cannot be seen yet. */
+@keyframes sd-node-in {
+  0% { opacity: 0; filter: blur(8px); transform: scale(1); }
+  1% { opacity: 0; filter: blur(8px); transform: scale(0.92); }
+  60% { opacity: 1; filter: blur(0); transform: scale(1.03); }
+  100% { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+@keyframes sd-edge-in {
+  from { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); }
+  to { stroke-dasharray: var(--len); stroke-dashoffset: 0; }
+}
+@keyframes sd-fade-in {
+  from { opacity: 0; }
+}
+.sd-node.sd-in {
+  animation: sd-node-in 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) var(--in-delay, 0ms) backwards;
+}
+.react-flow__edge-path.sd-edge-in {
+  animation: sd-edge-in 0.42s cubic-bezier(0.4, 0, 0.2, 1) var(--in-delay, 0ms) backwards;
+}
+.sd-label-in {
+  animation: sd-fade-in 0.25s ease var(--in-delay, 0ms) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sd-node.sd-in, .react-flow__edge-path.sd-edge-in, .sd-label-in { animation: none; }
+}
+/* Charts (uPlot): legend above the plot, as dot + label */
+.uplot {
+  display: flex;
+  flex-direction: column;
+}
+.uplot .u-legend {
+  order: -1;
+  margin: 2px 0 4px;
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: left;
+  /* one line; with many series it scrolls sideways instead of wrapping out of the panel */
+  display: block;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.uplot .u-legend tr {
+  display: inline-block;
+  margin-right: 4px;
+}
+.uplot .u-legend th {
+  font-weight: 400;
+}
+.uplot .u-legend .u-marker {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: 0;
+}
+/* solid series: a filled dot; dashed series keep a dashed ring */
+.uplot .u-legend .u-marker:not([style*='dashed']) {
+  border-width: 4px !important;
+}
+
+.sd-menu-group {
+  padding: 8px 8px 2px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sd-menu-group:first-child {
+  padding-top: 2px;
+}
+/* Chart expand button and the dialog it opens; the card morphs into the dialog (view transition) */
+.sd-chart-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 26px; height: 26px; margin: -4px -6px -4px 0; border-radius: 7px; /* takes no height: the title row stays one text line */
+  color: var(--ink-3); background: transparent; transition: background-color .15s, color .15s;
+}
+.sd-chart-btn:hover { color: var(--ink); background: var(--panel-2) }
+.sd-chart-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px }
+.sd-chart-backdrop { background: var(--dim); -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px) }
+/* the big chart shows every series: its legend wraps instead of running off the card */
+.sd-chart-big .u-legend, .sd-chart-big .u-legend tbody { display: flex; flex-wrap: wrap; justify-content: flex-start; white-space: normal }
+::view-transition-group(*) { animation-duration: .34s; animation-timing-function: cubic-bezier(.2, .85, .2, 1) }
+::view-transition-old(*), ::view-transition-new(*) { height: 100%; object-fit: cover; object-position: left top }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*) { animation: none } }
+/* Chart hover tooltip (components/Chart.tsx) */
+.sd-tip {
+  display: none;
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  min-width: 120px;
+  max-width: 220px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.sd-tip-t {
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+.sd-tip-r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sd-tip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sd-tip-l {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.sd-tip-v {
+  font-weight: 600;
+}
+
+/* Our own dropdown (components/Select.tsx). Trigger = kumo Select trigger (an Input);
+   popup = kumo Select/Dropdown popup: base background, radius lg, shadow-lg, line ring,
+   6px vertical padding; items radius 4px, 6px x 8px padding, highlighted = tint */
+.sd-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.sd-select:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+:root.dark .sd-select:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel-2) 60%, var(--control));
+}
+.sd-select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sd-select[aria-expanded='true'] {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 0.5px var(--focus-ring);
+}
+.sd-menu {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  font-size: 15px;
+  /* it pops out of its button */
+  transform-origin: top left;
+  animation: sd-pop 0.24s var(--spring) backwards;
+}
+.sd-menu[data-up] {
+  transform-origin: bottom left;
+}
+.sd-menu[data-end] {
+  transform-origin: top right;
+}
+.sd-option:disabled, .sd-option[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+button.sd-option {
+  width: 100%;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.sd-menu-sep {
+  height: 1px;
+  margin: 5px 2px;
+  background: var(--line);
+}
+.sd-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sd-option > svg {
+  margin-top: 2px;
+}
+.sd-option.is-active {
+  background: color-mix(in srgb, var(--panel-2) 75%, transparent);
+}
+
+/* Number field without spin buttons */
+.sd-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sd-number:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 0.5px var(--focus-ring);
+}
+.sd-number.is-disabled {
+  opacity: 0.5;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+/* Keyboard hint in tooltips and buttons */
+kbd {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.react-flow .sd-pill {
+  font-size: 13px;
+}
+
+/* Switch (role="switch"): a pill track with a knob; on = accent */
+.sd-switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--fill);
+  cursor: pointer;
+  transition: background-color var(--dur);
+}
+.sd-switch > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--control);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.32s var(--spring);
+}
+.sd-switch[aria-checked='true'] {
+  background: var(--accent);
+}
+.sd-switch[aria-checked='true'] > span {
+  transform: translateX(12px);
+}
+.sd-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* metrics charts: each keeps a readable width; the row scrolls sideways when they do not fit */
+.sd-charts { scroll-snap-type: x proximity; overscroll-behavior-x: contain; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.sd-charts > .card { min-width: 360px; scroll-snap-align: start; }
+
+/* the right panel's width handle: a thin strip on its left edge */
+.sd-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; touch-action: none; }
+.sd-resize::after { content: ''; position: absolute; left: 2px; top: 0; bottom: 0; width: 2px; background: transparent; transition: background .15s; }
+.sd-resize:hover::after, .sd-resize:focus-visible::after, .sd-resize[data-dragging]::after { background: var(--accent); }
+.sd-resize:focus-visible { outline: none; }
+
+/* Practice in progress over the canvas (PracticeOverlay): the cards take clicks, the space around them does not */
+.sd-float { pointer-events: auto; max-width: 100%; }
+/* what floats over the canvas is glass, and pops in */
+.card.sd-float, .card.sd-over {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-lg);
+  transform-origin: top right;
+  animation: sd-pop 0.3s var(--spring) backwards;
+}
+.card.sd-over { transform-origin: top left; }
+.btn.sd-over {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.sd-float-tall { width: min(420px, 100%); min-height: 0; flex-shrink: 1; }
+/* a problem's goal: a hairline capsule with a state mark (a hollow dot before a run) */
+.sd-goal {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--line-strong); font-size: 12px; white-space: nowrap;
+}
+.sd-goal[data-ok='true'] { border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.sd-goal[data-ok='false'] { border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
+.sd-goal-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+/* a practice dialog entry: wraps its text (a .btn stays on one line) */
+.sd-practice-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px;
+  width: 100%; padding: 10px 12px; text-align: left; cursor: pointer; transition: border-color .15s;
+}
+.sd-practice-item:hover, .sd-practice-item.is-on { border-color: var(--accent); }
+.sd-practice-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sd-practice-state { font-size: 12px; white-space: nowrap; padding-top: 2px; }
+
+/* ---- Glass and spring, outside the canvas cards ---- */
+@keyframes sd-pop {
+  from { opacity: 0; transform: scale(0.94); }
+}
+@keyframes sd-pop-out {
+  to { opacity: 0; transform: scale(0.97); }
+}
+@keyframes sd-fade-out {
+  to { opacity: 0; }
+}
+/* Modal dialog: the app behind it blurs and dims; the dialog is thick glass. It pops in, and
+   shrinks away when it closes (modal.ts useExit sets data-closing). */
+.sd-backdrop {
+  background: var(--dim);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  animation: sd-fade-in 0.18s ease backwards;
+}
+.sd-dialog {
+  background: color-mix(in srgb, var(--chrome) 86%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  animation: sd-pop 0.32s var(--spring) backwards;
+}
+.sd-backdrop[data-closing] {
+  animation: sd-fade-out 0.14s ease forwards;
+}
+.sd-backdrop[data-closing] .sd-dialog {
+  animation: sd-pop-out 0.14s ease-in forwards;
+}
+/* Palette entry: the same object as a canvas card. Its icon jumps a little under the pointer;
+   the entry grows a little when it is picked up. */
+.sd-pal {
+  transition: transform 0.3s var(--spring), background-color var(--dur);
+}
+.sd-pal .sd-icon {
+  transition: transform 0.34s var(--spring);
+}
+.sd-pal:hover .sd-icon {
+  transform: scale(1.14) rotate(-4deg);
+}
+.sd-pal:active {
+  transform: scale(1.04);
+  transition-duration: 0.08s;
+}
+/* A side or bottom panel that opens and closes (components/Slide.tsx). The track goes between
+   0 and the panel's own size; the panel keeps its size and is cut off, so its content does not
+   reflow. No overshoot here: the canvas next to it would shake. */
+.sd-slide {
+  display: grid;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 0;
+  transition: grid-template-columns 0.3s cubic-bezier(0.2, 0.9, 0.25, 1), grid-template-rows 0.3s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.sd-slide[data-axis='x'] { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
+.sd-slide[data-axis='y'] { grid-template-rows: 1fr; grid-template-columns: minmax(0, 1fr); }
+.sd-slide[data-axis='x'][data-shut] { grid-template-columns: 0fr; }
+.sd-slide[data-axis='y'][data-shut] { grid-template-rows: 0fr; }
+.sd-slide > div { display: flex; min-width: 0; min-height: 0; }
+.sd-slide[data-axis='y'] > div { flex-direction: column; }
+.sd-slide[data-moving] > div { overflow: hidden; }
+/* the left panel leaves to the left: its right edge stays on the moving edge */
+.sd-slide[data-anchor='end'] > div { justify-content: flex-end; }
+@media (prefers-reduced-motion: reduce) {
+  .btn, .sd-pal, .sd-pal .sd-icon, .sd-switch > span, .react-flow__controls-button svg, .sd-slide { transition: none; }
+  .sd-menu, .card.sd-float, .card.sd-over, .sd-backdrop, .sd-dialog, .sd-backdrop[data-closing], .sd-backdrop[data-closing] .sd-dialog { animation: none; }
+}
+
+/* ---- The phone layout (phone.ts, components/Phone.tsx): the canvas alone, the panels in drawers */
+
+@media (max-width: 480px) {
+  /* what the phone layout leaves out of a bar; !important because .btn sets its own display */
+  .sd-phone .sd-desk { display: none !important; }
+  .sd-phone .sd-name { flex: 1; width: auto; min-width: 0 !important; }
+  /* the run bar: the controls on one row, the scenario on the next */
+  .sd-phone .sd-runbar {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: var(--glass-bg) !important;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: 0 8px 24px -10px rgb(0 0 0 / 0.35);
+  }
+  /* above an open drawer: the play controls only; the scenario is in the drawer's own tab */
+  .sd-runcard[data-up] .sd-run-break,
+  .sd-runcard[data-up] .sd-run-break ~ *:not(.sd-run-error) { display: none !important; }
+  /* the zoom buttons stay clear of the card */
+  .sd-phone .react-flow__controls { margin-bottom: 118px; }
+  .sd-phone .react-flow__attribution { display: none; }
+  .sd-phone .sd-run-break { display: block; flex-basis: 100%; height: 0; }
+  .sd-phone .sd-run-scenario { flex: 1; width: auto; }
+  .sd-phone .sd-run-error { flex-basis: 100%; margin: 0; white-space: normal; }
+  /* dialogs: nearly the whole screen */
+  .sd-backdrop { padding: 10px !important; }
+  /* the examples: the categories become one row to swipe, the cards one column */
+  .sd-ex-body { flex-direction: column; }
+  .sd-ex-nav { display: flex; width: 100% !important; gap: 4px; overflow-x: auto; border-right: 0 !important; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+  .sd-ex-nav > * { margin-top: 0 !important; }
+  .sd-ex-nav button { width: auto; flex: none; white-space: nowrap; }
+  .sd-ex-tier { display: contents; }
+  .sd-ex-tier-name, .sd-ex-rule { display: none; }
+  /* a finger needs a larger target than the point it sees */
+  .sd-phone .react-flow__handle::after { content: ''; position: absolute; inset: -12px; }
+}
+.sd-run-break { display: none; }
+.sd-phone { --drawer-h: min(56dvh, 520px); --sheet: cubic-bezier(0.32, 0.72, 0, 1); }
+/* floats over the canvas: glass (set on .sd-runbar inside) */
+.sd-runcard { position: absolute; inset: auto 10px 10px; z-index: 21; transition: transform 0.34s var(--sheet); }
+.sd-runcard[data-up] { transform: translateY(calc(var(--drawer-drag, 0px) - var(--drawer-h))); }
+.sd-tabs { display: flex; padding-bottom: env(safe-area-inset-bottom); }
+.sd-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 0 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  transition: color var(--dur);
+}
+.sd-tab[aria-pressed='true'] { color: var(--accent); }
+/* floats over the canvas: glass. It covers the lower part, so the component being changed stays in view */
+.sd-drawer {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  height: var(--drawer-h);
+  border-top: 1px solid var(--line-strong);
+  border-radius: 16px 16px 0 0;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 -12px 32px -12px rgb(0 0 0 / 0.3);
+  /* a sheet: it slides up and slows to a stop. No spring: an overshoot would show a gap under it */
+  transform: translateY(100%);
+  visibility: hidden;
+  transition: transform 0.34s var(--sheet), visibility 0s 0.34s;
+}
+.sd-drawer[data-open] { transform: translateY(var(--drawer-drag, 0px)); visibility: visible; transition: transform 0.34s var(--sheet); }
+/* under the finger: no easing */
+[data-dragging] > .sd-drawer, [data-dragging] > .sd-runcard { transition: none; }
+.sd-drawer-head { position: relative; display: flex; flex: none; justify-content: flex-end; padding: 6px 8px 0; touch-action: none; cursor: grab; }
+/* another tab: its panel fades in */
+.sd-drawer-body { animation: sd-drawer-swap 0.2s ease-out; }
+@keyframes sd-drawer-swap { from { opacity: 0; } }
+.sd-drawer-grip { position: absolute; left: 50%; top: 7px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-strong); }
+.sd-drawer-body { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; }
+/* the desktop panels inside a drawer: full width, no frame of their own */
+.sd-drawer-body > aside.panel { flex: 1; width: 100% !important; min-height: 0; border: 0; background: transparent; }
+.sd-drawer-body [data-testid='right-resize'] { display: none; }
+.sd-drawer-body > section.panel { flex-direction: column; height: auto; border: 0; background: transparent !important; }
+.sd-drawer-body [data-testid='metrics-side'] { width: 100%; overflow: visible; }
+.sd-drawer-body .sd-charts { flex: none; flex-direction: column; overflow: visible; }
+.sd-drawer-body .sd-charts > * { flex: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sd-drawer, .sd-drawer[data-open], .sd-tab, .sd-runcard { transition: none; }
+  .sd-drawer-body { animation: none; }
+}

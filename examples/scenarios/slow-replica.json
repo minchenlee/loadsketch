@@ -1,0 +1,11 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "一份副本變慢 20 倍",
+  "seed": 1,
+  "durationS": 80,
+  "warmupS": 0,
+  "traffic": { "rps": 500, "readRatio": 0.8, "clientTimeoutMs": 2000 },
+  "events": [
+    { "type": "slow", "atS": 20, "forS": 40, "node": "store", "instance": 2, "multiplier": 20 }
+  ]
+}

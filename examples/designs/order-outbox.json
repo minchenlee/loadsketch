@@ -1,0 +1,48 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "訂單存了、通知沒送（dual write 和 outbox）",
+  "description": "下單時 API 先把訂單寫進資料庫，再送一則「訂單成立」訊息到佇列，給出貨 worker 處理。兩件事是分開的呼叫：情境在第 20 秒讓佇列故障 20 秒，這段時間訂單照樣存進資料庫，訊息卻送不出去（看 API 的「資料和訊息不一致」）：使用者看到失敗、重新下單，出貨那邊永遠不知道第一張訂單。試試看：把 API 的「寫入後送訊息」改成「開（transactional outbox）」：訊息和訂單在同一筆交易寫進資料庫，由 relay 慢慢送到佇列，佇列恢復後全部補送；使用者不再看到失敗，也不必等佇列。",
+  "nodes": [
+    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [200, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "下單 API",
+      "pos": [450, 200],
+      "params": { "instances": 4, "concurrency": 32, "serviceMs": { "mean": 5, "cv": 0.5 } }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "訂單資料庫",
+      "pos": [750, 100],
+      "params": {
+        "connections": 128,
+        "readMs": { "mean": 3, "cv": 0.5 },
+        "writeMs": { "mean": 8, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "q",
+      "kind": "queue",
+      "label": "訂單事件佇列",
+      "pos": [750, 300],
+      "params": { "delivery": "at_least_once", "visibilityTimeoutMs": 10000 }
+    },
+    {
+      "id": "ship",
+      "kind": "worker",
+      "label": "出貨 worker",
+      "pos": [1000, 300],
+      "params": { "instances": 4, "concurrency": 8, "serviceMs": { "mean": 30, "cv": 0.5 } }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb", "timeoutMs": 2000 },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db", "timeoutMs": 500 },
+    { "from": "api", "to": "q", "timeoutMs": 300 },
+    { "from": "q", "to": "ship" }
+  ]
+}

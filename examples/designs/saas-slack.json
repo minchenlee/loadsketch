@@ -1,0 +1,171 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "Slack 風格：快取被清空後的 metastable failure（2022-02-22）",
+  "description": "Slack 送訊息走 Webapp → Vitess 寫入，再交給 Admin Server → Channel Server → Gateway Server 推到 websocket；慢工作經 Kafkagate → Kafka → JQRelay → Redis 交給 job worker。讀取（含 client 開機時的 boot 查詢）先查 Mcrouter/Memcached，沒命中才查 Vitess。2022-02-22 一次 Consul 滾動升級在尖峰重啟 25% 機器的 Consul agent，快取節點被換成空節點，命中率下降，boot 的查詢全打到 Vitess；DB 過載使逾時增加，快取回填不起來，client 重試再加壓。觸發原因消失後系統仍不恢復，直到限流 boot 請求。來源：https://slack.engineering/slacks-incident-on-2-22-22/ 、https://slack.engineering/real-time-messaging/ 、https://slack.engineering/scaling-slacks-job-queue/ 。參數是教學用的縮小值，不是 Slack 的實際數字。",
+  "nodes": [
+    {
+      "id": "active",
+      "kind": "client",
+      "label": "已開機的 client（送訊息、讀訊息）",
+      "pos": [0, 120],
+      "params": { "weight": 3, "priority": "normal" }
+    },
+    {
+      "id": "boot",
+      "kind": "client",
+      "label": "開機中的 client（boot 查詢）",
+      "pos": [0, 360],
+      "params": { "weight": 1, "priority": "batch" }
+    },
+    {
+      "id": "envoy",
+      "kind": "load_balancer",
+      "label": "Envoy（邊緣 LB）",
+      "pos": [270, 240],
+      "params": { "policy": "p2c" }
+    },
+    {
+      "id": "bootlimit",
+      "kind": "rate_limiter",
+      "label": "boot 限流（事故中加上）",
+      "pos": [540, 240],
+      "params": { "limit": "rate", "ratePerSec": 100000, "burst": 100000, "appliesTo": "batch" }
+    },
+    {
+      "id": "webapp",
+      "kind": "service",
+      "label": "Webapp（Hack monolith）",
+      "pos": [810, 240],
+      "params": {
+        "instances": 12,
+        "concurrency": 32,
+        "serviceMs": { "mean": 6, "cv": 1 },
+        "queueLimit": 200
+      }
+    },
+    {
+      "id": "mcrouter",
+      "kind": "cache",
+      "label": "Mcrouter + Memcached",
+      "pos": [1080, 60],
+      "params": {
+        "mode": "lru",
+        "capacityKeys": 120000,
+        "ttlS": 0,
+        "stampede": "none",
+        "instances": 4,
+        "concurrency": 16,
+        "opMs": { "mean": 0.3, "cv": 0.5 }
+      }
+    },
+    {
+      "id": "vitess",
+      "kind": "sharded_db",
+      "label": "Vitess + MySQL（分片）",
+      "pos": [1080, 240],
+      "params": {
+        "shards": 4,
+        "replicas": 1,
+        "readFrom": "any",
+        "connections": 6,
+        "readMs": { "mean": 8, "cv": 1 },
+        "writeMs": { "mean": 10, "cv": 1 },
+        "queueLimit": 3000
+      }
+    },
+    {
+      "id": "admin",
+      "kind": "service",
+      "label": "Admin Server（找 channel 的 CS）",
+      "pos": [1080, 420],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 1, "cv": 0.5 } }
+    },
+    {
+      "id": "channel",
+      "kind": "service",
+      "label": "Channel Server（有狀態、扇出）",
+      "pos": [1350, 420],
+      "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 1 } }
+    },
+    {
+      "id": "gateway",
+      "kind": "service",
+      "label": "Gateway Server（websocket 推送）",
+      "pos": [1620, 420],
+      "params": { "instances": 6, "concurrency": 128, "serviceMs": { "mean": 2, "cv": 1 } }
+    },
+    {
+      "id": "kafkagate",
+      "kind": "service",
+      "label": "Kafkagate（job 入口）",
+      "pos": [1080, 600],
+      "params": { "instances": 2, "concurrency": 64, "serviceMs": { "mean": 1, "cv": 0.5 } }
+    },
+    {
+      "id": "kafka",
+      "kind": "queue",
+      "label": "Kafka（job topic）",
+      "pos": [1350, 600],
+      "params": { "delivery": "at_least_once", "visibilityTimeoutMs": 60000, "maxReceives": 5 }
+    },
+    {
+      "id": "jqrelay",
+      "kind": "worker",
+      "label": "JQRelay（Kafka → Redis）",
+      "pos": [1620, 600],
+      "params": { "instances": 2, "concurrency": 16, "serviceMs": { "mean": 2, "cv": 0.5 } }
+    },
+    {
+      "id": "redisq",
+      "kind": "queue",
+      "label": "Redis job queue",
+      "pos": [1080, 780],
+      "params": { "delivery": "at_least_once", "visibilityTimeoutMs": 60000, "maxReceives": 3 }
+    },
+    {
+      "id": "jobs",
+      "kind": "worker",
+      "label": "Job workers（推播、索引、計費）",
+      "pos": [1350, 780],
+      "params": { "instances": 12, "concurrency": 8, "serviceMs": { "mean": 30, "cv": 1 } }
+    },
+    {
+      "id": "push",
+      "kind": "service",
+      "label": "行動推播（外部）",
+      "pos": [1620, 780],
+      "params": { "instances": 2, "concurrency": 128, "serviceMs": { "mean": 60, "cv": 0.8 } }
+    }
+  ],
+  "edges": [
+    { "from": "active", "to": "envoy", "retries": 2, "backoffMs": 200 },
+    { "from": "boot", "to": "envoy", "retries": 3, "backoffMs": 200 },
+    { "from": "envoy", "to": "bootlimit" },
+    { "from": "bootlimit", "to": "webapp" },
+    { "from": "webapp", "to": "mcrouter" },
+    { "from": "webapp", "to": "vitess", "timeoutMs": 500, "retries": 1, "backoffMs": 50 },
+    { "from": "webapp", "to": "admin", "on": "write", "timeoutMs": 300 },
+    { "from": "webapp", "to": "kafkagate", "on": "write", "timeoutMs": 300 },
+    { "from": "admin", "to": "channel" },
+    { "from": "channel", "to": "gateway" },
+    { "from": "kafkagate", "to": "kafka" },
+    { "from": "kafka", "to": "jqrelay" },
+    { "from": "jqrelay", "to": "redisq" },
+    { "from": "redisq", "to": "jobs" },
+    { "from": "jobs", "to": "push", "timeoutMs": 2000 }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "試試看：1) 先跑情境：第 45 秒有一半快取節點被換成空節點，10 秒後回來但是冷的。看 Vitess 排隊和 webapp 排隊滿了被拒；觸發原因消失後，錯誤還會拖約一分鐘（量 70–140 秒：錯誤率約 0.5%，p99 約 840 ms；沒有事件時是 0%、約 100 ms）。2) 把「boot 限流」的每秒上限改成 300：已開機 client 的錯誤消失，代價是 boot 請求被擋（429）。3) 把快取的防擊穿改成 lease，或給 webapp→vitess 加重試預算 0.1，比較恢復速度。",
+      "pos": [270, 760],
+      "width": 520
+    },
+    {
+      "id": "n2",
+      "text": "簡化：真實的 boot 查詢是 scatter query（打所有 shard），模擬器沒有 scatter-gather，這裡只能用一般讀取表示。Gateway Server 的 websocket 長連線、Channel Server 的一致性雜湊環也沒有對應元件。",
+      "pos": [900, 760],
+      "width": 520
+    }
+  ]
+}

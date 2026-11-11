@@ -1,0 +1,11 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "一個分片變慢 10 倍（只有讀取）",
+  "seed": 1,
+  "durationS": 80,
+  "warmupS": 0,
+  "traffic": { "rps": 300, "readRatio": 1, "clientTimeoutMs": 2000 },
+  "events": [
+    { "type": "slow", "atS": 20, "forS": 40, "node": "index", "instance": 5, "multiplier": 10 }
+  ]
+}

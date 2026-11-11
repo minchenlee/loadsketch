@@ -1,0 +1,8 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "付款服務在第 20 秒變慢 20 倍",
+  "seed": 1,
+  "durationS": 60,
+  "traffic": { "rps": 400, "readRatio": 0.5 },
+  "events": [{ "type": "slow", "atS": 20, "forS": 20, "node": "payments", "multiplier": 20 }]
+}

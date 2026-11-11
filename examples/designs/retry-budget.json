@@ -1,0 +1,63 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "重試預算（從重試風暴中恢復）",
+  "description": "和「重試風暴」一樣，只多了重試預算 0.1：最近 10 秒內，重試最多是首次呼叫的 10%。突波時 API 負載從約 11 倍降到約 3 倍，突波結束後約 10 秒恢復。只開 deadline 傳遞救不了：每一跳的逾時（150 ms）本來就比 deadline（1 秒）短。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "lb",
+      "kind": "load_balancer",
+      "label": "負載平衡器",
+      "pos": [300, 200],
+      "params": { "policy": "least_conn" }
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [590, 200],
+      "params": { "instances": 3, "concurrency": 4, "serviceMs": { "mean": 6, "cv": 1 } }
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "label": "Redis",
+      "pos": [920, 80],
+      "params": { "hitRatio": 0.85 }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 320],
+      "params": { "replicas": 1, "connections": 12 }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    {
+      "from": "lb",
+      "to": "api",
+      "timeoutMs": 150,
+      "retries": 3,
+      "backoffMs": 10,
+      "retryBudget": 0.1
+    },
+    {
+      "from": "api",
+      "to": "cache",
+      "timeoutMs": 150,
+      "retries": 3,
+      "backoffMs": 10,
+      "retryBudget": 0.1
+    },
+    {
+      "from": "api",
+      "to": "db",
+      "timeoutMs": 150,
+      "retries": 3,
+      "backoffMs": 10,
+      "retryBudget": 0.1
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "排程加上 jitter：同樣的請求分散到 10 秒",
+  "seed": 1,
+  "durationS": 240,
+  "warmupS": 0,
+  "traffic": { "rps": 600, "readRatio": 0.9, "clientTimeoutMs": 2000 },
+  "events": [
+    { "type": "wave", "atS": 0, "periodS": 120, "amplitude": 0.5 },
+    { "type": "cron", "atS": 30, "everyS": 60, "burstS": 1, "multiplier": 6, "jitterS": 9 },
+    { "type": "pause", "atS": 0, "node": "api", "everyS": 2, "pauseMs": 120 }
+  ]
+}
