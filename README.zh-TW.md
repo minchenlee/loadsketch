@@ -4,6 +4,11 @@
 
 系統設計模擬器，學習用。把元件拉進來、接起來、灌流量，看每個設計決定的後果：哪裡排隊、延遲怎麼漲、哪裡先壞。
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
+  <img alt="loadsketch 裡的重試風暴：突波結束後，API 伺服器還是滿載" src="docs/images/screenshot-light.png">
+</picture>
+
 - 逐筆模擬（discrete-event）：每個請求真的走過每個元件，有排隊、逾時、重試、保險絲、故障。
 - 15 種元件（負載平衡器、API 伺服器、快取、資料庫、佇列、CDN 等），每個參數都能調：台數、並行數、逾時、重試、保險絲、命中率。
 - 旁邊附排隊理論的值（M/G/c），可以對照模擬結果。
@@ -20,11 +25,55 @@ npm run dev        # 模擬器：http://127.0.0.1:5317/app/　介紹頁：http:/
 - 點元件或連線，在右邊改參數。
 - 下方選情境、速度，按「執行」。連線上的小點是流量（藍＝讀、橘＝寫、紅＝失敗）。速度 1× 以下會看到單一請求的圓點走過整條路徑。
 - 「跳到結尾」直接算完，右側會說明瓶頸，並和排隊理論對照。
-- 學習：每次跑完，右側「為什麼會這樣」照時間說明發生了什麼（滿載、重試放大流量、開始失敗、恢復或卡住）。「重試風暴」範例還有「先猜，再執行」的問題和三個挑戰（不能加機器），每次跑完自動判定，過關的會記在瀏覽器裡。「值班練習」（8 題）：系統裡偷偷放一個故障，只看得到使用者的失敗率和 p99，花點數才能打開元件的指標；找出哪個元件、哪種故障，再到畫布上修好加分。「限制條件題目」（3 題）：在每月預算和複雜度點數（人少、期限短）裡達到失敗率和 p99 的目標，越便宜分數越高。每次跑完都會用示意價格算出每月成本。「從需求開始設計」（6 題）：只有需求和幾乎空白的畫布，自己決定要哪些元件、開多大，跑一次看撐不撐得住；每個零件多快是題目給的，不能靠改小數字過關；可以看參考設計（看了不計分）。
+- 學習：每次跑完，右側「為什麼會這樣」照時間說明發生了什麼（滿載、重試放大流量、開始失敗、恢復或卡住）。「重試風暴」範例還有「先猜，再執行」的問題和三個挑戰（不能加機器），每次跑完自動判定，過關的會記在瀏覽器裡。「值班練習」（14 題）：系統裡偷偷放一個故障，只看得到使用者的失敗率和 p99，花點數才能打開元件的指標；找出哪個元件、哪種故障，再到畫布上修好加分。「限制條件題目」（3 題）：在每月預算和複雜度點數（人少、期限短）裡達到失敗率和 p99 的目標，越便宜分數越高。每次跑完都會用示意價格算出每月成本。「從需求開始設計」（6 題）：只有需求和幾乎空白的畫布，自己決定要哪些元件、開多大，跑一次看撐不撐得住；每個零件多快是題目給的，不能靠改小數字過關；可以看參考設計（看了不計分）。
 - 隱藏面板：`⌘B` 左邊（元件）、`⌥⌘B` 右邊（設定）、`⌘J` 下方（指標）。Windows／Linux 用 Ctrl 代替 ⌘。右上角也有三個按鈕；設定會記住。
 - 語言：依瀏覽器語言顯示中文或英文；右上角「更多」選單可以切換，網址加 `?lang=en` 或 `?lang=zh-TW` 也可以。CLI 用 `--lang en`。
 - 網址參數：`?example=three-tier&scenario=spike&speed=0.1&autorun=1&theme=dark&select=api`。
 - 分享連結：頂列的「分享」把設計和情境壓縮放進網址 `#s=1.…` 後面，複製到剪貼簿。打開連結就是同一個設計和情境；不需要伺服器，`#` 後面也不會送到伺服器。
+
+## 截圖
+
+### 為什麼會這樣
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/why-zh-dark.webp">
+  <img alt="跑完之後，模擬器照時間說明發生了什麼" src="src/site/media/why-zh-light.webp">
+</picture>
+
+### 46 個範例
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/examples-zh-dark.webp">
+  <img alt="範例清單" src="src/site/media/examples-zh-light.webp">
+</picture>
+
+### 值班練習
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/oncall-zh-dark.webp">
+  <img alt="值班練習：只看得到失敗率和 p99" src="src/site/media/oncall-zh-light.webp">
+</picture>
+
+### 從需求開始設計
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/brief-zh-dark.webp">
+  <img alt="需求題：需求、限制，和幾乎空白的畫布" src="src/site/media/brief-zh-light.webp">
+</picture>
+
+### 限制條件題目
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/constraints-zh-dark.webp">
+  <img alt="限制條件題目：每月預算和複雜度上限" src="src/site/media/constraints-zh-light.webp">
+</picture>
+
+### 匯入 Terraform
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/terraform-zh-dark.webp">
+  <img alt="從 Terraform plan JSON 轉出的設計，附容量檢查結果" src="src/site/media/terraform-zh-light.webp">
+</picture>
 
 ## 指令
 
@@ -90,6 +139,12 @@ npm run schema                             # 改了元件目錄後重新產生 s
 - `e2e/`：Playwright 畫面測試。
 - `docs/model.md`：模型怎麼算、假設是什麼。
 - `src/site/`：介紹頁。上面會動的畫面是用 iframe 放進來的模擬器（`?embed=1`）。
+
+## 設計
+
+介面跟隨 [kumo](https://github.com/cloudflare/kumo)，Cloudflare 開源的 design system（MIT）。顏色 token，以及卡片、按鈕、輸入框、標籤、選單的外觀來自 kumo；元件是這個 repo 自己寫的，沒有使用 kumo 套件。對照表在 `src/app/index.css` 開頭，規則在 [docs/design-system.md](docs/design-system.md)。
+
+網站放在 Cloudflare Workers 的靜態資源上（`npm run deploy`）。
 
 ## 參與貢獻
 

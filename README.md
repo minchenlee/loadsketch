@@ -17,7 +17,7 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 - **"Why it happened".** After every run, the simulator tells the story of the run in time order: overload, retries that multiply the load, failures, recovery or a stuck system.
 - **15 kinds of component, and every parameter can be changed.** Load balancer, API server, cache, database, queue, CDN and more: instances, concurrency, timeouts, retries, circuit breakers, hit rates.
 - **46 examples.** Retry storm, cache stampede, gray failure, split brain, a bad config push, poison messages in a FIFO queue, a region cutover, and more. Each one has a scenario and says what to look at.
-- **On-call practice (8 incidents).** A fault is hidden. You see only the users' error rate and p99, pay points to open a component's metrics, name the component and the kind of fault, then fix the design on the canvas.
+- **On-call practice (14 incidents).** A fault is hidden. You see only the users' error rate and p99, pay points to open a component's metrics, name the component and the kind of fault, then fix the design on the canvas.
 - **Design briefs (6).** Start from requirements and an almost empty canvas: you choose the components and their sizes, then a run shows if the design holds. The brief gives how fast each part is, so a smaller number is not an answer. A reference design is one click away.
 - **Constraint problems (3).** Meet error-rate and p99 targets inside a monthly budget and a complexity limit. Every run shows its cost at sample prices.
 - **Terraform import.** Turn Terraform plan JSON into a design (ECS, Lambda, RDS, Aurora, SQS, ElastiCache, CloudFront and more). The import checks capacity first, and each finding runs as a scenario.
@@ -27,6 +27,50 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 - **English and Traditional Chinese**, light and dark.
 
 The examples are simplified models. Some refer to public information about well-known services; they are not the real architecture of any company.
+
+## Screenshots
+
+### "Why it happened"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/why-en-dark.webp">
+  <img alt="After a run, the simulator tells the story of the run in time order" src="src/site/media/why-en-light.webp">
+</picture>
+
+### 46 examples
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/examples-en-dark.webp">
+  <img alt="The list of examples" src="src/site/media/examples-en-light.webp">
+</picture>
+
+### On-call practice
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/oncall-en-dark.webp">
+  <img alt="An on-call incident: only the error rate and p99 are visible" src="src/site/media/oncall-en-light.webp">
+</picture>
+
+### Design briefs
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/brief-en-dark.webp">
+  <img alt="A design brief: requirements, limits and an almost empty canvas" src="src/site/media/brief-en-light.webp">
+</picture>
+
+### Constraint problems
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/constraints-en-dark.webp">
+  <img alt="A constraint problem with a monthly budget and a complexity limit" src="src/site/media/constraints-en-light.webp">
+</picture>
+
+### Terraform import
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="src/site/media/terraform-en-dark.webp">
+  <img alt="A design made from Terraform plan JSON, with capacity findings" src="src/site/media/terraform-en-light.webp">
+</picture>
 
 ## Run it locally
 
@@ -85,6 +129,12 @@ npm run build          # type check, then bundle to dist/
 | `docs/design-system.md` | The look and motion rules of the UI (Chinese) |
 
 `AGENTS.md` has the rules for changing the code, for people and for coding agents.
+
+## Design
+
+The UI follows [kumo](https://github.com/cloudflare/kumo), Cloudflare's open-source design system (MIT). The colour tokens and the look of the cards, buttons, inputs, badges and menus come from kumo; the components are written in this repository and do not use the kumo package. The mapping is at the top of `src/app/index.css`, and the rules are in [docs/design-system.md](docs/design-system.md).
+
+The site runs on Cloudflare Workers static assets (`npm run deploy`).
 
 ## Contributing
 
