@@ -555,6 +555,12 @@ select.field {
 ::view-transition-old(*), ::view-transition-new(*) { height: 100%; object-fit: cover; object-position: left top }
 @media (prefers-reduced-motion: reduce) { ::view-transition-group(*) { animation: none } }
 /* Chart hover tooltip (components/Chart.tsx) */
+/* The charts share one cursor. The horizontal line means something only in the chart under the
+   pointer (the others have a different y axis), so the others show the vertical line alone. */
+.u-over:not(:hover) .u-cursor-y {
+  display: none;
+}
+
 .sd-tip {
   display: none;
   position: absolute;

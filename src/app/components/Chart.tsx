@@ -25,6 +25,11 @@ function fmtValue(v: number, unit?: string): string {
   return v >= 100 ? Math.round(v).toLocaleString() : `${Math.round(v * 10) / 10}`;
 }
 
+/** The cursor group of the small charts (uPlot matches the cursors by x value). */
+const CURSOR_SYNC = 'sd-charts';
+/** One "stay hidden" flag for the whole group: a resize sets it, a pointer move over any of them clears it. */
+const groupQuiet = { current: false };
+
 /** Most rows a tooltip shows (the largest values first when there are more). */
 const TIP_ROWS = 6;
 
@@ -248,7 +253,8 @@ function ChartCard({ title, series, data, height = 150, yMax, unit, testId, big,
   const tip = useRef<HTMLDivElement>(null);
   const holder = useRef<HTMLDivElement>(null);
   // after a resize the tooltip stays hidden until the pointer moves (live data would show it again)
-  const quiet = useRef(false);
+  const ownQuiet = useRef(false);
+  const quiet = big ? ownQuiet : groupQuiet;
   const specs = useRef(series);
   specs.current = series;
   const markRef = useRef(marks ?? []);
@@ -267,7 +273,9 @@ function ChartCard({ title, series, data, height = 150, yMax, unit, testId, big,
       width: el.clientWidth || 300,
       height,
       padding: [6, 14, 0, 0],
-      cursor: { drag: { x: false, y: false } },
+      // the small charts share one cursor: pointing at a time in one chart shows the line and the
+      // values at that time in the others. The big chart in the dialog stands alone.
+      cursor: { drag: { x: false, y: false }, ...(big ? {} : { sync: { key: CURSOR_SYNC, scales: ['x', null] as [string, null], setSeries: false } }) },
       legend: { show: true, live: false },
       hooks: {
         setCursor: [(u) => !quiet.current && tip.current && holder.current && showTip(tip.current, u, specs.current, unit, holder.current)],
@@ -308,7 +316,7 @@ function ChartCard({ title, series, data, height = 150, yMax, unit, testId, big,
     };
     // data is applied by the next effect; rebuild only when the series or theme change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, theme, height, yMax, unit]);
+  }, [key, theme, height, yMax, unit, big]);
 
   useEffect(() => {
     plot.current?.setData(data as uPlot.AlignedData);

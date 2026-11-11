@@ -599,6 +599,36 @@ test('hovering a chart shows the values at that second; a long bottleneck text i
   expect(b.y + b.height).toBeLessThanOrEqual(s.y + s.height + 1);
 });
 
+test('the charts share one cursor: pointing at a time in one shows the line and the values in the others', async ({ page }) => {
+  await page.goto('/app/?example=three-tier&scenario=spike&speed=1&autorun=1');
+  await page.getByRole('button', { name: '跳到結尾' }).click();
+  await expect(page.getByTestId('bottleneck')).toContainText('API 伺服器', { timeout: 30_000 });
+  const box = (await page.getByTestId('chart-traffic').locator('.u-over').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.5);
+  const at = (await page.getByTestId('chart-traffic-tip').locator('.sd-tip-t').textContent())!;
+  expect(at).toMatch(/^\d+s$/);
+  for (const id of ['chart-latency', 'chart-util']) {
+    // the same time, and the vertical line at that time
+    await expect(page.getByTestId(`${id}-tip`).locator('.sd-tip-t')).toHaveText(at);
+    const over = (await page.getByTestId(id).locator('.u-over').boundingBox())!;
+    const line = (await page.getByTestId(id).locator('.u-cursor-x').boundingBox())!;
+    expect(Math.abs((line.x - over.x) / over.width - 0.4)).toBeLessThan(0.03);
+    // no horizontal line there: it has another y axis
+    await expect(page.getByTestId(id).locator('.u-cursor-y')).toBeHidden();
+  }
+  await page.screenshot({ path: join(SHOTS, 'chart-shared-cursor.png') });
+  await page.mouse.move(5, 5);
+  for (const id of ['chart-traffic', 'chart-latency', 'chart-util']) await expect(page.getByTestId(`${id}-tip`)).toBeHidden();
+  // the big chart in the dialog stands alone: it does not move the cursors behind it
+  await page.getByTestId('chart-util-expand').click();
+  await expect(page.getByTestId('chart-util-big')).toBeVisible();
+  await page.waitForFunction(() => document.getAnimations().every((a) => !String((a.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')));
+  const big = (await page.getByTestId('chart-util-big').locator('.u-over').boundingBox())!;
+  await page.mouse.move(big.x + big.width * 0.5, big.y + big.height * 0.5);
+  await expect(page.getByTestId('chart-util-big-tip')).toBeVisible();
+  await expect(page.getByTestId('chart-traffic-tip')).toBeHidden();
+});
+
 test('during a run, a resize keeps the tooltip hidden until the pointer moves', async ({ page }) => {
   await page.goto('/app/?example=three-tier&speed=1&autorun=1');
   await expect(page.getByTestId('chart-traffic').locator('canvas')).toBeVisible();
