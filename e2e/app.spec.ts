@@ -15,11 +15,6 @@ async function waitForClock(page: Page, s: number) {
   await expect.poll(() => clockSeconds(page), { timeout: 60_000, intervals: [250] }).toBeGreaterThan(s);
 }
 
-/** Circles drawn by the canvas animation that are currently visible. */
-async function visibleCircles(page: Page, selector: string): Promise<number> {
-  return page.locator(selector).evaluateAll((els) => els.filter((e) => Number(e.getAttribute('opacity')) > 0).length);
-}
-
 for (const theme of ['light', 'dark'] as const) {
   test(`three-tier design under a traffic spike (${theme})`, async ({ page }) => {
     const errors: string[] = [];
@@ -30,7 +25,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByTestId('pause').click();
     await page.waitForTimeout(300);
     // traffic particles are moving on the edges
-    expect(await visibleCircles(page, '.react-flow__edges g[pointer-events="none"]:not([data-dots]) circle')).toBeGreaterThan(10);
+    expect(Number(await page.getByTestId('edge-flow').getAttribute('data-particles'))).toBeGreaterThan(10);
     // the API servers are saturated and the metrics show failures
     await expect(page.locator('[data-node="api"]')).toContainText('100%');
     await expect(page.getByTestId('kpis')).toContainText('p99');
@@ -43,7 +38,7 @@ for (const theme of ['light', 'dark'] as const) {
 test('slow motion shows single requests moving along their path', async ({ page }) => {
   await page.goto('/app/?example=three-tier&scenario=steady&speed=0.03&autorun=1&theme=light&select=api');
   await page.waitForTimeout(5000);
-  await expect.poll(() => visibleCircles(page, '[data-dots] circle'), { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await page.getByTestId('edge-flow').getAttribute('data-dots')), { timeout: 15_000 }).toBeGreaterThan(0);
   await page.screenshot({ path: join(SHOTS, 'three-tier-slow-motion.png') });
 });
 

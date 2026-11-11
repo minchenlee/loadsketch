@@ -1,12 +1,13 @@
 import { isPhone } from '../phone.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CircleX, TriangleAlert } from 'lucide-react';
-import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
+import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useStoreApi, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
 import { useApp } from '../store.ts';
 import type { SdNode } from '../convert.ts';
 import { reducedMotion, springAt, useTilt } from '../motion.ts';
 import { ComponentNode, NODE_W } from './ComponentNode.tsx';
 import { FlowEdge } from './FlowEdge.tsx';
+import { startEdgeFlow } from '../edgeFlow.ts';
 import { t } from '../../i18n/index.ts';
 
 const nodeTypes = { component: ComponentNode };
@@ -268,6 +269,7 @@ export function Canvas() {
     >
       <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="var(--grid)" />
       {CONTROLS && <Controls showInteractive={false} position="bottom-left" />}
+      <EdgeFlow />
       <Checks />
     </ReactFlow>
   );
@@ -277,6 +279,16 @@ export function Canvas() {
  * The design check on the canvas: a count of errors and warnings, open for the list. A message
  * names a component or a connection: clicking it selects that part.
  */
+/** The traffic on the lines: one canvas for all edges (edgeFlow.ts). */
+function EdgeFlow() {
+  const store = useStoreApi();
+  useEffect(() => {
+    const pane = store.getState().domNode;
+    return pane ? startEdgeFlow(pane, () => store.getState().transform) : undefined;
+  }, [store]);
+  return null;
+}
+
 function Checks() {
   const issues = useApp((s) => s.issues);
   const focus = useApp((s) => s.focus);
