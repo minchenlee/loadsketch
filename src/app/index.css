@@ -782,6 +782,13 @@ kbd {
   backdrop-filter: var(--glass-blur);
 }
 .sd-float-tall { width: min(420px, 100%); min-height: 0; flex-shrink: 1; }
+/* a design brief: a column beside the design being built, which scrolls when the requirements are long */
+.sd-brief { min-height: 0; flex-shrink: 1; display: flex; flex-direction: column; }
+.sd-brief[data-open] { width: min(380px, 100%); }
+/* the title, the score and the goals stay; the requirements under them scroll */
+.sd-brief > * { flex-shrink: 0; }
+.sd-brief > .sd-brief-body { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.sd-brief .sd-goal { white-space: normal; }
 /* a problem's goal: a hairline capsule with a state mark (a hollow dot before a run) */
 .sd-goal {
   display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px;
@@ -790,6 +797,8 @@ kbd {
 .sd-goal[data-ok='true'] { border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
 .sd-goal[data-ok='false'] { border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
 .sd-goal-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+/* a phone: the run card floats over the bottom of the canvas; an open card ends above it */
+.sd-phone [data-testid='practice-overlay'] { max-height: calc(100% - 136px); }
 /* a practice dialog entry: wraps its text (a .btn stays on one line) */
 .sd-practice-item {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px;

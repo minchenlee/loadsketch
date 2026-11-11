@@ -1,9 +1,9 @@
-// Practice: constraint problems, on-call incidents and the guess log, apart from the design being
+// Practice: design briefs, constraint problems, on-call incidents and the guess log, apart from the design being
 // edited. The dialog lists them; the one in progress stays on the canvas (PracticeOverlay).
 import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Dumbbell, X } from 'lucide-react';
-import { Constraints, ProblemCard } from './Constraints.tsx';
+import { Briefs, Constraints, ProblemCard } from './Constraints.tsx';
 import { OnCall, OnCallCard } from './OnCall.tsx';
 import { GuessLog } from './GuessLog.tsx';
 import { t } from '../../i18n/index.ts';
@@ -25,7 +25,8 @@ export function PracticeDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <Briefs onStart={close} />
+          <div className="mt-6 grid grid-cols-1 gap-6 border-t border-[var(--line)] pt-4 md:grid-cols-2">
             <Constraints onStart={close} />
             <OnCall onStart={close} />
           </div>

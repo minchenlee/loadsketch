@@ -1,13 +1,15 @@
 // Takes the feature screenshots of the intro site (src/site/media/), headless: each feature in
 // English and Chinese, light and dark, as WebP. It needs the cwebp command (brew install webp).
 // Start the dev server first, then:
-//   node scripts/site-shots.ts [http://127.0.0.1:5317]
+//   node scripts/site-shots.ts [http://127.0.0.1:5317] [feature]
+// With a feature name (for example `brief`), only that one is taken.
 import { chromium, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:5317';
+const ONLY = process.argv[3];
 const OUT = join(import.meta.dirname, '..', 'src', 'site', 'media');
 
 const done = (p: Page) => p.waitForFunction(() => (window as unknown as { __loadsketch: { getState(): { status: string } } }).__loadsketch.getState().status === 'done', null, { timeout: 60_000 });
@@ -20,6 +22,14 @@ const SHOTS: Record<string, { query: string; steps: (p: Page) => Promise<void> }
       await p.getByTestId('open-practice').click();
       await p.getByTestId('oncall-start-gray-errors').click();
       await p.getByTestId('oncall-answer').waitFor({ timeout: 30_000 });
+    },
+  },
+  brief: {
+    query: 'example=three-tier',
+    steps: async (p) => {
+      await p.getByTestId('open-practice').click();
+      await p.getByTestId('brief-start-brief-sale').click();
+      await p.getByTestId('brief-text').waitFor();
     },
   },
   constraints: {
@@ -60,6 +70,7 @@ const SHOTS: Record<string, { query: string; steps: (p: Page) => Promise<void> }
 
 const browser = await chromium.launch({ headless: true });
 for (const [name, shot] of Object.entries(SHOTS)) {
+  if (ONLY && name !== ONLY) continue;
   for (const lang of ['en', 'zh-TW']) {
     for (const theme of ['light', 'dark']) {
       const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5, reducedMotion: 'reduce' });

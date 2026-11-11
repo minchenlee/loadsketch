@@ -18,6 +18,7 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 - **15 kinds of component, and every parameter can be changed.** Load balancer, API server, cache, database, queue, CDN and more: instances, concurrency, timeouts, retries, circuit breakers, hit rates.
 - **46 examples.** Retry storm, cache stampede, gray failure, split brain, a bad config push, poison messages in a FIFO queue, a region cutover, and more. Each one has a scenario and says what to look at.
 - **On-call practice (8 incidents).** A fault is hidden. You see only the users' error rate and p99, pay points to open a component's metrics, name the component and the kind of fault, then fix the design on the canvas.
+- **Design briefs (3).** Start from requirements and an almost empty canvas: you choose the components and their sizes, then a run shows if the design holds. The brief gives how fast each part is, so a smaller number is not an answer. A reference design is one click away.
 - **Constraint problems (3).** Meet error-rate and p99 targets inside a monthly budget and a complexity limit. Every run shows its cost at sample prices.
 - **Terraform import.** Turn Terraform plan JSON into a design (ECS, Lambda, RDS, Aurora, SQS, ElastiCache, CloudFront and more). The import checks capacity first, and each finding runs as a scenario.
 - **Designs are JSON files.** Designs and scenarios (`loadsketch/design@1`, `loadsketch/scenario@1`) have a JSON Schema in `schema/`. They are easy to read and write for people and AI agents.
@@ -74,7 +75,7 @@ npm run build          # type check, then bundle to dist/
 |---|---|
 | `src/schema/` | The file formats (zod), the component kinds, the design checks |
 | `src/engine/` | The discrete-event simulation. No browser APIs |
-| `src/learn/` | Lessons, on-call incidents, constraint problems, cost, diagnosis |
+| `src/learn/` | Lessons, on-call incidents, design briefs, constraint problems, cost, diagnosis |
 | `src/import/terraform/` | Terraform plan JSON → design |
 | `src/app/` | The simulator UI (React, React Flow). The simulation runs in a Web Worker |
 | `src/site/` | The intro site. Its live panels are the simulator in an iframe (`?embed=1`) |

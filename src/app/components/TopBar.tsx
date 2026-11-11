@@ -197,7 +197,7 @@ export function TopBar() {
           <BookOpen size={14} /> <span className="sd-desk">{t('範例')}</span>
         </button>
         {browse && <ExampleBrowser onClose={() => setBrowse(false)} />}
-        <button className="btn" onClick={() => setPractice(true)} title={t('限制條件題目、值班練習和先猜紀錄')} aria-label={t('練習')} data-testid="open-practice">
+        <button className="btn" onClick={() => setPractice(true)} title={t('從需求開始的設計題、限制條件題目、值班練習和先猜紀錄')} aria-label={t('練習')} data-testid="open-practice">
           <Dumbbell size={14} /> <span className="sd-desk">{t('練習')}</span>
         </button>
         {practice && <PracticeDialog onClose={() => setPractice(false)} />}

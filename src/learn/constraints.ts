@@ -161,19 +161,23 @@ export interface ProblemVerdict {
   score: number;
 }
 
-/** Judge one run of a problem: the targets are gates; past them, a cheaper design scores higher. */
-export function judgeProblem(p: Problem, design: Design, run: { result: SimResult; windows: WindowStat[] }): ProblemVerdict {
+/** Judge a run against the four limits: they are gates; past them, a cheaper design scores higher. */
+export function judgeLimits(limits: Problem['limits'], design: Design, run: { result: SimResult; windows: WindowStat[] }): ProblemVerdict {
   const cost = costOf(design, run);
   const points = complexity(design);
   const s = run.result.summary;
   const checks: Check[] = [
-    { id: 'errors', ok: s.errorRate <= p.limits.maxErrorRate, value: s.errorRate, limit: p.limits.maxErrorRate },
-    { id: 'p99', ok: s.latencyMs.p99 <= p.limits.maxP99Ms, value: s.latencyMs.p99, limit: p.limits.maxP99Ms },
-    { id: 'budget', ok: cost.perMonth <= p.limits.budgetPerMonth, value: cost.perMonth, limit: p.limits.budgetPerMonth },
-    { id: 'points', ok: points.total <= p.limits.maxPoints, value: points.total, limit: p.limits.maxPoints },
+    { id: 'errors', ok: s.errorRate <= limits.maxErrorRate, value: s.errorRate, limit: limits.maxErrorRate },
+    { id: 'p99', ok: s.latencyMs.p99 <= limits.maxP99Ms, value: s.latencyMs.p99, limit: limits.maxP99Ms },
+    { id: 'budget', ok: cost.perMonth <= limits.budgetPerMonth, value: cost.perMonth, limit: limits.budgetPerMonth },
+    { id: 'points', ok: points.total <= limits.maxPoints, value: points.total, limit: limits.maxPoints },
   ];
   const passed = checks.every((c) => c.ok);
-  const score = passed ? 50 + Math.round((50 * (p.limits.budgetPerMonth - cost.perMonth)) / p.limits.budgetPerMonth) : 0;
+  const score = passed ? 50 + Math.round((50 * (limits.budgetPerMonth - cost.perMonth)) / limits.budgetPerMonth) : 0;
   return { passed, checks, cost, points, score };
 }
 
+/** Judge one run of a problem. */
+export function judgeProblem(p: Problem, design: Design, run: { result: SimResult; windows: WindowStat[] }): ProblemVerdict {
+  return judgeLimits(p.limits, design, run);
+}

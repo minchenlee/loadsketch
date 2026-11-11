@@ -24,7 +24,8 @@ const PHONE_ZOOM = 0.65;
 /**
  * The first view of a design: all of it. On a phone a wide design would be too small to read, so
  * the view keeps PHONE_ZOOM and shows one end: the ?focus= component, or else the leftmost one
- * (where the traffic starts). The part of the canvas under the run card and an open drawer is not counted.
+ * (where the traffic starts). The part of the canvas under the run card and an open drawer is not counted,
+ * and neither is the part beside an open design brief.
  */
 function firstView(nodes: SdNode[], w: number, h: number): Viewport {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -34,18 +35,31 @@ function firstView(nodes: SdNode[], w: number, h: number): Viewport {
     x1 = Math.max(x1, n.position.x + (n.measured?.width ?? NODE_W));
     y1 = Math.max(y1, n.position.y + (n.measured?.height ?? 84));
   }
-  if (!isPhone()) return getViewportForBounds({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, w, h, FIT.minZoom, FIT.maxZoom, FIT.padding);
+  if (!isPhone()) {
+    const bounds = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+    const brief = document.querySelector<HTMLElement>('.sd-brief');
+    if (!brief) return getViewportForBounds(bounds, w, h, FIT.minZoom, FIT.maxZoom, FIT.padding);
+    // an open design brief covers the right of the canvas from top to bottom: the design goes beside it
+    if (brief.hasAttribute('data-open')) return getViewportForBounds(bounds, Math.max(260, w - brief.offsetWidth - 24), h, FIT.minZoom, FIT.maxZoom, FIT.padding);
+    // closed, it is a bar with the goals at the top: the design goes under it
+    const top = brief.offsetHeight + 24;
+    const v = getViewportForBounds(bounds, w, Math.max(200, h - top), FIT.minZoom, FIT.maxZoom, FIT.padding);
+    return { ...v, y: v.y + top };
+  }
   const covered = useApp.getState().drawer ? Math.min(innerHeight * 0.56, 520) + 66 : 112;
-  const free = Math.max(120, h - covered);
+  // a design brief's bar is at the top of the canvas
+  const card = document.querySelector<HTMLElement>('.sd-brief');
+  const top = card ? card.offsetHeight + 16 : 0;
+  const free = Math.max(120, h - covered - top);
   const all = getViewportForBounds({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, w, free, FIT.minZoom, FIT.maxZoom, FIT.padding);
-  if (all.zoom >= PHONE_ZOOM) return all;
+  if (all.zoom >= PHONE_ZOOM) return { ...all, y: all.y + top };
   const focus = nodes.find((n) => n.id === FOCUS);
   const at = focus ?? nodes.reduce((a, n) => (n.position.x < a.position.x ? n : a));
   const cx = at.position.x + (at.measured?.width ?? NODE_W) / 2;
   const cy = at.position.y + (at.measured?.height ?? 84) / 2;
   // the focus in the middle; without one, the design's left edge at the screen's left edge
   const x = focus ? w / 2 - cx * PHONE_ZOOM : 16 - x0 * PHONE_ZOOM;
-  return { x, y: free / 2 - cy * PHONE_ZOOM, zoom: PHONE_ZOOM };
+  return { x, y: top + free / 2 - cy * PHONE_ZOOM, zoom: PHONE_ZOOM };
 }
 
 export const DRAG_MIME = 'application/x-loadsketch-kind';

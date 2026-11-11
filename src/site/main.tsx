@@ -187,6 +187,7 @@ const shot = (id: string, lang: Lang, theme: Theme) => MEDIA[`./media/${id}-${la
 
 const SLIDES = [
   { id: 'oncall', title: tx('值班練習'), text: tx('有東西壞了。你只看得到失敗率和延遲。找出來，修好它。') },
+  { id: 'brief', title: tx('從需求開始設計'), text: tx('只有需求和幾乎空白的畫布。自己組，跑一次，看撐不撐得住。') },
   { id: 'why', title: tx('為什麼會這樣'), text: tx('每次跑完，告訴你發生了什麼。一步一步，照時間說。') },
   { id: 'constraints', title: tx('預算有限的題目'), text: tx('失敗率和延遲要達標，預算不能超過。越省，分數越高。') },
   { id: 'terraform', title: tx('匯入 Terraform'), text: tx('plan JSON 轉成設計。哪裡容量不夠，按一下就跑。') },

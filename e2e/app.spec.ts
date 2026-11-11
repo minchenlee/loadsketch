@@ -148,14 +148,19 @@ test('every example opens with its own scenario and no overlapping cards', async
     await page.goto(`/app/?example=${name}`);
     await expect(page.locator('[data-node]').first()).toBeVisible();
     if (existsSync(join(dir, '..', 'scenarios', `${name}.json`))) await expect(page.getByRole('button', { name: '情境' })).not.toContainText('平穩流量');
-    const boxes = await page.locator('[data-node]').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { id: e.getAttribute('data-node'), x: r.x, y: r.y, w: r.width, h: r.height }; }));
-    for (let i = 0; i < boxes.length; i++) {
-      for (let j = i + 1; j < boxes.length; j++) {
-        const a = boxes[i], b = boxes[j];
-        const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-        expect(overlap, `${name}: ${a.id} overlaps ${b.id}`).toBe(false);
+    // the cards take their places a moment after the first one shows: wait until none overlap
+    const overlaps = () => page.locator('[data-node]').evaluateAll((els) => {
+      const boxes = els.map((e) => { const r = e.getBoundingClientRect(); return { id: e.getAttribute('data-node'), x: r.x, y: r.y, w: r.width, h: r.height }; });
+      const out: string[] = [];
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i], b = boxes[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) out.push(`${a.id} overlaps ${b.id}`);
+        }
       }
-    }
+      return out;
+    });
+    await expect.poll(overlaps, { message: name, timeout: 5000 }).toEqual([]);
   }
 });
 
@@ -1314,6 +1319,82 @@ test('on-call: a run on the canvas shows the same incident, hides the cause unti
   expect(errors).toEqual([]);
 });
 
+test('design brief: starts from the requirements and the given nodes; a design built by hand is judged on limits, needs and givens', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app/');
+  type Node = { id: string; data: { node: { kind: string } } };
+  type S = { nodes: Node[]; edges: unknown[]; scenario: { name?: string }; addNode(kind: string, x: number, y: number): void; onConnect(c: { source: string; target: string }): void; updateNode(id: string, p: { params: Record<string, unknown> }): void };
+  const store = <T,>(fn: (s: S, arg: never) => T, arg?: unknown) => page.evaluate(`(${fn.toString()})(window.__loadsketch.getState(), ${JSON.stringify(arg ?? null)})`) as Promise<T>;
+  const runToEnd = async () => {
+    await page.getByRole('button', { name: /^(執行|再跑一次)$/ }).click();
+    await page.getByRole('button', { name: '跳到結尾' }).click();
+    await expect(page.getByTestId('run')).toBeVisible({ timeout: 60_000 });
+  };
+  await page.getByTestId('open-practice').click();
+  await expect(page.getByTestId('briefs')).toContainText('從需求開始設計');
+  await page.getByTestId('brief-start-brief-notify').click();
+  await expect(page.getByTestId('practice')).toHaveCount(0);
+  // the canvas holds what the brief gives and nothing else; the card opens with the requirements
+  const box = page.getByTestId('problem-brief-notify');
+  await expect(box).toHaveAttribute('data-open', '');
+  for (const part of ['功能需求', '流量', '已知條件', '不在範圍內']) await expect(box.getByTestId('brief-text')).toContainText(part);
+  expect(await store((s) => s.nodes.map((n) => n.id).sort())).toEqual(['sms', 'users']);
+  expect(await store((s) => s.edges.length)).toBe(0);
+  expect(await store((s) => s.scenario.name)).toBe('需求：簡訊通知');
+  await expect(box.getByTestId('need-finished')).not.toHaveAttribute('data-ok');
+  // build it: an API, a queue and a worker that calls the provider. The worker is too small.
+  const add = async (kind: string, x: number) => {
+    await store((s, a: { kind: string; x: number }) => s.addNode(a.kind, a.x, 200), { kind, x });
+    return store((s, k: string) => s.nodes.filter((n) => n.data.node.kind === k && n.id !== 'sms').at(-1)!.id, kind);
+  };
+  const api = await add('service', 300);
+  const queue = await add('queue', 600);
+  const worker = await add('worker', 900);
+  for (const [source, target] of [['users', api], [api, queue], [queue, worker], [worker, 'sms']]) await store((s, c: { source: string; target: string }) => s.onConnect(c), { source, target });
+  await runToEnd();
+  // every request was accepted, but the messages wait: not passed
+  await expect(box.getByTestId('check-errors')).toHaveAttribute('data-ok', 'true');
+  await expect(box.getByTestId('need-finished')).toHaveAttribute('data-ok', 'false');
+  await expect(box.getByTestId('problem-score')).toHaveText('還沒過關');
+  // enough workers: passed, and the score is kept
+  await store((s, id: string) => s.updateNode(id, { params: { instances: 4, concurrency: 32, serviceMs: { mean: 2, cv: 1 } } }), worker);
+  await runToEnd();
+  for (const c of ['errors', 'p99', 'budget', 'points']) await expect(box.getByTestId(`check-${c}`)).toHaveAttribute('data-ok', 'true');
+  for (const n of ['reaches-sms', 'finished', 'not-degraded']) await expect(box.getByTestId(`need-${n}`)).toHaveAttribute('data-ok', 'true');
+  await expect(box.getByTestId('problem-score')).toHaveText(/^過關！得分 \d+/);
+  // just enough workers: the queue empties after the traffic ends, and that work counts
+  await store((s, id: string) => s.updateNode(id, { params: { instances: 2, concurrency: 49, serviceMs: { mean: 2, cv: 1 } } }), worker);
+  await runToEnd();
+  for (const n of ['reaches-sms', 'finished']) await expect(box.getByTestId(`need-${n}`)).toHaveAttribute('data-ok', 'true');
+  await expect(box.getByTestId('problem-score')).toHaveText(/^過關！得分 \d+/);
+  const best = () => page.evaluate(() => (JSON.parse(localStorage.getItem('loadsketch-constraints') ?? '{}') as Record<string, number>)['brief-notify']);
+  const kept = await best();
+  expect(kept).toBeGreaterThanOrEqual(50);
+  await page.screenshot({ path: join(SHOTS, 'brief.png') });
+  // a given part made faster: every number is fine, and it does not pass
+  await store((s) => s.updateNode('sms', { params: { serviceMs: { mean: 1, cv: 0.5 } } }));
+  await runToEnd();
+  await expect(box.getByTestId('brief-broken')).toContainText('不能改設定');
+  await expect(box.getByTestId('problem-score')).toHaveText('還沒過關');
+  // the reference design: the brief goes on (closed, so the design shows), judged without a score
+  await box.getByTestId('brief-reference').click();
+  await expect(box).not.toHaveAttribute('data-open');
+  expect(await store((s) => s.nodes.length)).toBe(5);
+  await runToEnd();
+  await expect(box.getByTestId('problem-score')).toHaveText('參考設計過關（不計分）');
+  expect(await best()).toBe(kept);
+  await box.getByTestId('problem-quit').click();
+  await expect(box).toHaveCount(0);
+  await page.getByTestId('open-practice').click();
+  await expect(page.getByTestId('brief-start-brief-notify')).toContainText(`最高 ${kept} 分`);
+  // picked again: back to the start
+  await page.getByTestId('brief-start-brief-notify').click();
+  expect(await store((s) => s.nodes.map((n) => n.id).sort())).toEqual(['sms', 'users']);
+  expect(errors).toEqual([]);
+});
+
 test('practice: the dialog holds the keyboard; the problem in progress resumes; an incident ends by its button or another load', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -1549,14 +1630,14 @@ test('intro site: it opens the simulator, and its live panels are the simulator 
   await expect(live.getByTestId('file-menu')).toHaveCount(0);
   // the feature carousel: the next button shows the next screenshot, in the page's language and theme
   const carousel = page.getByTestId('site-carousel');
-  await expect(carousel.getByText('1 / 5')).toBeVisible();
+  await expect(carousel.getByText('1 / 6')).toBeVisible();
   await carousel.getByRole('button', { name: 'Next' }).click();
-  await expect(carousel.getByText('2 / 5')).toBeVisible();
-  await expect(carousel.getByRole('heading', { name: 'Why it happened' })).toBeVisible();
-  await expect(carousel.getByRole('img', { name: 'Why it happened' })).toHaveAttribute('src', /why-en-light/);
+  await expect(carousel.getByText('2 / 6')).toBeVisible();
+  await expect(carousel.getByRole('heading', { name: 'Design from requirements' })).toBeVisible();
+  await expect(carousel.getByRole('img', { name: 'Design from requirements' })).toHaveAttribute('src', /brief-en-light/);
   // the current screenshot opens large, and Escape closes it
   await carousel.getByRole('button', { name: 'Enlarge' }).click();
-  await expect(page.getByTestId('site-zoom').getByRole('img')).toHaveAttribute('src', /why-en-light/);
+  await expect(page.getByTestId('site-zoom').getByRole('img')).toHaveAttribute('src', /brief-en-light/);
   // a modal dialog: the page behind it takes no focus, and Tab stays on the dialog's button
   expect(await page.evaluate(() => document.getElementById('root')!.inert)).toBe(true);
   await page.keyboard.press('Tab');
@@ -1567,7 +1648,7 @@ test('intro site: it opens the simulator, and its live panels are the simulator 
   // the language button changes the page text
   await page.getByTestId('site-lang').click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('畫出系統 灌流量 看哪裡先壞');
-  await expect(carousel.getByRole('img', { name: '為什麼會這樣' })).toHaveAttribute('src', /why-zh-light/);
+  await expect(carousel.getByRole('img', { name: '從需求開始設計' })).toHaveAttribute('src', /brief-zh-light/);
   // the page does not scroll sideways on a phone
   await page.setViewportSize({ width: 390, height: 800 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);

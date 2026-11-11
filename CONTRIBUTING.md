@@ -43,6 +43,7 @@ Feature requests are welcome! Please:
 
 We welcome code contributions! Areas where we especially need help:
 - **Examples**: new designs and scenarios that teach one idea well
+- **Design briefs**: a new problem that starts from requirements (`src/learn/briefs.ts`), with a reference design that passes and a first design that does not
 - **Component kinds**: a new kind of component. It is a code change in several places; [AGENTS.md](AGENTS.md) lists them under "新增一種元件"
 - **Model accuracy**: cases where the simulation differs from how real systems behave
 - **Terraform import**: more resource types and providers
@@ -76,7 +77,7 @@ loadsketch/
 ├── src/
 │   ├── schema/             # File formats (zod), component kinds, design checks
 │   ├── engine/             # Discrete-event simulation (no browser APIs)
-│   ├── learn/              # Lessons, on-call incidents, cost, diagnosis
+│   ├── learn/              # Lessons, on-call incidents, design briefs, cost, diagnosis
 │   ├── import/terraform/   # Terraform plan JSON -> design
 │   ├── app/                # Simulator UI (React, React Flow)
 │   ├── site/               # Intro site

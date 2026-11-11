@@ -35,6 +35,9 @@ jobs:
       - name: Golden test (every example gives the same numbers)
         run: npx vitest run tests/golden.test.ts
 
+      - name: Design briefs (the reference design passes, the first design does not)
+        run: npx vitest run tests/briefs.test.ts
+
       - name: AGENTS.md check
         run: node scripts/check-agents-md.ts
 
