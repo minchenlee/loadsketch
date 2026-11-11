@@ -82,7 +82,7 @@ const retryStorm: Lesson = {
     {
       id: 'retry-storm/keep-retries',
       title: tx('重試照留'),
-      text: tx('每條原本有重試的連線至少還要重試 1 次，整場失敗率低於 10%，成功請求的 p99 低於 130 ms。'),
+      text: tx('每條原本有重試的連線至少還要重試 1 次（通往快取的不算），整場失敗率低於 10%，成功請求的 p99 低於 130 ms。'),
       goals: [
         failUnder10,
         { text: tx('成功請求的 p99 低於 130 ms'), check: (run) => ({ ok: run.result.summary.latencyMs.p99 < 130, value: ms(run.result.summary.latencyMs.p99) }) },

@@ -82,7 +82,17 @@ describe('retry-storm lesson: challenges', () => {
     const v = judge(lesson.challenges[2], run(smallQueue, noRetries), original);
     expect(v.goals.every((g) => g.ok)).toBe(true);
     expect(v.passed).toBe(false);
-    expect(v.broken.length).toBe(retried(original).length);
+    // every retried connection but the one into the cache
+    expect(v.broken.length).toBe(retried(original).length - 1);
+  });
+
+  it('a call into a cache may stop retrying: the store is read on a miss, so that retry is not one to keep', () => {
+    const rule = lesson.challenges[2].rules[1];
+    const d = structuredClone(original);
+    for (const e of d.edges) if (e.to === 'cache') e.retries = 0;
+    expect(rule.check(d, original)).toEqual([]);
+    for (const e of d.edges) if (e.to === 'db') e.retries = 0;
+    expect(rule.check(d, original)).toHaveLength(1);
   });
 
   it('more capacity, faster parts, a removed component or a new server break "no more capacity"', () => {

@@ -137,7 +137,7 @@ export const PROBLEMS: Problem[] = [
     scenario: sc(tx('限制：每秒 4000'), { rps: 4000, readRatio: 0.95 }),
     start: [],
     limits: { maxErrorRate: 0.01, maxP99Ms: 200, budgetPerMonth: 2800, maxPoints: 6 },
-    hint: tx('加讀副本最直覺，但多 1 點，也比較貴。拿掉副本，把主庫的連線數調大：快取已經擋掉大部分讀取，主庫只要接得住沒命中的那些。'),
+    hint: tx('加讀副本最直覺，但多 1 點，也比較貴。拿掉副本，把主庫的規格開大（在這裡是調大它同時能處理的查詢數，價錢會跟著漲）：快取已經擋掉大部分讀取，主庫只要接得住沒命中的那些。'),
     solution: [{ node: 'db', params: { replicas: 0, connections: 32 } }],
     naive: [{ node: 'db', params: { replicas: 3 } }],
   },

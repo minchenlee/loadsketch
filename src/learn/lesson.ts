@@ -118,15 +118,20 @@ export const noMoreCapacity: Rule = {
   },
 };
 
-/** Every connection that retried in the original still retries at least once. */
+/**
+ * Every connection that retried in the original still retries at least once. A call into a cache
+ * does not count: when the cache does not answer, the caller reads the store, so a retry there
+ * is not something to keep.
+ */
 export const keepRetries: Rule = {
   short: tx('重試照留'),
-  text: tx('原本有重試的連線，每條至少還要重試 1 次'),
+  text: tx('原本有重試的連線，每條至少還要重試 1 次（通往快取的不算）'),
   check: (d, original) => {
     const now = new Map(d.edges.map((e) => [edgeId(e), e]));
+    const caches = new Set(original.nodes.filter((n) => n.kind === 'cache').map((n) => n.id));
     const out: string[] = [];
     for (const o of original.edges) {
-      if (!o.retries) continue;
+      if (!o.retries || caches.has(o.to)) continue;
       const e = now.get(edgeId(o));
       if (e && !(e.retries && e.retries >= 1)) out.push(t('連線「{id}」不重試了', { id: edgeId(o) }));
     }
