@@ -204,6 +204,13 @@ export interface AppState {
   setTheme: (t: 'light' | 'dark') => void;
   setLang: (l: Lang) => void;
   togglePanel: (p: keyof Panels) => void;
+  /**
+   * A click on a component or a call (M13): opens the closed right panel on its settings. Only a
+   * click calls it; a drag, a box select, the keyboard, undo and paste do not.
+   */
+  openSettings: () => void;
+  /** Counts the clicks that asked for the settings tab (the Inspector follows it). */
+  settingsAsked: number;
   toggleExpanded: (id: string) => void;
   setGuess: (question: string, option: string) => void;
   markPassed: (ids: string[]) => void;
@@ -589,6 +596,13 @@ export const useApp = create<AppState>((set, get) => {
       /* private mode */
     }
     set({ panels });
+  },
+  settingsAsked: 0,
+  openSettings: () => {
+    // the embedded canvas shows the panels its address asks for; an open panel stays on its tab
+    if (EMBEDDED || get().panels.right) return;
+    get().togglePanel('right');
+    set({ settingsAsked: get().settingsAsked + 1 });
   },
   toggleExpanded: (id) => set({ expanded: { ...get().expanded, [id]: !get().expanded[id] } }),
   setGuess: (question, option) => set({ guesses: { ...get().guesses, [question]: option } }),

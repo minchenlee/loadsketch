@@ -93,6 +93,85 @@ test('⌘B, ⌥⌘B and ⌘J hide and show the left, right and bottom panels', a
   await expect(bottom).toBeVisible();
 });
 
+test.describe('a click opens the panel (M13)', () => {
+  test.beforeEach(async ({ page }) => {
+    // the right panel was closed before
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('m13')) localStorage.setItem('loadsketch-panels', JSON.stringify({ left: true, right: false, bottom: true }));
+      sessionStorage.setItem('m13', '1');
+    });
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+  });
+  const right = (page: Page) => page.getByTestId('right-panel');
+  const selected = (page: Page) => page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { selected: { id: string; type: string } | null } } }).__loadsketch.getState().selected);
+
+  test('opens the panel on its settings when a component or a call is clicked; closed by hand, it stays closed until the next click', async ({ page }) => {
+    await expect(right(page)).toHaveCount(0);
+    await page.locator('[data-node="api"]').click();
+    await expect(right(page)).toBeVisible();
+    await expect(page.getByTestId('tab-design')).toHaveAttribute('aria-selected', 'true');
+    expect(await selected(page)).toEqual({ id: 'api', type: 'node' });
+    // the choice is saved, as with the panel button
+    expect(JSON.parse((await page.evaluate(() => localStorage.getItem('loadsketch-panels')))!).right).toBe(true);
+    // on another tab, a click on a component of the open panel leaves the panel open
+    await page.getByTestId('tab-versions').click();
+    // closed by hand: it stays closed while nothing is clicked, also when a component is selected another way
+    await page.getByRole('button', { name: '隱藏設定面板' }).click();
+    await expect(right(page)).toHaveCount(0);
+    await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { select(s: { id: string; type: string }): void } } }).__loadsketch.getState().select({ id: 'db', type: 'node' }));
+    await page.waitForTimeout(300);
+    await expect(right(page)).toHaveCount(0);
+    // the same component clicked again: open, on its settings (not the versions tab it had)
+    await page.locator('[data-node="api"]').click();
+    await expect(right(page)).toBeVisible();
+    await expect(page.getByTestId('tab-design')).toHaveAttribute('aria-selected', 'true');
+    // a call opens it too
+    await page.getByRole('button', { name: '隱藏設定面板' }).click();
+    await expect(right(page)).toHaveCount(0);
+    // the call from the load balancer to the API server is a straight line between the two cards
+    const lb = (await page.locator('[data-node="lb"]').boundingBox())!;
+    const api = (await page.locator('[data-node="api"]').boundingBox())!;
+    await page.mouse.click(lb.x + lb.width + (api.x - lb.x - lb.width) * 0.3, lb.y + lb.height / 2);
+    await expect(right(page)).toBeVisible();
+    await expect(page.getByTestId('tab-design')).toHaveAttribute('aria-selected', 'true');
+    const edgeSel = await page.evaluate(() => {
+      const st = (window as unknown as { __loadsketch: { getState(): { selected: { id: string; type: string } | null; edges: { id: string; source: string; target: string }[] } } }).__loadsketch.getState();
+      const e = st.selected?.type === 'edge' ? st.edges.find((x) => x.id === st.selected!.id) : undefined;
+      return e && `${e.source}>${e.target}`;
+    });
+    expect(edgeSel).toBe('lb>api');
+  });
+
+  test('opens the panel only on a click: a drag or a box select keeps it closed', async ({ page }) => {
+    const box = (await page.locator('[data-node="api"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 40, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    await expect(right(page)).toHaveCount(0);
+    // it moved, so this was a drag
+    const after = (await page.locator('[data-node="api"]').boundingBox())!;
+    expect(after.x - box.x).toBeGreaterThan(30);
+    // a box select with Shift over two components
+    const users = (await page.locator('[data-node="users"]').boundingBox())!;
+    const lb = (await page.locator('[data-node="lb"]').boundingBox())!;
+    await page.keyboard.down('Shift');
+    await page.mouse.move(users.x - 30, users.y - 30);
+    await page.mouse.down();
+    await page.mouse.move(lb.x + lb.width + 20, lb.y + lb.height + 30, { steps: 8 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    await page.waitForTimeout(300);
+    await expect(right(page)).toHaveCount(0);
+    // undo (the drag above) does not open it either
+    await page.keyboard.press('ControlOrMeta+z');
+    await page.waitForTimeout(300);
+    await expect(right(page)).toHaveCount(0);
+  });
+});
+
 test('dropdowns are our own menus and work with the keyboard', async ({ page }) => {
   await page.goto('/app/?example=three-tier&scenario=steady');
   await expect(page.locator('select')).toHaveCount(0);

@@ -67,6 +67,9 @@ function firstView(nodes: SdNode[], w: number, h: number): Viewport {
   return { x, y: top + free / 2 - cy * PHONE_ZOOM, zoom: PHONE_ZOOM };
 }
 
+/** A click on a component or a call: its settings, in the drawer on a phone, else in the right panel. */
+const openSettings = () => (isPhone() ? useApp.getState().setDrawer('inspector') : useApp.getState().openSettings());
+
 export const DRAG_MIME = 'application/x-loadsketch-kind';
 /** A preset dragged from the palette: its id (M8). */
 export const PRESET_MIME = 'application/x-loadsketch-preset';
@@ -248,9 +251,10 @@ export function Canvas() {
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
       onPaneClick={() => select(null)}
-      // a phone: a tap on a component or a call opens its settings
-      onNodeClick={() => isPhone() && useApp.getState().setDrawer('inspector')}
-      onEdgeClick={() => isPhone() && useApp.getState().setDrawer('inspector')}
+      // a click on a component or a call opens its settings: the drawer on a phone, the closed
+      // right panel elsewhere (M13)
+      onNodeClick={openSettings}
+      onEdgeClick={openSettings}
       onNodeDragStart={(e, n) => tilt.start(e, n)}
       onNodeDrag={(e, n) => tilt.move(e, n)}
       onNodeDragStop={(e, n) => tilt.stop(e, n)}

@@ -696,11 +696,12 @@ export function Inspector() {
   const [tab, setTab] = useState<Tab>(hasLesson && !selected ? 'learn' : 'design');
   const [seen, setSeen] = useState(true);
   const imports = useApp((s) => s.imported?.loads);
-  const [last, setLast] = useState({ selected, example, status, imports });
-  if (last.selected !== selected || last.example !== example || last.status !== status || last.imports !== imports) {
-    setLast({ selected, example, status, imports });
+  const asked = useApp((s) => s.settingsAsked);
+  const [last, setLast] = useState({ selected, example, status, imports, asked });
+  if (last.selected !== selected || last.example !== example || last.status !== status || last.imports !== imports || last.asked !== asked) {
+    setLast({ selected, example, status, imports, asked });
     if (imports !== undefined && imports !== last.imports) setTab('checks');
-    else if (selected && selected !== last.selected) setTab('design');
+    else if (asked !== last.asked || (selected && selected !== last.selected)) setTab('design');
     else if (example !== last.example) setTab(hasLesson ? 'learn' : 'design');
     // a finished run has a new story: mark the tab when it is not open
     if (status === 'done' && last.status !== 'done') setSeen(tab === 'learn');
