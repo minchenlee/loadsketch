@@ -173,6 +173,69 @@ test.describe('a click opens the panel (M13)', () => {
   });
 });
 
+test.describe('github link (M16)', () => {
+  const REPO_URL = 'https://github.com/minchenlee/loadsketch';
+  test.beforeEach(async ({ context }) => {
+    // no request leaves the machine: GitHub answers with an empty page
+    await context.route('https://github.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>GitHub</title>' }));
+  });
+
+  test('github link: an icon button in the top bar, between the panel buttons and "more", opens the repository in a new tab', async ({ page }) => {
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    const link = page.getByTestId('github-link');
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', REPO_URL);
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(link).toHaveAttribute('aria-label', 'GitHub');
+    await expect(link).toHaveAttribute('title', '在 GitHub 上看原始碼');
+    // an icon only, the same size as "more"
+    await expect(link).toHaveText('');
+    await expect(link.locator('svg')).toHaveCount(1);
+    const box = (await link.boundingBox())!;
+    const more = (await page.getByTestId('more-menu').boundingBox())!;
+    expect(Math.round(box.height)).toBe(Math.round(more.height));
+    expect(Math.abs(box.width - more.width)).toBeLessThanOrEqual(1);
+    // its place: after the panel buttons, before "more"
+    const panels = (await page.getByRole('group', { name: '面板' }).boundingBox())!;
+    expect(box.x).toBeGreaterThan(panels.x + panels.width - 1);
+    expect(box.x + box.width).toBeLessThan(more.x + 1);
+    // a click opens a new tab on the repository; the app stays
+    const [tab] = await Promise.all([page.context().waitForEvent('page'), link.click()]);
+    await expect.poll(() => tab.url()).toBe(REPO_URL);
+    expect(page.url()).toContain('/app/');
+    // English: the same label
+    await page.goto('/app/?example=three-tier&lang=en');
+    await expect(page.getByTestId('github-link')).toHaveAttribute('aria-label', 'GitHub');
+    await expect(page.getByTestId('github-link')).toHaveAttribute('title', 'View the source on GitHub');
+  });
+
+  test('github link: not in the embedded app', async ({ page }) => {
+    await page.goto('/app/?example=three-tier&embed=1&panels=right');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await expect(page.getByTestId('github-link')).toHaveCount(0);
+  });
+
+  test.describe('on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    test('github link: in the "more" menu, not in the bar', async ({ page }) => {
+      await page.goto('/app/?example=three-tier');
+      await expect(page.locator('[data-node]')).toHaveCount(5);
+      await expect(page.getByTestId('github-link')).toBeHidden();
+      await page.getByTestId('more-menu').click();
+      const item = page.getByTestId('github-item');
+      await expect(item).toBeVisible();
+      await expect(item).toContainText('GitHub');
+      const [tab] = await Promise.all([page.context().waitForEvent('page'), item.click()]);
+      await expect.poll(() => tab.url()).toBe(REPO_URL);
+      expect(page.url()).toContain('/app/');
+      // the bar has no extra width
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    });
+  });
+});
+
 test('dropdowns are our own menus and work with the keyboard', async ({ page }) => {
   await page.goto('/app/?example=three-tier&scenario=steady');
   await expect(page.locator('select')).toHaveCount(0);

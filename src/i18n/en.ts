@@ -833,6 +833,7 @@ export const EN: Record<string, string> = {
   "圖片": "Image",
   "圖示": "Icon",
   "圖表": "Charts",
+  "在 GitHub 上看原始碼": "View the source on GitHub",
   "在 {rps} rps 停下：{why}": "Stopped at {rps} rps: {why}",
   "在畫布上修（+{n} 分）": "Fix it on the canvas (+{n} points)",
   "在畫布上選取這個元件": "Select this component on the canvas",

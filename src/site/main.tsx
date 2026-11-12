@@ -11,8 +11,8 @@ import './site.css';
 import logoBlack from '../app/assets/logo-black.svg';
 import logoWhite from '../app/assets/logo-white.svg';
 import { pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
+import { REPO } from '../repo.ts';
 
-const REPO = 'https://github.com/minchenlee/loadsketch';
 const APP = './app/';
 
 type Theme = 'light' | 'dark';

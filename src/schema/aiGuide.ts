@@ -5,6 +5,7 @@
 // (skillMd() and referenceMd(), in skills/loadsketch/, public/skills/loadsketch/ and its zip).
 // tests/ai-guide.test.ts fails when a file and the catalog differ.
 import { EN } from '../i18n/en.ts';
+import { REPO } from '../repo.ts';
 import { DESIGN_SCHEMA, DesignSchema, formatJson, type Design } from './design.ts';
 import { CATEGORY_LABEL, CLIENT_EDGE_LATENCY_MS, EDGE_PARAMS, INTER_REGION_MS, KINDS, type KindSpec, type ParamSpec } from './kinds.ts';
 
@@ -73,8 +74,8 @@ const shape = DesignSchema.shape as Record<string, { description?: string }>;
 export const SITE = 'https://loadsketch.mclee.dev';
 /** Where the skill's files are on the site (public/skills/loadsketch/). */
 export const SKILL_PATH = '/skills/loadsketch';
-/** The repository: the example designs and the README. */
-export const REPO = 'https://github.com/minchenlee/loadsketch';
+/** The repository: the example designs and the README (src/repo.ts). */
+export { REPO };
 
 /** How to answer, the design, a node, an edge and how requests flow: the rules both the guide and the skill hold. */
 function rules(): string[] {

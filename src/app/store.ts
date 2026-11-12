@@ -42,7 +42,8 @@ function storage(): Storage | undefined {
   }
 }
 /** The simulator inside another page (?embed=1): its looping runs leave no versions. */
-const EMBEDDED = new URLSearchParams(location.search).has('embed');
+/** The app inside an iframe of the intro page (?embed=1). */
+export const EMBEDDED = new URLSearchParams(location.search).has('embed');
 
 /** ?lang= first, then the saved choice, then the browser language. Set before any text is made. */
 function initialLang(): Lang {

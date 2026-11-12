@@ -97,7 +97,7 @@ node scripts/check-agents-md.ts
 - **範例**：在 `examples/designs/` 加 JSON，在 `src/app/examples.ts` 的 `CATEGORIES` 放進一個分類；要搭配特定情境時，加到 `src/app/exampleScenarios.ts` 的 `EXAMPLE_SCENARIO`。
 - **情境**：在 `examples/scenarios/` 加 JSON。適用任何設計的，加到 `src/app/store.ts` 的 `GENERAL_SCENARIOS`。
 - **情境事件種類**：`src/schema/design.ts` 的 `ScenarioEvent`（zod union），`src/engine/sim.ts` 的 `scheduleEvents()`，情境編輯器 `src/app/scenarioEdit.ts`。
-- **頂端列**：`src/app/components/TopBar.tsx`。新動作預設放進檔案選單或更多選單（`src/app/components/Menu.tsx` 的 `Menu`），不加新的文字按鈕。
+- **頂端列**：`src/app/components/TopBar.tsx`。新動作預設放進檔案選單或更多選單（`src/app/components/Menu.tsx` 的 `Menu`），不加新的文字按鈕。例外：使用者要求的 GitHub 圖示按鈕（只有圖示，在面板按鈕和「更多」之間；手機放進「更多」選單；embed 不顯示）。repo 網址只寫在 `src/repo.ts` 的 `REPO`。
 - **畫布的動態**（進場、拖曳傾斜、換範例時的飛行）：`src/app/motion.ts` 和 `src/app/components/Canvas.tsx`。對話框的關閉動畫：`src/app/modal.ts` 的 `useExit()`。面板開關：`src/app/components/Slide.tsx` 的 `Slide`。
 - **手機版面（480px 以下）**：`src/app/phone.ts`、`src/app/components/Phone.tsx`（底部分頁和抽屜）；規則在 `docs/design-system.md` 第 8 節。
 - **右側面板的分頁**：`src/app/components/Inspector.tsx`（分頁清單和 `Tab` 型別）；元件從 `useApp` 讀狀態。
