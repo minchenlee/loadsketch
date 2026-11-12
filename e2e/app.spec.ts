@@ -2405,3 +2405,100 @@ test('checkout brief: the brief gives two APIs, and only checkout goes to the pa
   await expect(box.getByTestId('problem-score')).toHaveText('參考設計過關（不計分）');
   expect(errors).toEqual([]);
 });
+
+test.describe('paste design', () => {
+  test('JSON with slips is explained in plain words; a good design shows its changes and replaces the canvas only on a click', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await catchClipboard(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    type S = { design(): { name: string; nodes: { id: string; params?: Record<string, unknown> }[] }; exportText(): string };
+    const st = <T,>(fn: (s: S) => T) => page.evaluate(`(${fn.toString()})(window.__loadsketch.getState())`) as Promise<T>;
+    const before = await st((s) => s.exportText());
+
+    await page.getByTestId('file-menu').click();
+    await page.getByTestId('paste-design-open').click();
+    const dlg = page.getByTestId('paste-design');
+    const box = dlg.getByTestId('paste-design-text');
+    await expect(box).toBeFocused();
+    const apply = dlg.getByTestId('paste-design-apply');
+    await expect(apply).toBeDisabled();
+
+    // copy the current design (to give to an AI)
+    await dlg.getByTestId('paste-design-copy').click();
+    await expect(dlg.getByTestId('paste-design-copy')).toContainText('已複製');
+    expect(await page.evaluate(() => (window as unknown as { __copied: string }).__copied)).toBe(before);
+
+    // a JSON slip: where it is, and the usual cause
+    await box.fill('{\n  "name": "x",\n}');
+    await expect(dlg.getByTestId('paste-design-problems')).toContainText('第 3 行第 1 個字附近有問題');
+    await expect(dlg.getByTestId('paste-design-problems')).toContainText('多了逗號');
+    await expect(apply).toBeDisabled();
+
+    // format slips: the component by its id, the field, what is there and what is expected
+    const d = JSON.parse(before);
+    d.nodes.find((n: { id: string }) => n.id === 'api').params.instances = '6';
+    d.nodes.find((n: { id: string }) => n.id === 'lb').kind = 'loadbalancer';
+    await box.fill(JSON.stringify(d, null, 2));
+    const problems = dlg.getByTestId('paste-design-problems');
+    await expect(problems).toContainText('元件「api」（第 3 個）的設定「instances」要是數字，現在是文字 "6"。');
+    await expect(problems).toContainText('是不是 "load_balancer"？');
+    await expect(apply).toBeDisabled();
+    await page.waitForTimeout(300); // the dialog's entrance
+    await dlg.screenshot({ path: join(SHOTS, 'paste-design-problems.png') });
+
+    // fixed, as an AI answers it (in a code fence): the changes against the canvas
+    d.nodes.find((n: { id: string }) => n.id === 'api').params.instances = 6;
+    d.nodes.find((n: { id: string }) => n.id === 'lb').kind = 'load_balancer';
+    d.nodes.push({ id: 'audit', kind: 'queue', pos: [900, 500] });
+    d.name = 'AI 改過的三層式網站';
+    await box.fill('```json\n' + JSON.stringify(d, null, 2) + '\n```');
+    const diff = dlg.getByTestId('paste-design-diff');
+    await expect(diff).toContainText('「AI 改過的三層式網站」和畫布有 2 處不同');
+    await expect(diff).toContainText('新增元件「Queue」');
+    await expect(diff).toContainText('3 → 6');
+    // a lone queue is allowed, with a warning
+    await expect(dlg.getByTestId('paste-design-warnings')).toContainText('audit');
+    await dlg.screenshot({ path: join(SHOTS, 'paste-design-diff.png') });
+    // nothing changes before the click
+    expect(await st((s) => s.exportText())).toBe(before);
+    await expect(apply).toBeEnabled();
+    await apply.click();
+    await expect(dlg).toHaveCount(0);
+    expect(await st((s) => s.design().name)).toBe('AI 改過的三層式網站');
+    expect(await st((s) => s.design().nodes.find((n) => n.id === 'api')!.params!.instances)).toBe(6);
+    await expect(page.locator('[data-node]')).toHaveCount(6);
+
+    // Escape closes without a change
+    await page.getByTestId('file-menu').click();
+    await page.getByTestId('paste-design-open').click();
+    await dlg.getByTestId('paste-design-text').fill(before);
+    await expect(dlg.getByTestId('paste-design-diff')).toContainText('2 處不同');
+    await page.keyboard.press('Escape');
+    await expect(dlg).toHaveCount(0);
+    expect(await st((s) => s.design().name)).toBe('AI 改過的三層式網站');
+    expect(errors).toEqual([]);
+  });
+
+  test('unsaved changes are named before replacing; a copy the clipboard refuses says so', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new Error('denied'); } } });
+    });
+    await page.goto('/app/?example=three-tier&lang=en');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    type S = { updateNode(id: string, p: { params: Record<string, unknown> }): void; exportText(): string };
+    const text = await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().exportText());
+    await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().updateNode('api', { params: { instances: 4 } }));
+    await page.getByTestId('file-menu').click();
+    await page.getByTestId('paste-design-open').click();
+    const dlg = page.getByTestId('paste-design');
+    await dlg.getByTestId('paste-design-copy').click();
+    await expect(dlg.getByTestId('paste-design-copy-failed')).toContainText('Cannot write to the clipboard');
+    await expect(dlg.getByTestId('paste-design-copy')).not.toContainText('Copied');
+    await dlg.getByTestId('paste-design-text').fill(text);
+    await expect(dlg.getByTestId('paste-design-diff')).toContainText('differs from the canvas in 1 places');
+    await expect(dlg.getByTestId('paste-design-unsaved')).toContainText('not saved');
+  });
+});

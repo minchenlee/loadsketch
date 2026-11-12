@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BookOpen, Check, ChevronDown, Download, Ellipsis, Dumbbell, FileInput, Link2, Redo2, Undo2, FilePlus2, FolderOpen, Languages, Moon, PanelBottom, PanelLeft, PanelRight, Sun } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, ClipboardPaste, Download, Ellipsis, Dumbbell, FileInput, Link2, Redo2, Undo2, FilePlus2, FolderOpen, Languages, Moon, PanelBottom, PanelLeft, PanelRight, Sun } from 'lucide-react';
 import logoBlack from '../assets/logo-black.svg';
 import logoWhite from '../assets/logo-white.svg';
 import { DESIGN_SCHEMA, parseDesign } from '../../schema/design.ts';
@@ -7,6 +7,7 @@ import { useApp, type Panels } from '../store.ts';
 import { ExampleBrowser } from './ExampleBrowser.tsx';
 import { EXAMPLE_PLANS, ImportTerraform } from './ImportTerraform.tsx';
 import { PracticeDialog } from './Practice.tsx';
+import { PasteDesign } from './PasteDesign.tsx';
 import { Menu, type MenuItem } from './Menu.tsx';
 import { encodeShare, SHARE_WARN_CHARS } from '../share.ts';
 import { IS_MAC, SHORTCUT } from '../ui.ts';
@@ -42,6 +43,7 @@ export function TopBar() {
   const planFile = useRef<HTMLInputElement>(null);
   const [shared, setShared] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [pasting, setPasting] = useState(false);
 
   // the link holds the design and the scenario; it goes to the clipboard, or to the address bar when
   // the clipboard is not allowed
@@ -124,6 +126,7 @@ export function TopBar() {
   const fileItems: MenuItem[] = [
     { label: t('新設計'), icon: <FilePlus2 size={14} />, onSelect: () => load({ schema: DESIGN_SCHEMA, name: t('未命名設計'), nodes: [], edges: [] }), 'data-testid': 'new-design' },
     { label: t('開啟'), icon: <FolderOpen size={14} />, onSelect: () => file.current?.click() },
+    { label: t('貼上設計 JSON'), icon: <ClipboardPaste size={14} />, onSelect: () => setPasting(true), title: t('貼上 AI 或別人給你的設計 JSON；也可以從這裡複製目前的設計'), 'data-testid': 'paste-design-open' },
     { label: t('匯入 Terraform'), icon: <FileInput size={14} />, onSelect: () => setImporting(true), title: t('把 Terraform plan（terraform show -json 的輸出）轉成設計'), 'data-testid': 'import-terraform' },
     { label: t('存成 JSON'), icon: <Download size={14} />, onSelect: save, sep: true, 'data-testid': 'save-json' },
   ];
@@ -170,6 +173,7 @@ export function TopBar() {
         </button>
       </div>
       <input ref={file} type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && open(e.target.files[0])} />
+      {pasting && <PasteDesign onClose={() => setPasting(false)} />}
       {importing && (
         <ImportTerraform
           onClose={() => setImporting(false)}
