@@ -1,4 +1,4 @@
-import { isPhone } from '../phone.ts';
+import { isPhone, usePhone } from '../phone.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CircleX, TriangleAlert, X } from 'lucide-react';
 import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useStoreApi, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
@@ -300,7 +300,7 @@ const THROUGH_HINT_MS = 12_000;
 
 /**
  * A cache just connected straight to a store: once, at the bottom of the canvas (where the panels do
- * not cover it), what that line does. The line keeps its "read-through" label.
+ * not cover it; on a phone, at the top), what that line does. The line keeps its "read-through" label.
  */
 function ThroughHint() {
   const id = useApp((s) => s.throughHint);
@@ -314,9 +314,12 @@ function ThroughHint() {
     const h = setTimeout(() => useApp.getState().throughHint === id && useApp.setState({ throughHint: null }), THROUGH_HINT_MS);
     return () => clearTimeout(h);
   }, [id]);
+  // on a phone the run card and the drawers take the bottom: the hint goes on top, under the
+  // design-check button, where an open drawer does not reach it
+  const phone = usePhone();
   if (!id || !names) return null;
   return (
-    <Panel position="bottom-center" className="!mb-3 w-[min(440px,calc(100%-24px))]">
+    <Panel position={phone ? 'top-center' : 'bottom-center'} className={`w-[min(440px,calc(100%-24px))] ${phone ? '!mt-14' : '!mb-3'}`}>
       <div className="card sd-over flex gap-2 p-2.5 text-[13px] leading-snug" role="status" data-testid="edge-through-hint">
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 font-medium">{names}</div>

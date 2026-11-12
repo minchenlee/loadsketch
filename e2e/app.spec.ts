@@ -1853,6 +1853,44 @@ test.describe('phone layout', () => {
     expect(a.width).toBeGreaterThan(300);
     expect(b.y).toBeGreaterThan(a.y);
   });
+
+  test('read-through hint on a phone: above the run card, and still in view with a drawer open', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { onConnect(c: { source: string; target: string }): void } } }).__loadsketch.getState().onConnect({ source: 'cache', target: 'db' }));
+    const hint = page.getByTestId('edge-through-hint');
+    await expect(hint).toBeVisible();
+    // nothing overlaps it, and what is on top at each corner of the text is the hint itself
+    const clear = async () => {
+      const h = (await hint.boundingBox())!;
+      expect(h.y).toBeGreaterThanOrEqual(0);
+      for (const other of [page.locator('.sd-runcard'), page.getByTestId('phone-drawer')]) {
+        if (!(await other.isVisible())) continue;
+        const o = (await other.boundingBox())!;
+        expect(h.y + h.height <= o.y || o.y + o.height <= h.y, 'overlaps').toBe(true);
+      }
+      const onTop = await hint.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return [[r.left + 8, r.top + 8], [r.right - 8, r.bottom - 8], [r.left + r.width / 2, r.top + r.height / 2]].every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+      });
+      expect(onTop).toBe(true);
+    };
+    await page.waitForTimeout(600); // the run card and the canvas have stopped moving
+    await clear();
+    await page.screenshot({ path: join(SHOTS, 'phone-read-through.png') });
+    // a drawer open: the hint stays in view
+    await page.getByTestId('phone-tab-inspector').tap();
+    await expect(page.getByTestId('phone-drawer')).toHaveAttribute('data-open');
+    await page.waitForTimeout(600); // the drawer has stopped moving
+    await expect(hint).toBeVisible();
+    await clear();
+    await page.screenshot({ path: join(SHOTS, 'phone-read-through-drawer.png') });
+    await hint.getByTestId('edge-through-hint-close').tap();
+    await expect(hint).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
