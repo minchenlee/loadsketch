@@ -72,7 +72,7 @@ const autoscale = (max: number): Record<string, ParamSpec> => ({
       { value: 'off', label: '關（固定台數）' },
       { value: 'on', label: '開（依忙碌率加減台數）' },
     ],
-    help: '開啟後，「實例數」是最少台數。每隔一段時間看平均忙碌率：太忙就加機器，太閒就減一台。新機器要等開機時間才接請求，剛上線時比較慢（冷啟動）。',
+    help: '開啟後，「實例數」是最少台數。每隔一段時間看平均忙碌率：太忙就加機器，太閒就減機器。新機器要等開機時間才接請求，剛上線時比較慢（冷啟動）。',
   },
   maxInstances: { type: 'int', default: max, min: 1, max: 1000, label: '最多台數', help: '自動擴充的上限。', when: AUTO },
   targetUtil: {

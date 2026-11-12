@@ -1,7 +1,7 @@
 {
   "schema": "loadsketch/design@1",
   "name": "快取 lease＋TTL jitter",
-  "description": "和「快取擊穿」一樣，只多了兩個設定。Lease：熱門 key 過期時，第一個沒命中的請求拿到 lease 去查 DB，其他的每 20 ms 再問一次 Redis，等它寫回。每次過期只查 DB 一次，DB 從約 78 rps 降到約 23 rps，沒有失敗。TTL jitter 0.2：一開始一起寫入的 key 不會在第 10、20、30 秒一起過期，DB 的尖峰變低、變平均。代價：等待的請求多花幾十 ms。",
+  "description": "和「快取擊穿」一樣，只多了兩個設定。Lease：熱門 key 過期時，第一個沒命中的請求拿到 lease 去查 DB，其他的每 20 ms 再問一次 Redis，等它寫回。每次過期只查 DB 一次，DB 從約 61 rps 降到約 23 rps，沒有失敗。TTL jitter 0.2：一開始一起寫入的 key 不會在第 10、20、30 秒一起過期，DB 的尖峰變低、變平均。代價：等待的請求多花幾十 ms。",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },

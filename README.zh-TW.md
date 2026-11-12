@@ -103,7 +103,7 @@ npm run schema                             # 改了元件目錄後重新產生 s
 | `sharded.json` | `hot-keys` | 熱門 key 讓一個分片特別忙 |
 | `retry-storm.json` | `retry-storm` | 突波過後，每層重試 3 次把流量放大 4 倍，系統一直起不來（metastable failure） |
 | `retry-budget.json` | `retry-storm` | 同一個設計加上 10% 重試預算：突波過後幾秒就恢復 |
-| `adaptive-throttle.json` | `retry-storm` | 同一個設計改用呼叫端自適應限流（K = 2）：擋下重試風暴，但約 40 秒才完全恢復 |
+| `adaptive-throttle.json` | `retry-storm` | 同一個設計改用呼叫端自適應限流（K = 2）：擋下重試風暴，但約 33 秒才完全恢復 |
 | `autoscale.json` | `flash-crowd` | 自動擴充：新實例要開機 30 秒、冷啟動變慢，追不上突然的流量 |
 | `cache-stampede.json` | `hot-key-expiry` | 熱門 key 過期時上百個請求一起查 DB（cache stampede），DB 和 API 滿載 |
 | `cache-lease.json` | `hot-key-expiry` | 同一個設計加上 lease 和 TTL jitter：每次過期只查一次 DB，沒有失敗 |
@@ -123,10 +123,13 @@ npm run schema                             # 改了元件目錄後重新產生 s
 | `blind-autoscaler.json` | `blind-autoscaler` | 流量 3 倍，自動擴充要問的監控服務（同一個叢集）也被擠爆：擴充器看不到數字，到第 60 秒才開始加機器，約 51% 請求失敗。拿掉控制面那條線（改看平台自己的指標）：第 25 秒就加機器，失敗降到約 17% |
 | `order-outbox.json` | `order-outbox` | 下單先寫 DB 再送佇列，佇列故障 20 秒：約 5,900 張訂單存了但通知沒送，使用者也看到失敗（23%）。打開 outbox：0 失敗、0 不一致，佇列恢復後 relay 補送全部訊息（非同步 p99 約 4.8 秒） |
 | `fifo-poison.json` | `fifo-poison` | FIFO 佇列 8 組，每 1000 則有 1 則毒訊息：每則卡住整組約 50 秒，非同步 p99 約 91 秒，結束時還積了約 10,700 則。分組數 256：p99 約 44 秒；visibility timeout 2 秒：約 16 秒；改回一般佇列：13 ms |
+| `serverless-db.json` | `spike` | 函式（像 AWS Lambda）直接查 Postgres：突波時每個新環境各占一條資料庫連線，資料庫在第 34 秒前後滿載、排隊 |
 
-另有 9 個參考知名服務公開資料做的概念範例（各自有同名情境）：Bitly（`url-shortener`）、Netflix（`cdn-offload`）、Shopify（`flash-sale`）、Stripe（`saas-stripe`）、Discord（`hot-shard`）、Instagram（`cache-cold-restart`）、Uber（`location-writes`）、Dropbox（`upload-tasks`）、Twitter（`timeline-fanout`）。說明、來源和「試試看」在 [`docs/examples-saas.md`](docs/examples-saas.md)。這些是簡化的模型，不是各公司真正的架構。
+另有 8 個參考知名服務公開資料做的概念範例（各自有同名情境）：Bitly（`url-shortener`）、Netflix（`cdn-offload`）、Shopify（`flash-sale`）、Discord（`hot-shard`）、Instagram（`cache-cold-restart`）、Uber（`location-writes`）、Dropbox（`upload-tasks`）、Twitter（`timeline-fanout`）。說明、來源和「試試看」在 [`docs/examples-saas.md`](docs/examples-saas.md)。這些是簡化的模型，不是各公司真正的架構。
 
 「真實服務架構」分類有 3 個完整架構（14–18 個元件）：Instagram 2011（`saas-instagram`）、Uber 2015（`saas-uber`）、Netflix 2016（`saas-netflix`），各自有一個故障情境和修正步驟。說明在 [`docs/examples-architectures.md`](docs/examples-architectures.md)。
+
+「真實事故重現」分類有 4 個照公開事故報告做的範例（11–19 個元件）：Slack 2022（`saas-slack`）、Stripe 2019（`saas-stripe`）、LinkedIn 2018（`saas-linkedin`）、GitHub 2018（`saas-github`），各自有事故的情境和可以試的修正。說明寫在每個範例的描述裡。
 
 ## 結構
 

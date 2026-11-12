@@ -1053,7 +1053,7 @@ export interface SimResult {
     node: string;
     label: string;
     instance?: number;
-    /** Average utilisation of the busiest instance over the measured time. */
+    /** Average utilisation over the measured time of the named instance: the one that rejected the most requests, else the busiest. */
     utilization: number;
     peakUtilization: number;
     peakAtS: number;
@@ -1542,9 +1542,9 @@ export class Simulation {
         if (!inst) continue;
         this.at(start, () => {
           inst.slowEv = ev.multiplier;
-          this.log({ node: n.id, type: 'slow', text: t('{name}第 {i} 台變慢 {m} 倍', { name: n.label, i: inst.idx, m: ev.multiplier }) });
+          this.log({ node: n.id, type: 'slow', text: t('{name}變慢 {m} 倍', { name: `${n.label} ${inst.role || `#${inst.idx}`}`, m: ev.multiplier }) });
         });
-        if (end !== null) this.at(end, () => { inst.slowEv = 1; this.log({ node: n.id, type: 'slow_end', text: t('{name}第 {i} 台恢復速度', { name: n.label, i: inst.idx }) }); });
+        if (end !== null) this.at(end, () => { inst.slowEv = 1; this.log({ node: n.id, type: 'slow_end', text: t('{name}恢復速度', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
       } else if (ev.type === 'slow') {
         this.at(start, () => {
           n.slow = ev.multiplier;
@@ -1584,9 +1584,9 @@ export class Simulation {
         if (!inst) continue;
         this.at(start, () => {
           inst.errOverride = ev.rate;
-          this.log({ node: n.id, type: 'errors', text: t('{name}第 {i} 台錯誤率變 {p}%', { name: n.label, i: inst.idx, p: Math.round(ev.rate * 100) }) });
+          this.log({ node: n.id, type: 'errors', text: t('{name}錯誤率變 {p}%', { name: `${n.label} ${inst.role || `#${inst.idx}`}`, p: Math.round(ev.rate * 100) }) });
         });
-        if (end !== null) this.at(end, () => { inst.errOverride = null; this.log({ node: n.id, type: 'errors_end', text: t('{name}第 {i} 台錯誤率恢復', { name: n.label, i: inst.idx }) }); });
+        if (end !== null) this.at(end, () => { inst.errOverride = null; this.log({ node: n.id, type: 'errors_end', text: t('{name}錯誤率恢復', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
       } else if (ev.type === 'errors') {
         this.at(start, () => {
           n.errOverride = ev.rate;
@@ -3179,13 +3179,14 @@ export class Simulation {
     }
     const s = this.hcState(n, inst);
     const thr = n.num('hcThreshold');
-    const name = { name: n.label, target: inst.node.label, i: inst.idx };
+    // the instance by its role (primary, replica 1) or its number, as a fault names it
+    const name = { name: n.label, target: `${inst.node.label} ${inst.role || `#${inst.idx}`}` };
     if (ok) {
       s.fails = 0;
       s.passes++;
       if (!s.up && s.passes >= thr) {
         s.up = true;
-        this.log({ node: n.id, type: 'hc_in', text: t('{name}的 health check 把「{target}」第 {i} 台放回', name) });
+        this.log({ node: n.id, type: 'hc_in', text: t('{name}的 health check 把「{target}」放回', name) });
       }
     } else {
       s.passes = 0;
@@ -3193,7 +3194,7 @@ export class Simulation {
       if (s.up && s.fails >= thr) {
         s.up = false;
         n.w.hcOut++;
-        this.log({ node: n.id, type: 'hc_out', text: t('{name}的 health check 把「{target}」第 {i} 台移出', name) });
+        this.log({ node: n.id, type: 'hc_out', text: t('{name}的 health check 把「{target}」移出', name) });
       }
     }
   }
@@ -3228,7 +3229,7 @@ export class Simulation {
     s.streak = 0;
     s.ejectUntil = this.now + n.num('ejectS') * 1000;
     n.w.ejections++;
-    this.log({ node: n.id, type: 'eject', text: t('{name}暫時剔除「{target}」第 {i} 台（連續 {k} 次失敗）', { name: n.label, target: inst.node.label, i: inst.idx, k: n.num('outlierErrors') }) });
+    this.log({ node: n.id, type: 'eject', text: t('{name}暫時剔除「{target}」（連續 {k} 次失敗）', { name: n.label, target: `${inst.node.label} ${inst.role || `#${inst.idx}`}`, k: n.num('outlierErrors') }) });
   }
 
   private balance(n: NodeRT, req: Req, op: Op, done: Done): void {
@@ -4627,6 +4628,10 @@ export class Simulation {
         let hn = 0;
         let maxU = 0;
         let maxIdx = 0;
+        // the instance that turned away the most requests (its queue was full), and how busy it was
+        let rejMax = 0;
+        let rejIdx = 0;
+        let rejU = 0;
         let capA = 0;
         const instRows: NonNullable<NodeResult['instances']> = [];
         const balanced = n.insts.length > 1 && n.inc.some((e) => e.from.kind === 'load_balancer' && e.from.str('policy') !== 'random');
@@ -4647,6 +4652,11 @@ export class Simulation {
           if (u > maxU) {
             maxU = u;
             maxIdx = i.idx;
+          }
+          if (s.rejected > rejMax) {
+            rejMax = s.rejected;
+            rejIdx = i.idx;
+            rejU = u;
           }
           instRows.push({
             idx: i.idx,
@@ -4709,11 +4719,14 @@ export class Simulation {
         const score = peak.util + (t.origin.queue_full > 0 ? 0.5 : 0);
         if (score > worst && t.arrivals > 0) {
           worst = score;
+          // The instance to name: the one whose full queue turned requests away, when there is one.
+          // The busiest on average can be a healthy one (a slow instance that the load balancer
+          // took out has a low average), and the rejections would be told under its name.
           bottleneck = {
             node: n.id,
             label: n.label,
-            instance: n.insts.length > 1 ? maxIdx : undefined,
-            utilization: round(maxU, 4),
+            instance: n.insts.length > 1 ? (rejMax > 0 ? rejIdx : maxIdx) : undefined,
+            utilization: round(rejMax > 0 ? rejU : maxU, 4),
             peakUtilization: round(peak.util, 4),
             peakAtS: peak.t,
             avgQueue: round(avgQ, 2),
@@ -4932,14 +4945,21 @@ export class Simulation {
 
   private why(b: NonNullable<SimResult['bottleneck']>, r: NodeResult): string {
     if (r.kind === 'queue') {
+      // A FIFO queue whose workers are idle: a message that keeps failing holds its group, and the
+      // messages behind it wait (head-of-line blocking). More workers do not help.
+      const worker = this.busiestDownstream(b.node);
+      if (r.holBlocked && (!worker || worker.peak < 0.7)) {
+        return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是一直失敗的訊息卡住自己的分組，同組後面的訊息都在等（head-of-line blocking）。', { name: b.label, k: r.queueDepthEnd ?? 0 });
+      }
       return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 處理得比寫入慢。', { name: b.label, k: r.queueDepthEnd ?? 0 });
     }
     const pct = (x: number) => `${Math.round(x * 100)}%`;
     const count = r.instances?.length ?? 1;
     // When every instance is about as busy as the busiest, the whole pool is the bottleneck.
-    const pool = count > 1 && r.utilization !== undefined && b.utilization <= r.utilization * 1.15;
+    const pool = count > 1 && r.utilization !== undefined && (r.maxInstanceUtilization ?? b.utilization) <= r.utilization * 1.15;
     const role = b.instance !== undefined && r.instances ? r.instances.find((x) => x.idx === b.instance)?.role || `#${b.instance}` : '';
-    const who = pool ? t('{name}（{k} 台都很忙）', { name: b.label, k: count }) : role ? `${b.label} ${role}` : b.label;
+    // an autoscaled pool has a row for every instance it may start: the count would be its maximum
+    const who = pool ? (r.autoscale ? t('{name}（開著的每一台都很忙）', { name: b.label }) : t('{name}（{k} 台都很忙）', { name: b.label, k: count })) : role ? `${b.label} ${role}` : b.label;
     const util = pool ? (r.utilization ?? b.utilization) : b.utilization;
     const queued = Math.round(r.peakQueue ?? 0);
     const dropped = r.origin.queue_full;

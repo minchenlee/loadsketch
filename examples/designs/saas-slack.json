@@ -127,7 +127,7 @@
       "kind": "worker",
       "label": "Job workers（推播、索引、計費）",
       "pos": [1350, 780],
-      "params": { "instances": 12, "concurrency": 8, "serviceMs": { "mean": 30, "cv": 1 } }
+      "params": { "instances": 16, "concurrency": 12, "serviceMs": { "mean": 30, "cv": 1 } }
     },
     {
       "id": "push",

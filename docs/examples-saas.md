@@ -1,6 +1,6 @@
 # 參考知名服務的概念範例
 
-這份文件說明 9 個參考知名服務公開資料做的範例：8 個單一概念範例（`url-shortener`、`cdn-offload`、`flash-sale`、`hot-shard`、`cache-cold-restart`、`location-writes`、`upload-tasks`、`timeline-fanout`），和 Stripe 的 `saas-stripe`。每個範例只取公開資料裡的一個重點，縮小成模擬器能跑的大小。比較完整的架構放在範例瀏覽器的「真實服務架構」分類，說明在 [examples-architectures.md](examples-architectures.md)。
+這份文件說明 8 個參考知名服務公開資料做的單一概念範例（`url-shortener`、`cdn-offload`、`flash-sale`、`hot-shard`、`cache-cold-restart`、`location-writes`、`upload-tasks`、`timeline-fanout`）。每個範例只取公開資料裡的一個重點，縮小成模擬器能跑的大小。比較完整的架構放在範例瀏覽器的「真實服務架構」分類，說明在 [examples-architectures.md](examples-architectures.md)。
 
 先講清楚兩件事：
 
@@ -13,19 +13,18 @@
 node cli/loadsketch.ts run examples/designs/timeline-fanout.json --scenario examples/scenarios/timeline-fanout.json
 ```
 
-下面的數字都是種子 1、60 秒、前 5 秒暖機的結果。不帶 `--scenario`（預設 100 rps）時，9 個設計都沒有錯誤，最忙的元件都在 6% 以下。
+下面的數字都是種子 1、60 秒、前 5 秒暖機的結果。不帶 `--scenario`（預設 100 rps）時，8 個設計都沒有錯誤，最忙的元件都在 6% 以下。
 
 | 範例 | 學什麼 | 情境 | 關鍵結果 |
 |---|---|---|---|
 | [Bitly](#1-bitly-風格短網址轉址) | LRU 快取命中率決定 DB 負載 | 3,000 rps、讀 99%、Zipf 1.0 | 命中率 73%，DB 副本最忙 69% |
 | [Netflix](#2-netflix-風格cdn-擋住新劇上線的流量) | CDN 命中率擋住突波 | 2,000 rps，突波 4 倍 | 來源只收到 250 rps，錯誤 0% |
 | [Shopify](#3-shopify-風格限時搶購) | 限流保護後端 | 400 rps，突波 10 倍 | 429 拒絕 49,870 個，成功請求 p99 100 ms |
-| [Stripe](#4-stripe-風格付款-api-的重試與保險絲) | 重試放大、保險絲 | 銀行 90% 失敗 20 秒 | 保險絲跳開 5 次，p50 120 ms |
-| [Discord](#5-discord-風格熱門頻道造成熱分片) | 熱分片拖垮整體 | 3,500 rps、Zipf 1.2 | 一個分片 100%，平均 46%，錯誤 4.29% |
-| [Instagram](#6-instagram-風格快取失效後的驚群) | 快取故障後的驚群 | memcache 停 5 秒 | Django 滿載排隊 1,384 個，p99 596 ms |
-| [Uber](#7-uber-風格司機位置更新寫入量大分片) | 寫入量只能靠分片 | 寫 80%，爬升到 2.5 倍 | 分片 0 主庫滿載；加副本沒用，加分片有用 |
-| [Dropbox](#8-dropbox-風格上傳非同步任務) | 同步路徑上的慢依賴 | 物件儲存慢 6 倍 20 秒 | 錯誤 28.21%（逾時 6,638） |
-| [Twitter](#9-twitter-風格首頁時間軸的寫入擴散fan-out) | fan-out on write 的積壓 | 1,500 rps，突波 4 倍 | 讀取 p99 57.5 ms；擴散延遲 p99 9.6 秒 |
+| [Discord](#4-discord-風格熱門頻道造成熱分片) | 熱分片拖垮整體 | 3,500 rps、Zipf 1.2 | 一個分片 100%，平均 46%，錯誤 4.29% |
+| [Instagram](#5-instagram-風格快取失效後的驚群) | 快取故障後的驚群 | memcache 停 5 秒 | Django 滿載排隊 1,384 個，p99 596 ms |
+| [Uber](#6-uber-風格司機位置更新寫入量大分片) | 寫入量只能靠分片 | 寫 80%，爬升到 2.5 倍 | 分片 0 主庫滿載；加副本沒用，加分片有用 |
+| [Dropbox](#7-dropbox-風格上傳非同步任務) | 同步路徑上的慢依賴 | 物件儲存慢 6 倍 20 秒 | 錯誤 28.21%（逾時 6,638） |
+| [Twitter](#8-twitter-風格首頁時間軸的寫入擴散fan-out) | fan-out on write 的積壓 | 1,500 rps，突波 4 倍 | 讀取 p99 57.5 ms；擴散延遲 p99 9.6 秒 |
 
 ---
 
@@ -168,55 +167,7 @@ db        805.67 rps  忙碌 20%  最忙 24%
 
 ---
 
-## 4. Stripe 風格：付款 API 的重試與保險絲
-
-檔案：`saas-stripe.json`，情境「銀行第 20 秒起 90% 請求失敗，持續 20 秒」。
-
-### 真實服務做什麼
-
-Stripe 公開了四種限流和降載：每個使用者每秒請求數的限流（token bucket，用 Redis 實作）、同時進行中請求數的限制、保留容量給重要請求的降載，以及事故時的最後防線。另一篇文章說明 idempotency key：用戶端每個操作帶一個唯一 ID，重試時伺服器只做一次，所以網路斷線不會重複扣款；重試要用指數退避加隨機抖動（jitter），避免大家同時重試。
-
-來源：
-
-- Stripe, *Scaling your API with rate limiters*：<https://stripe.com/blog/rate-limiters>
-- Stripe, *Designing robust and predictable APIs with idempotency*：<https://stripe.com/blog/idempotency>
-
-### 對應到元件
-
-| 真實系統 | 模型 |
-|---|---|
-| 請求限流 | `limiter`（800 req/s） |
-| 付款 API | `api`（3 台 × 32） |
-| idempotency key 紀錄 | `idem`（Database，每筆請求都寫或讀） |
-| 呼叫銀行 | `cb`（保險絲）→ `bank`，逾時 500 ms，重試 2 次，退避 100 ms（full jitter） |
-
-### 簡化了什麼
-
-- 模型不檢查 idempotency key 是否重複；`idem` 只代表「每筆都要多一次資料庫存取」的成本。
-- 限流是全站一個桶，不是每個使用者一個；沒有並行數限制，也沒有依重要程度降載。
-- 銀行是一個 API Server，錯誤是隨機的。
-
-### 情境顯示什麼
-
-```
-請求：送出 27,568，成功 20,486，失敗 7,082（錯誤率 25.69%）
-  失敗原因：元件錯誤 669，保險絲跳開 6,413
-成功請求的延遲（ms）：平均 138，p50 120，p95 246，p99 1011
-cb    352.8 rps  保險絲跳開 6,413
-bank 264.36 rps  元件錯誤 2,216
-事件：23.6 秒保險絲跳開，之後每 3 秒試探一次，又跳開；40.2 秒恢復。
-```
-
-銀行一壞，保險絲在 3.6 秒後跳開。之後的付款請求立刻失敗（`circuit_open`），不再佔住付款 API 的執行緒。
-
-### 試試看
-
-- 拿掉保險絲（`api` 直接接 `bank`，保留逾時和重試）：銀行收到 464 rps（寫入只有約 350 rps，多的是重試），錯誤率 33.28%，出現 5,700 個逾時，p99 升到 2,706 ms，API Gateway 滿載。重試把壞掉的下游打得更兇。
-- 把 `cb → bank` 的 `retries` 改成 `0`：銀行收到 232 rps（有重試時是 264），p99 從 1,011 降到 261 ms。下游壞掉時，重試只是多等。
-
----
-
-## 5. Discord 風格：熱門頻道造成熱分片
+## 4. Discord 風格：熱門頻道造成熱分片
 
 檔案：`hot-shard.json`，情境「大型伺服器發公告：少數頻道非常熱」。
 
@@ -262,7 +213,7 @@ messages  3,338.27 rps  平均忙碌 46%  最忙 100%
 
 ---
 
-## 6. Instagram 風格：快取失效後的驚群
+## 5. Instagram 風格：快取失效後的驚群
 
 檔案：`cache-cold-restart.json`，情境「memcache 第 25 秒停 5 秒，恢復時是冷的」。
 
@@ -285,7 +236,7 @@ Instagram 2016 年的 QCon 投影片：使用者、貼文、好友關係放在 P
 ### 簡化了什麼
 
 - 用「快取停 5 秒」代表「快取被清空」。模型裡快取故障時，服務直接讀資料庫；恢復時快取是空的。
-- 沒有 lease、沒有 stale 讀取（見「缺的元件」）。
+- 這個範例沒開防擊穿。模型有 lease 和 coalescing（快取的 `stampede` 參數，見 `cache-lease` 範例），可以打開來比較；沒有 stale 讀取（見「缺的元件」）。
 - 只有一個區域。
 
 ### 情境顯示什麼
@@ -307,7 +258,7 @@ pg        1,341.73 rps
 
 ---
 
-## 7. Uber 風格：司機位置更新（寫入量大、分片）
+## 6. Uber 風格：司機位置更新（寫入量大、分片）
 
 檔案：`location-writes.json`，情境「尖峰時段：第 10 秒起 30 秒內流量爬到 2.5 倍」。
 
@@ -352,7 +303,7 @@ geo  2,940.73 rps  忙碌 53%  最忙 74%  排隊 20.5
 
 ---
 
-## 8. Dropbox 風格：上傳＋非同步任務
+## 7. Dropbox 風格：上傳＋非同步任務
 
 檔案：`upload-tasks.json`，情境「物件儲存第 20 秒起慢 6 倍，持續 20 秒」。
 
@@ -376,7 +327,7 @@ Dropbox 的 ATF（Async Task Framework）讓各團隊排程背景任務。Fronte
 ### 簡化了什麼
 
 - 沒有 Store Consumer 的 2 秒輪詢、沒有優先順序、沒有任務排程時間。
-- 模型的 worker 故障時，訊息算失敗，不會重送；真實的 ATF 是 at-least-once。
+- 這個範例的佇列是「交出就刪」：worker 故障時，訊息算失敗，不會重送。真實的 ATF 是 at-least-once；把佇列的 `delivery` 改成 `at_least_once` 就會重送（見 `async-reliable` 範例）。
 - 讀取（列出檔案）也走同一個上傳 API，所以會被寫入拖慢。
 
 ### 情境顯示什麼
@@ -398,7 +349,7 @@ Dropbox 的 ATF（Async Task Framework）讓各團隊排程背景任務。Fronte
 
 ---
 
-## 9. Twitter 風格：首頁時間軸的寫入擴散（fan-out）
+## 8. Twitter 風格：首頁時間軸的寫入擴散（fan-out）
 
 檔案：`timeline-fanout.json`，情境「大事件：第 20 秒起流量變 4 倍，持續 15 秒」。
 
@@ -422,7 +373,7 @@ Dropbox 的 ATF（Async Task Framework）讓各團隊排程背景任務。Fronte
 
 ### 簡化了什麼
 
-- 模型沒有「一則推文寫 N 次」的放大。用 worker 的 40 ms 處理時間代表「一則推文要寫到很多人的時間軸」。
+- 這個範例沒有「一則推文寫 N 次」的放大，用 worker 的 40 ms 處理時間代表「一則推文要寫到很多人的時間軸」。要看真的扇出，在 `fanworker → timelines` 那條線設 `fanout`。
 - 沒有名人和一般帳號的混合策略。
 - 發文和讀時間軸一起變 4 倍；真實的大事件主要是發文暴增。
 
@@ -448,17 +399,13 @@ fanworker  271.35 rps  忙碌 75%
 
 ## 缺的元件
 
-下面這些課題，模擬器目前沒有對應的元件或參數，所以沒有做進範例，或只做了近似：
+下面這些課題，模擬器目前沒有對應的元件或參數，所以沒有做進範例，或只做了近似。（這份清單以前還有 request coalescing、Memcache lease、每個使用者的限流桶和並行數限制、依重要程度降載、fan-out 倍數、at-least-once 重送；這些現在都有了，見 `cache-lease`、`tenant-limits`、`priority-shedding`、`async-reliable` 範例和連線的 `fanout`。）
 
 | 課題 | 出現在 | 缺什麼 |
 |---|---|---|
-| Request coalescing | Discord | 同一個 key 同時多個請求時，只往下游送一次。 |
 | 依 key 路由到服務實例 | Discord、Uber（Ringpop） | Load Balancer 的一致性雜湊策略，以及「有狀態、依 key 分配的服務」。 |
-| Memcache lease／stale-while-revalidate | Instagram | 快取沒命中時只讓一個請求去補值，其他人等待或讀舊值。 |
-| 每個使用者一個限流桶、並行數限制、依重要程度降載 | Stripe | Rate Limiter 只有全站一個桶；沒有 concurrency limiter 和 load shedder。 |
-| Idempotency（去重） | Stripe | 重試時判斷「已經做過」並回傳上次的結果。 |
+| Stale-while-revalidate | Instagram | 快取過期時先回舊值，背景再補新值。 |
+| Idempotency（去重） | 付款 API（Stripe） | 重試時判斷「已經做過」並回傳上次的結果。 |
 | 被拒後自動再來／排隊頁 | Shopify | 用戶端的重試行為（被 429 後過一陣子再送），以及等候室的先來先服務。 |
-| Fan-out 倍數 | Twitter | 一則訊息在 worker 產生 N 次下游寫入。 |
 | CDN 容量和預先推送 | Netflix | CDN 的頻寬上限，以及命中率隨時間變化（例如情境事件改命中率）。 |
-| At-least-once 重送 | Dropbox | Worker 失敗時把訊息放回佇列。 |
 | 地理查詢 | Uber | 「找附近的 key」這種跨分片的範圍查詢。 |

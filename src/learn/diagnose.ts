@@ -58,7 +58,9 @@ export function diagnose(full: RunData): Story[] {
     const k = `${e.type}:${e.node ?? (e.type.startsWith('region_') ? e.text : '')}`;
     if (seen.has(k)) continue;
     seen.add(k);
-    out.push({ t: e.t, kind: 'trigger', node: e.node, text: e.text });
+    // the same thing on several instances of the node at the same time is one line that says how many
+    const same = e.node === undefined ? 1 : result.timeline.filter((x) => x.type === e.type && x.node === e.node && x.t === e.t).length;
+    out.push({ t: e.t, kind: 'trigger', node: e.node, text: same > 1 ? t('{text}（同一時間共 {k} 台）', { text: e.text, k: same }) : e.text });
   }
 
   // the system's own reactions: the first of each kind on each node
