@@ -38,8 +38,10 @@ function useRunsAgain(items: CompareItem[]): (Again | undefined)[] {
 
 export function CompareHost() {
   const items = useApp((s) => s.compare);
+  const key = useApp((s) => s.compareKey);
   if (!items) return null;
-  return <CompareDialog items={items} onClose={() => useApp.getState().closeCompare()} />;
+  // a new comparison (another link in the same tab) starts afresh: baseline, runs, share note
+  return <CompareDialog key={key} items={items} onClose={() => useApp.getState().closeCompare()} />;
 }
 
 function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () => void }) {
@@ -76,13 +78,15 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
   const metrics = METRICS;
 
   // a link to this comparison: the baseline first (Q9=A: at most 2 runs)
+  // what the last share did; shown in this dialog (the app behind it is inert and cannot be read)
+  const [link, setLink] = useState<{ url: string; copied: boolean; long: boolean } | null>(null);
   const [shared, setShared] = useState(false);
   const canShare = items.length <= MAX_SHARE_COMPARE;
   const share = async () => {
     const runs = [base, ...items.filter((x) => x !== base)].map((x) => ({ name: x.name, design: x.design, scenario: x.scenario }));
     const r = await copyLink(await encodeCompare(runs));
-    if (r.long) useApp.setState({ error: t('分享連結很長（{n} 個字元），有些聊天軟體會截斷。大的設計建議用「存成 JSON」分享。', { n: r.url.length }) });
-    if (!r.copied) useApp.setState({ error: t('不能寫入剪貼簿：連結已放在網址列，從那裡複製。') });
+    setLink(r);
+    if (!r.copied) return;
     setShared(true);
     setTimeout(() => setShared(false), 2000);
   };
@@ -108,6 +112,15 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {link && (!link.copied || link.long) && (
+            <div className="card mb-3 px-3 py-2 text-[14px]" style={{ borderColor: 'color-mix(in srgb, var(--warn) 55%, var(--line))' }} data-testid="compare-share-note">
+              {!link.copied && <div>{t('不能寫入剪貼簿：選取下面的連結，自己複製。')}</div>}
+              {link.long && <div>{t('分享連結很長（{n} 個字元），有些聊天軟體會截斷。大的設計建議用「存成 JSON」分享。', { n: link.url.length })}</div>}
+              {!link.copied && (
+                <input className="field mt-1.5 w-full font-mono text-[12px]" readOnly value={link.url} aria-label={t('分享連結')} onFocus={(e) => e.currentTarget.select()} autoFocus data-testid="compare-share-link" />
+              )}
+            </div>
+          )}
           {mixed && (
             <div className="card mb-3 flex items-start gap-2 px-3 py-2 text-[14px]" style={{ borderColor: 'color-mix(in srgb, var(--warn) 55%, var(--line))' }} data-testid="compare-mixed">
               <TriangleAlert size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--warn-ink)' }} />

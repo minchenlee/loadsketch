@@ -2189,3 +2189,58 @@ test('compare: a chart made big over the compare view closes alone; the app stay
   await expect(dlg).toHaveCount(0);
   expect(await inert()).toBe(false);
 });
+
+test.describe('compare examples: links and the clipboard', () => {
+  test('another comparison link in the same tab starts afresh: its own baseline and runs', async ({ page }) => {
+    await catchClipboard(page);
+    await page.goto('/app/?lang=en');
+    // two links: the retry pair and the cache pair
+    const linkOf = async (search: string, card: string) => {
+      await page.getByTestId('open-examples').click();
+      await page.getByLabel('Search examples').fill(search);
+      await page.getByTestId(card).click();
+      const dlg = page.getByTestId('compare');
+      await dlg.getByTestId('compare-share').click();
+      await expect(dlg.getByTestId('compare-share')).toContainText('Copied');
+      const url = await page.evaluate(() => (window as unknown as { __copied: string }).__copied);
+      await page.keyboard.press('Escape');
+      await expect(dlg).toHaveCount(0);
+      return url.slice(url.indexOf('#'));
+    };
+    const retry = await linkOf('retry', 'example-compare-retry-storm');
+    const cache = await linkOf('cache-stampede', 'example-compare-cache-stampede');
+
+    await page.evaluate((h) => (location.hash = h), retry);
+    const dlg = page.getByTestId('compare');
+    await expect(dlg.getByTestId('compare-col').nth(1)).toContainText('Retry budget');
+    await expect(dlg.getByTestId('compare-row-errorRate').locator('[data-tone]')).toHaveCount(1, { timeout: 60_000 });
+    // B as the baseline in this one
+    await dlg.getByTestId('compare-set-base').click();
+    await expect(dlg.getByTestId('compare-col').nth(1).getByTestId('compare-base')).toBeVisible();
+
+    // the next link, in the same tab: A is its baseline, and no number of the last one is shown
+    await page.evaluate((h) => (location.hash = h), cache);
+    await expect(dlg.getByTestId('compare-col').nth(1)).toContainText('lease');
+    await expect(dlg.getByTestId('compare-col').nth(0).getByTestId('compare-base')).toBeVisible();
+    await expect(dlg.getByTestId('compare-col').nth(1).getByTestId('compare-base')).toHaveCount(0);
+    await expect(dlg.getByTestId('compare-row-errorRate').locator('td').nth(1)).toContainText('…');
+  });
+
+  test('a clipboard that refuses: no "Copied"; the link shows in the dialog to copy by hand', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new DOMException('denied', 'NotAllowedError'); } } });
+    });
+    await page.goto('/app/?lang=en');
+    await page.getByTestId('open-examples').click();
+    await page.getByLabel('Search examples').fill('retry');
+    await page.getByTestId('example-compare-retry-storm').click();
+    const dlg = page.getByTestId('compare');
+    await dlg.getByTestId('compare-share').click();
+    await expect(dlg.getByTestId('compare-share-note')).toContainText('Cannot write to the clipboard');
+    await expect(dlg.getByTestId('compare-share-link')).toHaveValue(/#c=1\.[A-Za-z0-9_-]+$/);
+    await expect(dlg.getByTestId('compare-share-link')).toBeFocused();
+    await expect(dlg.getByTestId('compare-share')).not.toContainText('Copied');
+    await page.waitForTimeout(2100);
+    await expect(dlg.getByTestId('compare-share')).not.toContainText('Copied');
+  });
+});

@@ -88,8 +88,11 @@ describe('comparison links (roadmap-next M3, Q9=A)', () => {
     expect(one.ok && JSON.stringify(one.value)).toBe(JSON.stringify(want));
     const link = await decodeLink(`#${OLD_LINK}`);
     expect(link.ok && link.kind === 'one' && JSON.stringify(link.value)).toBe(JSON.stringify(want));
-    // and a link made now is the same text: the s=1 format did not change
-    expect(await encodeShare(want as unknown as { design: Design; scenario: Scenario })).toBe(OLD_LINK);
+    // a link made now opens to the same state (the compressed bytes may differ between Node versions)
+    const now = await encodeShare(want as unknown as { design: Design; scenario: Scenario });
+    expect(now.startsWith('s=1.')).toBe(true);
+    const again = await decodeShare(now);
+    expect(again.ok && JSON.stringify(again.value)).toBe(JSON.stringify(want));
   });
 
   it('holds 2 runs: fewer or more is refused when made and when opened', async () => {

@@ -172,6 +172,8 @@ export interface AppState {
   versionsMemoryOnly: boolean;
   /** The runs in the compare view while it is open (compare.ts). */
   compare: CompareItem[] | null;
+  /** Goes up with every comparison opened: the compare view starts afresh for each one. */
+  compareKey: number;
 
   load: (d: Design, origin?: () => Design) => void;
   /** Load a design from `loadsketch import terraform` (in the browser) with its checks. */
@@ -345,6 +347,7 @@ export const useApp = create<AppState>((set, get) => {
   versions: loadVersions(storage()),
   versionsMemoryOnly: storage() === undefined,
   compare: null,
+  compareKey: 0,
 
   load: (d, origin) => {
     get().stop();
@@ -647,7 +650,7 @@ export const useApp = create<AppState>((set, get) => {
     set({ scenario: structuredClone(v.scenario) });
   },
   importVersions: (add) => changeVersions((l) => mergeVersions(l, add)),
-  openCompare: (items) => set({ compare: items }),
+  openCompare: (items) => set({ compare: items, compareKey: get().compareKey + 1 }),
   compareExamples: (a, b, open) => {
     if (!EXAMPLES[a] || !EXAMPLES[b]) return;
     get().loadExample(open);
@@ -655,7 +658,7 @@ export const useApp = create<AppState>((set, get) => {
       const sc = SCENARIOS[exampleScenario(k)] ?? defaultScenario();
       return { key: `example:${k}`, name: t(EXAMPLES[k].name), design: localizeDesign(structuredClone(EXAMPLES[k])), scenario: structuredClone(sc) };
     };
-    set({ compare: [item(a), item(b)] });
+    set({ compare: [item(a), item(b)], compareKey: get().compareKey + 1 });
   },
   closeCompare: () => set({ compare: null }),
   markPassed: (ids) => {
