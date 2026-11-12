@@ -214,10 +214,12 @@ describe('two tabs', () => {
   });
 
   it('without a list in storage, the change applies to the list in memory', () => {
-    expect(updateVersions(undefined, [fake(1)], (l) => addVersion(l, fake(2))).list.map((v) => v.id)).toEqual(['v2', 'v1']);
+    const none = updateVersions(undefined, [fake(1)], (l) => addVersion(l, fake(2)));
+    expect(none.list.map((v) => v.id)).toEqual(['v2', 'v1']);
+    expect(none.memoryOnly).toBe(true);
     const broken: Store = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     const r = updateVersions(broken, [fake(1)], (l) => removeVersion(l, 'v1'));
-    expect(r.list).toEqual([]);
+    expect(r).toEqual({ list: [], dropped: 0, refused: false, memoryOnly: true });
   });
 });
 
@@ -259,5 +261,19 @@ describe('full storage', () => {
     expect(r).toMatchObject({ refused: true, dropped: 0 });
     expect(r.list).toEqual(before);
     expect(loadVersions(store)).toEqual(before);
+  });
+});
+
+describe('storage that takes no write', () => {
+  it('reads work, every write throws: changes stay in memory and say so', () => {
+    const mem = new Map<string, string>([[VERSIONS_KEY, versionFile([fake(1)])]]);
+    const readOnly: Store = { getItem: (k) => mem.get(k) ?? null, setItem: () => { throw new Error('denied'); } };
+    const r = updateVersions(readOnly, [], (l) => addVersion(l, fake(2)));
+    expect(r.list.map((v) => v.id)).toEqual(['v2', 'v1']);
+    expect(r).toMatchObject({ memoryOnly: true, refused: false, dropped: 0 });
+    // a storage that works is not memory only
+    const ok = new Map<string, string>();
+    const good: Store = { getItem: (k) => ok.get(k) ?? null, setItem: (k, v) => void ok.set(k, v) };
+    expect(updateVersions(good, [], (l) => addVersion(l, fake(1))).memoryOnly).toBe(false);
   });
 });

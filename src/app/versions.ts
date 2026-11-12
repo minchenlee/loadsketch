@@ -227,10 +227,10 @@ export function saveVersions(store: Store | undefined, list: Version[]): { saved
  *
  * The list returned is always the list saved, so memory and storage never differ: versions full
  * storage leaves out are gone (`dropped`), and a change that does not fit at all is not made
- * (`refused`; the list stays as it was). A storage that takes no write at all (blocked) keeps the
- * list in memory only.
+ * (`refused`; the list stays as it was). Without storage, or with a storage that takes no write at
+ * all (blocked), the list lives in memory only (`memoryOnly`): it is gone when the page closes.
  */
-export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[]): { list: Version[]; dropped: number; refused: boolean } {
+export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[]): { list: Version[]; dropped: number; refused: boolean; memoryOnly: boolean } {
   let base = memory;
   try {
     const text = store?.getItem(VERSIONS_KEY);
@@ -241,12 +241,12 @@ export function updateVersions(store: Store | undefined, memory: Version[], chan
   }
   const next = change(base);
   const r = saveVersions(store, next);
-  if (r.saved) return { list: r.saved, dropped: r.dropped, refused: false };
+  if (r.saved) return { list: r.saved, dropped: r.dropped, refused: false, memoryOnly: !store };
   // the list as it was does not save either: the storage takes nothing (blocked), so the list lives in memory
   try {
     store!.setItem(VERSIONS_KEY, versionFile(base));
   } catch {
-    return { list: next, dropped: 0, refused: false };
+    return { list: next, dropped: 0, refused: false, memoryOnly: true };
   }
-  return { list: base, dropped: 0, refused: true };
+  return { list: base, dropped: 0, refused: true, memoryOnly: false };
 }

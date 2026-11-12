@@ -660,7 +660,12 @@ function changeVersions(change: (list: Version[]) => Version[]): void {
   useApp.setState({ versions: r.list });
   if (r.dropped) useApp.setState({ error: t('瀏覽器的儲存空間滿了：最舊的 {n} 個版本已經移除。要留下版本，先匯出成檔案。', { n: r.dropped }) });
   if (r.refused) useApp.setState({ error: t('瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。') });
+  if (r.memoryOnly && !memoryWarned) {
+    memoryWarned = true;
+    useApp.setState({ error: t('這個瀏覽器不讓網頁存資料：版本只留到關閉分頁。要留下版本，先匯出成檔案。') });
+  }
 }
+let memoryWarned = false;
 
 /** A finished run leaves a version: the design and scenario that ran, and a summary of the result. */
 function recordVersion(): void {

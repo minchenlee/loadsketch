@@ -1698,6 +1698,7 @@ export const EN: Record<string, string> = {
   "這個使用者送出的請求是哪一級。過載時，設了「降載門檻」的元件會先丟「可丟棄」的請求；限流器也可以只限「可丟棄」的請求。": "Which class the requests from this user are. Under overload, a component with a load-shedding threshold drops batch requests first; a rate limiter can also limit batch requests only.",
   "這個元件對外開放，但前面已經有別的入口送流量給它，所以使用者不直接接到它。答案檔的 entry 可以改。": "This component is open to the internet, but another entry already sends traffic to it, so users are not wired to it directly. The answer file's entry can change this.",
   "這個比例的訊息內容有問題，每次處理都失敗。搭配 queue 的「至少一次」和 DLQ 看效果。": "Share of messages with bad content that fail on every attempt. Use it with the queue's at-least-once setting and the DLQ to see the effect.",
+  "這個瀏覽器不讓網頁存資料：版本只留到關閉分頁。要留下版本，先匯出成檔案。": "This browser does not let the page store data: versions last only until the tab closes. To keep versions, export them to a file first.",
   "這個發現還沒有對應的模擬。": "This finding has no simulation yet.",
   "這個設計": "For this design",
   "這個設計分了 API：每個請求依 API 的比例決定呼叫哪個 API，讀或寫由 API 決定，不看讀取比例。": "This design has APIs: each request calls one of them by its share, and the API says whether it reads or writes. The read share is not used.",
