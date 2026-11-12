@@ -3,10 +3,12 @@
 // shows it before the canvas is replaced.
 //
 // Settings are compared by what they mean, not how they are written: a parameter left out and the
-// same parameter set to its default are the same. Positions, notes and the description are not
-// compared: they do not change a run.
+// same parameter set to its default are the same. Every field is compared except the few listed as
+// IGNORED below (positions, notes, names, the description, import sources): they do not change a
+// run. A field added to the format later is compared without a change here (tests/design-diff.test.ts
+// lists the fields of the schema to make sure).
 import { EDGE_PARAMS, KINDS, resolveParams, type ParamSpec } from '../schema/kinds.ts';
-import { edgeId, type Design, type DesignEdge, type DesignNode, type Scenario } from '../schema/design.ts';
+import { edgeId, resolveScenario, type Design, type DesignEdge, type DesignNode, type Scenario } from '../schema/design.ts';
 import { isPercent, unitLabel } from './paramLayout.ts';
 import { t, tx } from '../i18n/index.ts';
 
@@ -32,15 +34,27 @@ export interface EdgeRef {
 
 const same = (a: Value, b: Value) => JSON.stringify(a) === JSON.stringify(b);
 
-/** Node fields compared besides its params. */
-const NODE_FIELDS = ['kind', 'label', 'region', 'replicaRegion'] as const;
+/** Fields that do not change a run: not compared. */
+export const IGNORED = {
+  design: ['schema', 'name', 'description', 'notes'],
+  node: ['id', 'pos', 'source'],
+  edge: ['id', 'source'],
+  api: ['name', 'label'],
+  scenario: ['schema', 'name'],
+} as const;
 
-/** An edge's settings with the defaults filled in (the latency default depends on the caller). */
+const has = (list: readonly string[], k: string) => list.includes(k);
+const keysOf = (...objs: object[]) => [...new Set(objs.flatMap((o) => Object.keys(o)))];
+
+/** Node fields shown first, in this order; other fields follow. */
+const NODE_FIELDS = ['kind', 'label', 'region', 'replicaRegion'];
+
+/** An edge's fields with the defaults filled in (the latency default depends on the caller). */
 function edgeValues(e: DesignEdge): Record<string, Value> {
-  const out: Record<string, Value> = {};
+  const out: Record<string, Value> = { from: e.from, to: e.to };
   const raw = e as unknown as Record<string, Value>;
   for (const [name, spec] of Object.entries(EDGE_PARAMS)) out[name] = raw[name] ?? (name === 'latencyMs' ? undefined : spec.default);
-  out.apis = e.apis;
+  for (const k of Object.keys(raw)) if (!(k in out) && !has(IGNORED.edge, k)) out[k] = raw[k];
   return out;
 }
 
@@ -59,7 +73,10 @@ export function diffDesigns(a: Design, b: Design): Change[] {
     const na = an.get(nb.id);
     if (!na) continue;
     const base = { type: 'node-changed' as const, node: nb.id, kind: nb.kind, ...label(nb) };
-    for (const f of NODE_FIELDS) if (!same(na[f], nb[f])) out.push({ ...base, field: f, before: na[f], after: nb[f] });
+    const ra = na as unknown as Record<string, Value>;
+    const rb = nb as unknown as Record<string, Value>;
+    const fields = [...NODE_FIELDS, ...keysOf(na, nb).filter((k) => !NODE_FIELDS.includes(k))].filter((k) => k !== 'params' && !has(IGNORED.node, k));
+    for (const f of fields) if (!same(ra[f], rb[f])) out.push({ ...base, field: f, before: ra[f], after: rb[f] });
     // a new kind has other params: compare what is written
     const pa = na.kind === nb.kind ? resolveParams(nb.kind, na.params) : (na.params ?? {});
     const pb = na.kind === nb.kind ? resolveParams(nb.kind, nb.params) : (nb.params ?? {});
@@ -101,7 +118,12 @@ export function diffDesigns(a: Design, b: Design): Change[] {
   for (const [ea, eb] of pairs) {
     const va = edgeValues(ea);
     const vb = edgeValues(eb);
-    for (const k of Object.keys(vb)) if (!same(va[k], vb[k])) out.push({ type: 'edge-changed', ...ref(edgeId(eb), eb), field: k, before: va[k], after: vb[k] });
+    for (const k of keysOf(va, vb)) {
+      if (same(va[k], vb[k])) continue;
+      // a call that now goes from or to another component: the names, as the canvas shows them
+      const end = k === 'from' || k === 'to';
+      out.push({ type: 'edge-changed', ...ref(edgeId(eb), eb), field: k, before: end ? named(va[k] as string) : va[k], after: end ? named(vb[k] as string) : vb[k] });
+    }
   }
 
   // APIs by name
@@ -112,13 +134,16 @@ export function diffDesigns(a: Design, b: Design): Change[] {
   for (const y of b.apis ?? []) {
     const x = aa.get(y.name);
     if (!x) continue;
-    for (const f of ['op', 'share'] as const) {
-      const before = f === 'share' ? (x.share ?? 1) : x[f];
-      const after = f === 'share' ? (y.share ?? 1) : y[f];
-      if (!same(before, after)) out.push({ type: 'api-changed', api: y.name, field: f, before, after });
-    }
+    const rx = { ...x, share: x.share ?? 1 } as Record<string, Value>;
+    const ry = { ...y, share: y.share ?? 1 } as Record<string, Value>;
+    for (const f of keysOf(rx, ry)) if (!has(IGNORED.api, f) && !same(rx[f], ry[f])) out.push({ type: 'api-changed', api: y.name, field: f, before: rx[f], after: ry[f] });
   }
-  if (!same(a.interRegionMs, b.interRegionMs)) out.push({ type: 'design-changed', field: 'interRegionMs', before: a.interRegionMs, after: b.interRegionMs });
+  const da = a as unknown as Record<string, Value>;
+  const db = b as unknown as Record<string, Value>;
+  for (const f of keysOf(a, b)) {
+    if (has(IGNORED.design, f) || f === 'nodes' || f === 'edges' || f === 'apis') continue;
+    if (!same(da[f], db[f])) out.push({ type: 'design-changed', field: f, before: da[f], after: db[f] });
+  }
   return out;
 }
 
@@ -128,30 +153,34 @@ export interface ScenarioChange {
   after: Value;
 }
 
-/** Scenario fields that change a run, with their defaults. */
-const SCENARIO_FIELDS: [string, (s: Scenario) => Value][] = [
-  ['traffic.rps', (s) => s.traffic.rps],
-  ['traffic.readRatio', (s) => s.traffic.readRatio ?? 0.9],
-  ['traffic.clientTimeoutMs', (s) => s.traffic.clientTimeoutMs ?? 3000],
-  ['traffic.arrivals', (s) => s.traffic.arrivals ?? 'poisson'],
-  ['traffic.followReads', (s) => s.traffic.followReads ?? 0],
-  ['durationS', (s) => s.durationS ?? 60],
-  ['warmupS', (s) => s.warmupS ?? 5],
-  ['seed', (s) => s.seed ?? 1],
-  ['keys', (s) => s.keys ?? null],
-  ['scale', (s) => s.scale ?? 'auto'],
-  ['events', (s) => s.events ?? []],
-];
+/** The fields of a resolved scenario, by their place in the scenario file. */
+const SCENARIO_PATH: Record<string, string> = {
+  rps: 'traffic.rps',
+  readRatio: 'traffic.readRatio',
+  clientTimeoutMs: 'traffic.clientTimeoutMs',
+  arrivals: 'traffic.arrivals',
+  followReads: 'traffic.followReads',
+  followAfterMs: 'traffic.followAfterMs',
+  keyCount: 'keys.count',
+  zipf: 'keys.zipf',
+};
+
+/**
+ * A scenario as the engine runs it: every field with its default filled in (resolveScenario), plus
+ * the scale. The name is left out: it does not change a run.
+ */
+function scenarioValues(s: Scenario): Record<string, Value> {
+  const out: Record<string, Value> = {};
+  for (const [k, v] of Object.entries(resolveScenario(s))) if (!has(IGNORED.scenario, k)) out[SCENARIO_PATH[k] ?? k] = v;
+  out.scale = s.scale ?? 'auto';
+  return out;
+}
 
 /** How scenario `b` differs from `a`. Empty: the two runs can be compared number for number. */
 export function diffScenarios(a: Scenario, b: Scenario): ScenarioChange[] {
-  const out: ScenarioChange[] = [];
-  for (const [field, get] of SCENARIO_FIELDS) {
-    const before = get(a);
-    const after = get(b);
-    if (!same(before, after)) out.push({ field, before, after });
-  }
-  return out;
+  const va = scenarioValues(a);
+  const vb = scenarioValues(b);
+  return keysOf(va, vb).filter((k) => !same(va[k], vb[k])).map((field) => ({ field, before: va[field], after: vb[field] }));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -193,6 +222,8 @@ const FIELD_LABEL: Record<string, string> = {
   op: tx('讀或寫'),
   share: tx('流量比重'),
   interRegionMs: tx('跨區域延遲'),
+  from: tx('呼叫端'),
+  to: tx('被呼叫端'),
 };
 
 /** One change as a sentence. */
@@ -250,10 +281,13 @@ const SCENARIO_LABEL: Record<string, string> = {
   'traffic.clientTimeoutMs': tx('使用者逾時'),
   'traffic.arrivals': tx('請求到達方式'),
   'traffic.followReads': tx('寫完接著讀的比例'),
+  'traffic.followAfterMs': tx('寫完多久接著讀'),
+  'keys.count': tx('資料筆數'),
+  'keys.zipf': tx('熱門程度（zipf）'),
   durationS: tx('時長'),
   warmupS: tx('暖機'),
+  windowS: tx('每個統計區間'),
   seed: tx('隨機種子'),
-  keys: tx('資料筆數和熱門程度'),
   scale: tx('縮小比例'),
   events: tx('事件'),
 };
@@ -264,9 +298,8 @@ export function describeScenarioChange(c: ScenarioChange): string {
   const v = (x: Value): string => {
     if (c.field === 'events') return t('{n} 個', { n: (x as unknown[]).length });
     if (c.field === 'traffic.readRatio' || c.field === 'traffic.followReads') return `${fmtNum((x as number) * 100)}%`;
-    if (c.field === 'durationS' || c.field === 'warmupS') return t('{n} 秒', { n: fmtNum(x as number) });
-    if (c.field === 'traffic.clientTimeoutMs') return `${fmtNum(x as number)} ms`;
-    if (c.field === 'keys') return x ? t('{count} 筆，zipf {zipf}', { count: (x as { count: number }).count, zipf: (x as { zipf?: number }).zipf ?? 0.8 }) : t('預設');
+    if (c.field === 'durationS' || c.field === 'warmupS' || c.field === 'windowS') return t('{n} 秒', { n: fmtNum(x as number) });
+    if (c.field === 'traffic.clientTimeoutMs' || c.field === 'traffic.followAfterMs') return `${fmtNum(x as number)} ms`;
     if (c.field === 'traffic.arrivals') return x === 'constant' ? t('平均間隔') : t('隨機');
     return fmtValue(x);
   };

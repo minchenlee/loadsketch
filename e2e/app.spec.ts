@@ -2157,3 +2157,35 @@ test.describe('compare examples', () => {
     await expect(page.getByTestId('compare')).toHaveCount(0);
   });
 });
+
+test('compare: a chart made big over the compare view closes alone; the app stays inert until both close', async ({ page }) => {
+  await page.goto('/app/?lang=en');
+  await page.getByTestId('open-examples').click();
+  await page.getByLabel('Search examples').fill('gray-failure');
+  await page.getByTestId('example-compare-gray-failure').click();
+  const dlg = page.getByTestId('compare');
+  await expect(dlg.getByTestId('compare-col')).toHaveCount(2);
+  const inert = () => page.evaluate(() => !!document.getElementById('root')!.inert);
+  expect(await inert()).toBe(true);
+
+  // Esc closes the big chart only
+  await dlg.getByTestId('compare-chart-p99-expand').click();
+  await expect(page.getByTestId('compare-chart-p99-big')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('compare-chart-p99-big')).toHaveCount(0);
+  await expect(dlg).toBeVisible();
+  expect(await inert()).toBe(true);
+
+  // the close button: the same
+  await dlg.getByTestId('compare-chart-fail-expand').click();
+  await expect(page.getByTestId('compare-chart-fail-big')).toBeVisible();
+  await page.getByTestId('compare-chart-fail-big').getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByTestId('compare-chart-fail-big')).toHaveCount(0);
+  await expect(dlg).toBeVisible();
+  expect(await inert()).toBe(true);
+
+  // then Esc closes the compare view, and the app works again
+  await page.keyboard.press('Escape');
+  await expect(dlg).toHaveCount(0);
+  expect(await inert()).toBe(false);
+});

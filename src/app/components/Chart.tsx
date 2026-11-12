@@ -5,6 +5,7 @@ import { Maximize2, X } from 'lucide-react';
 import { useApp } from '../store.ts';
 import { t } from '../../i18n/index.ts';
 import { LONG_RUN_S, fmtAxisTime, fmtClock, fmtMs, timeIncrs } from '../ui.ts';
+import { useModal } from '../modal.ts';
 
 export interface SeriesSpec {
   label: string;
@@ -202,30 +203,9 @@ function ChartDialog({ name, onClose, ...props }: ChartProps & { name: string; o
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  useLayoutEffect(() => {
-    closeBtn.current?.focus();
-    // a modal dialog: the app behind it takes no focus or clicks while it is open
-    const app = document.getElementById('root');
-    if (app) app.inert = true;
-    return () => {
-      if (app) app.inert = false;
-    };
-  }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onClose();
-      if (e.key !== 'Tab' || !box.current) return;
-      // Tab and Shift+Tab go round the dialog's own controls; focus never leaves it
-      const all = [...box.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')];
-      if (!all.length) return;
-      const i = all.indexOf(document.activeElement as HTMLElement);
-      const next = e.shiftKey ? (i <= 0 ? all.length - 1 : i - 1) : i < 0 || i === all.length - 1 ? 0 : i + 1;
-      e.preventDefault();
-      all[next].focus();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useLayoutEffect(() => closeBtn.current?.focus(), []);
+  // a modal dialog: the app behind it takes no focus or clicks; Esc closes it, Tab stays in it
+  useModal(box, onClose);
   return createPortal(
     <div className="sd-chart-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={box} role="dialog" aria-modal="true" aria-label={props.title} className="max-h-full w-[min(1200px,100%)] overflow-y-auto rounded-[inherit]">

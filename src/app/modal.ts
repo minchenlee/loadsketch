@@ -1,20 +1,38 @@
 // A modal dialog rendered outside #root (createPortal to document.body): while it is open the app
 // behind it is inert (no focus, clicks or shortcuts, see App.tsx), Escape closes it, and Tab goes
 // round the dialog's own controls.
+//
+// Dialogs can open over dialogs (a chart made big inside the compare view): they form a stack. The
+// app stays inert until the last one closes, and Escape and Tab go to the top one only.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { reducedMotion } from './motion.ts';
 
+const stack: object[] = [];
+
+/** The open modal dialogs, for tests. */
+export function openModals(): number {
+  return stack.length;
+}
+
 export function useModal(box: RefObject<HTMLElement | null>, onClose: () => void): void {
+  const [me] = useState(() => ({}));
   useLayoutEffect(() => {
+    stack.push(me);
     const app = document.getElementById('root');
     if (app) app.inert = true;
     return () => {
-      if (app) app.inert = false;
+      stack.splice(stack.indexOf(me), 1);
+      if (app && !stack.length) app.inert = false;
     };
-  }, []);
+  }, [me]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onClose();
+      if (stack[stack.length - 1] !== me) return;
+      if (e.key === 'Escape') {
+        // the dialogs below see this key too: only the top one closes
+        e.stopImmediatePropagation();
+        return onClose();
+      }
       if (e.key !== 'Tab' || !box.current) return;
       // only what Tab can reach: not disabled, not hidden (a file input behind its button)
       const all = [...box.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(
@@ -28,7 +46,7 @@ export function useModal(box: RefObject<HTMLElement | null>, onClose: () => void
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [box, onClose]);
+  }, [box, onClose, me]);
 }
 
 /** How long a dialog takes to leave (index.css: .sd-backdrop[data-closing]). */
