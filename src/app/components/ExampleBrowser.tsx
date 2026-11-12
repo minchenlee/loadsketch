@@ -139,7 +139,7 @@ export function ExampleBrowser({ onClose }: { onClose: () => void }) {
                         close();
                       }}
                       title={t('兩個範例用同一個情境跑，並排看差在哪裡')}
-                      data-testid={`example-compare-${k}`}
+                      data-testid={`pair-compare-${k}`}
                     >
                       <GitCompareArrows size={13} className="shrink-0" />
                       {t('和「{name}」比較', { name: t(EXAMPLES[other].name) })}

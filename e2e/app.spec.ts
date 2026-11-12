@@ -2091,11 +2091,11 @@ test.describe('compare examples', () => {
     await page.getByLabel('Search examples').fill('retry');
     // only the examples in a pair have the button
     await expect(page.getByTestId('example-retry-storm')).toBeVisible();
-    await expect(page.getByTestId('example-compare-adaptive-throttle')).toHaveCount(0);
-    await expect(page.getByTestId('example-compare-retry-storm')).toContainText('Retry budget');
+    await expect(page.getByTestId('pair-compare-adaptive-throttle')).toHaveCount(0);
+    await expect(page.getByTestId('pair-compare-retry-storm')).toContainText('Retry budget');
     await page.waitForTimeout(400); // the dialog's entrance
     await page.getByTestId('example-browser').screenshot({ path: join(SHOTS, 'example-pairs.png') });
-    await page.getByTestId('example-compare-retry-budget').click();
+    await page.getByTestId('pair-compare-retry-budget').click();
     await expect(page.getByTestId('example-browser')).toHaveCount(0);
     const dlg = page.getByTestId('compare');
     await expect(dlg.getByTestId('compare-col')).toHaveCount(2);
@@ -2137,7 +2137,7 @@ test.describe('compare examples', () => {
     await page.goto('/app/?lang=en');
     await page.getByTestId('open-examples').click();
     await page.getByLabel('Search examples').fill('cache-stampede');
-    await page.getByTestId('example-compare-cache-stampede').click();
+    await page.getByTestId('pair-compare-cache-stampede').click();
     const dlg = page.getByTestId('compare');
     await dlg.getByTestId('compare-set-base').click();
     await dlg.getByTestId('compare-share').click();
@@ -2162,7 +2162,7 @@ test('compare: a chart made big over the compare view closes alone; the app stay
   await page.goto('/app/?lang=en');
   await page.getByTestId('open-examples').click();
   await page.getByLabel('Search examples').fill('gray-failure');
-  await page.getByTestId('example-compare-gray-failure').click();
+  await page.getByTestId('pair-compare-gray-failure').click();
   const dlg = page.getByTestId('compare');
   await expect(dlg.getByTestId('compare-col')).toHaveCount(2);
   const inert = () => page.evaluate(() => !!document.getElementById('root')!.inert);
@@ -2207,8 +2207,8 @@ test.describe('compare examples: links and the clipboard', () => {
       await expect(dlg).toHaveCount(0);
       return url.slice(url.indexOf('#'));
     };
-    const retry = await linkOf('retry', 'example-compare-retry-storm');
-    const cache = await linkOf('cache-stampede', 'example-compare-cache-stampede');
+    const retry = await linkOf('retry', 'pair-compare-retry-storm');
+    const cache = await linkOf('cache-stampede', 'pair-compare-cache-stampede');
 
     await page.evaluate((h) => (location.hash = h), retry);
     const dlg = page.getByTestId('compare');
@@ -2233,7 +2233,7 @@ test.describe('compare examples: links and the clipboard', () => {
     await page.goto('/app/?lang=en');
     await page.getByTestId('open-examples').click();
     await page.getByLabel('Search examples').fill('retry');
-    await page.getByTestId('example-compare-retry-storm').click();
+    await page.getByTestId('pair-compare-retry-storm').click();
     const dlg = page.getByTestId('compare');
     await dlg.getByTestId('compare-share').click();
     await expect(dlg.getByTestId('compare-share-note')).toContainText('Cannot write to the clipboard');
