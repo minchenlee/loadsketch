@@ -20,6 +20,7 @@ import {
   versionFile,
   updateVersions,
   viewVersions,
+  versionChanges,
   type Store,
   type Version,
 } from '../src/app/versions.ts';
@@ -251,6 +252,58 @@ describe('storage that reads but takes no write (M8 review rounds 2 and 3)', () 
     const a2 = updateVersions(store, a.list, (l) => renameVersion(l, 'v1', 'base'), a.pending);
     expect(a2).toMatchObject({ memoryOnly: false, pending: [] });
     expect(loadVersions(store).map((v) => [v.id, v.name])).toEqual([['v3', 'run 3'], ['v4', 'run 4'], ['v1', 'base']]);
+  });
+});
+
+describe('changes waiting for storage keep their target (M8 review round 4)', () => {
+  const flaky = () => {
+    const mem = new Map<string, string>();
+    const box = { full: false, mem };
+    const store: Store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => { if (box.full) throw new Error('quota'); mem.set(k, v); } };
+    return { box, store };
+  };
+
+  it('a version merged into another tab\'s version of the same run: the pin and the name that wait follow it', () => {
+    const { box, store } = flaky();
+    saveVersions(store, [fake(1)]);
+    box.full = true;
+    let a = updateVersions(store, loadVersions(store), versionChanges.add(fake(5, { id: 'vA' })));
+    a = updateVersions(store, a.list, versionChanges.pin('vA', true), a.pending);
+    a = updateVersions(store, a.list, versionChanges.rename('vA', 'mine'), a.pending);
+    expect(a.pending).toHaveLength(3);
+    // tab B ran the same design and scenario, saved as vB
+    box.full = false;
+    updateVersions(store, loadVersions(store), versionChanges.add(fake(5, { id: 'vB', at: 2000 })));
+    const a2 = updateVersions(store, a.list, (l) => l, a.pending);
+    expect(a2.pending).toEqual([]);
+    expect(loadVersions(store).map((v) => [v.id, v.name, v.pinned])).toEqual([
+      ['vB', 'mine', true],
+      ['v1', 'run 1', false],
+    ]);
+  });
+
+  it('a version that waits keeps its removal when another tab took its id', () => {
+    const { box, store } = flaky();
+    saveVersions(store, [fake(1)]);
+    box.full = true;
+    let a = updateVersions(store, loadVersions(store), versionChanges.add(fake(5, { id: 'v9' })));
+    a = updateVersions(store, a.list, versionChanges.remove('v9'), a.pending);
+    box.full = false;
+    updateVersions(store, loadVersions(store), versionChanges.add(fake(6, { id: 'v9' })));
+    updateVersions(store, a.list, (l) => l, a.pending);
+    expect(loadVersions(store).map((v) => v.name)).toEqual(['run 6', 'run 1']);
+  });
+
+  it('another tab cleared the versions: the list is empty with this tab\'s unsaved changes on top, and the old ones are not written back', () => {
+    const { box, store } = flaky();
+    saveVersions(store, [fake(2), fake(1)]);
+    box.full = true;
+    const a = updateVersions(store, loadVersions(store), versionChanges.add(fake(3)));
+    box.mem.delete(VERSIONS_KEY);
+    expect(viewVersions(store, a.list, a.pending).map((v) => v.id)).toEqual(['v3']);
+    box.full = false;
+    updateVersions(store, a.list, (l) => l, a.pending);
+    expect(loadVersions(store).map((v) => v.id)).toEqual(['v3']);
   });
 });
 

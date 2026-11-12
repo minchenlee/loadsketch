@@ -30,7 +30,7 @@ import type { Finding } from '../import/terraform/index.ts';
 import { editedSources } from './sources.ts';
 import { markNew, planEntrance } from './motion.ts';
 import type { CompareItem } from './compare.ts';
-import { VERSIONS_KEY, addVersion, loadVersions, mergeVersions, pinVersion, removeVersion, renameVersion, summarize, updateVersions, viewVersions, type Version, type VersionChange } from './versions.ts';
+import { VERSIONS_KEY, loadVersions, newId, summarize, updateVersions, versionChanges, viewVersions, type Version, type VersionChange } from './versions.ts';
 
 /** localStorage, or undefined where it is blocked (private mode in some browsers). */
 function storage(): Storage | undefined {
@@ -649,16 +649,28 @@ export const useApp = create<AppState>((set, get) => {
     saveGuessLog([]);
     set({ guessLog: [] });
   },
-  renameVersion: (id, name) => changeVersions((l) => renameVersion(l, id, name)),
-  pinVersion: (id, pinned) => changeVersions((l) => pinVersion(l, id, pinned)),
-  removeVersion: (id) => changeVersions((l) => removeVersion(l, id)),
+  renameVersion: (id, name) => changeVersions(versionChanges.rename(id, name)),
+  pinVersion: (id, pinned) => changeVersions(versionChanges.pin(id, pinned)),
+  removeVersion: (id) => changeVersions(versionChanges.remove(id)),
   loadVersion: (id) => {
     const v = get().versions.find((x) => x.id === id);
     if (!v) return;
     get().load(structuredClone(v.design));
     set({ scenario: structuredClone(v.scenario) });
   },
-  importVersions: (add) => changeVersions((l) => mergeVersions(l, add)),
+  importVersions: (add) => {
+    // ids are fixed now: taken ones get a new id here, not on a replay
+    const taken = new Set(get().versions.map((v) => v.id));
+    changeVersions(
+      versionChanges.merge(
+        add.map((v) => {
+          const id = taken.has(v.id) ? newId(v.at, taken) : v.id;
+          taken.add(id);
+          return { ...v, id };
+        }),
+      ),
+    );
+  },
   openCompare: (items) => set({ compare: items, compareKey: get().compareKey + 1 }),
   compareExamples: (a, b, open) => {
     if (!EXAMPLES[a] || !EXAMPLES[b]) return;
@@ -707,7 +719,8 @@ function recordVersion(): void {
   if (EMBEDDED || !s.ran || !s.result) return;
   const { design, scenario } = s.ran;
   const v = { at: Date.now(), name: design.name, pinned: false, design, scenario, summary: summarize(design, s.result, s.windows) };
-  changeVersions((l) => addVersion(l, v));
+  // the id is fixed now, so changes made later find this version after a replay
+  changeVersions(versionChanges.add({ ...v, id: newId(v.at, new Set(s.versions.map((x) => x.id))) }));
 }
 
 // another tab changed the versions: show its list

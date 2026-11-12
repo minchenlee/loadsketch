@@ -90,12 +90,15 @@ export function newId(at: number, taken: Set<string>): string {
  * the top with the new time, and keeps its name and pin. Then the oldest unpinned versions beyond
  * MAX_VERSIONS go.
  */
-export function addVersion(list: Version[], v: Omit<Version, 'id'> & { id?: string }, max = MAX_VERSIONS): Version[] {
+export function addVersion(list: Version[], v: Omit<Version, 'id'> & { id?: string }, max = MAX_VERSIONS, alias?: Map<string, string>): Version[] {
   const same = list.find((x) => sameRun(x, v));
   const { id, ...rest } = v;
+  const taken = new Set(list.map((x) => x.id));
   const added: Version = same
     ? { ...same, at: v.at, summary: v.summary }
-    : { id: id ?? newId(v.at, new Set(list.map((x) => x.id))), ...rest };
+    : { id: id && !taken.has(id) ? id : newId(v.at, taken), ...rest };
+  // what the id the caller gave became: the version of the same run, or a new id
+  if (id && added.id !== id) alias?.set(id, added.id);
   return trim([added, ...list.filter((x) => x !== same)], max);
 }
 
@@ -171,12 +174,17 @@ export function parseVersionFile(text: string): { ok: true; versions: Version[];
  * Imported versions join the list: a version of a run already in the list is skipped, ids that are
  * taken get a new one. Pinned versions stay pinned; the unpinned limit applies.
  */
-export function mergeVersions(list: Version[], add: Version[], max = MAX_VERSIONS): Version[] {
+export function mergeVersions(list: Version[], add: Version[], max = MAX_VERSIONS, alias?: Map<string, string>): Version[] {
   const out = [...list];
   const ids = new Set(out.map((v) => v.id));
   for (const v of add) {
-    if (out.some((x) => sameRun(x, v))) continue;
+    const same = out.find((x) => sameRun(x, v));
+    if (same) {
+      if (same.id !== v.id) alias?.set(v.id, same.id);
+      continue;
+    }
     const id = ids.has(v.id) ? newId(v.at, ids) : v.id;
+    if (id !== v.id) alias?.set(v.id, id);
     ids.add(id);
     out.push({ ...v, id });
   }
@@ -220,35 +228,58 @@ export function saveVersions(store: Store | undefined, list: Version[]): { saved
   }
 }
 
-/** A change to the list: replayed on a newer list from storage, so it works by id. */
-export type VersionChange = (list: Version[]) => Version[];
+/**
+ * A change to the list. It may be replayed on a newer list from storage (see `updateVersions`), so
+ * its ids are fixed when it is made. On a replay an id can turn into another one (another tab has a
+ * version of the same run, or took the id): the change records that in `alias`, and later changes
+ * find their version through it (M8 review round 4).
+ */
+export type VersionChange = (list: Version[], alias: Map<string, string>) => Version[];
 /** At most this many changes wait for storage to take a write; more are refused. */
 export const MAX_PENDING_VERSIONS = 40;
 
-/** The list in storage now, or null when storage has none or cannot be read. */
+const to = (alias: Map<string, string>, id: string) => alias.get(id) ?? id;
+
+/** The changes the store makes, in a form that replays. A new version needs its id already. */
+export const versionChanges = {
+  add: (v: Omit<Version, 'id'> & { id: string }): VersionChange => (l, alias) => addVersion(l, v, MAX_VERSIONS, alias),
+  rename: (id: string, name: string): VersionChange => (l, alias) => renameVersion(l, to(alias, id), name),
+  pin: (id: string, pinned: boolean): VersionChange => (l, alias) => pinVersion(l, to(alias, id), pinned),
+  remove: (id: string): VersionChange => (l, alias) => removeVersion(l, to(alias, id)),
+  merge: (add: Version[]): VersionChange => (l, alias) => mergeVersions(l, add, MAX_VERSIONS, alias),
+};
+
+/**
+ * The list in storage now: an empty list when storage has none (another tab may have cleared it), or
+ * null when storage cannot be read (M8 review round 4).
+ */
 function storedVersions(store: Store | undefined): Version[] | null {
+  if (!store) return null;
   try {
-    const text = store?.getItem(VERSIONS_KEY);
-    const r = text ? parseVersionFile(text) : null;
-    return r?.ok ? r.versions : null;
+    const text = store.getItem(VERSIONS_KEY);
+    if (text === null) return [];
+    const r = parseVersionFile(text);
+    return r.ok ? r.versions : null;
   } catch {
     return null;
   }
 }
 
+const replay = (list: Version[], changes: VersionChange[], alias = new Map<string, string>()) => changes.reduce((l, c) => c(l, alias), list);
+
 /**
  * The list to show: the list in storage now, with this tab's changes not saved yet on top. Without a
- * list in storage, the list in memory (it has those changes already).
+ * readable storage, the list in memory (it has those changes already).
  */
 export function viewVersions(store: Store | undefined, memory: Version[], pending: VersionChange[]): Version[] {
   const latest = storedVersions(store);
-  return latest ? pending.reduce((l, c) => c(l), latest) : memory;
+  return latest ? replay(latest, pending) : memory;
 }
 
 /**
  * Changes the list the way another tab may have left it: reads the newest list from storage, applies
  * `change` to it and saves the result. Two tabs then do not overwrite each other's versions. Without
- * a list in storage (blocked storage, nothing saved yet), `change` applies to the list in memory.
+ * a readable storage, `change` applies to the list in memory.
  *
  * Saved, the list returned is the list saved: versions full storage leaves out are gone (`dropped`),
  * and a change that does not fit at all is not made (`refused`; the list stays as it was). Without
@@ -260,8 +291,10 @@ export function viewVersions(store: Store | undefined, memory: Version[], pendin
  * 3). A save that works empties `pending`. With too many changes waiting, this one is refused too.
  */
 export function updateVersions(store: Store | undefined, memory: Version[], change: VersionChange, pending: VersionChange[] = []): { list: Version[]; dropped: number; refused: boolean; memoryOnly: boolean; pending: VersionChange[] } {
-  const base = viewVersions(store, memory, pending);
-  const next = change(base);
+  const latest = storedVersions(store);
+  const alias = new Map<string, string>();
+  const base = latest ? replay(latest, pending, alias) : memory;
+  const next = change(base, alias);
   const r = saveVersions(store, next);
   if (r.saved) return { list: r.saved, dropped: r.dropped, refused: false, memoryOnly: !store, pending: [] };
   // the list as it was (with the changes waiting) does not save either: the storage takes nothing

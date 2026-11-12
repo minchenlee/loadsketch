@@ -94,7 +94,9 @@ function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => 
       useApp.setState({ error: t('打不開 {file}：這不是 loadsketch 匯出的樣板檔。', { file: f.name }) });
       return;
     }
-    const { full } = usePresets.getState().importPresets(r.presets);
+    const { full, refused } = usePresets.getState().importPresets(r.presets);
+    // refused: the palette says why (presets-refused)
+    if (refused) return;
     const why = [
       r.skipped ? t('{n} 個樣板格式不對', { n: r.skipped }) : '',
       full ? t('{n} 個樣板放不下（最多 {max} 個）', { n: full, max: MAX_PRESETS }) : '',

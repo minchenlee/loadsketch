@@ -294,10 +294,13 @@ function NodeInspector({ id }: { id: string }) {
   // the name being typed for a new preset (null: closed), and the last one saved here
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [refused, setRefused] = useState(false);
   useEffect(() => {
     setSaving(null);
     setSaved(null);
+    setRefused(false);
   }, [id]);
+  useEffect(() => setRefused(false), [saving === null]);
   if (!node) return null;
   const spec = KINDS[node.kind];
   const Icon = iconOf(node as { kind: string; params?: Record<string, unknown> });
@@ -326,7 +329,8 @@ function NodeInspector({ id }: { id: string }) {
           onSubmit={(e) => {
             e.preventDefault();
             if (!saving.trim()) return;
-            savePreset(node, saving);
+            // refused (too many changes wait for storage): the form stays open and says why
+            if (!savePreset(node, saving)) return setRefused(true);
             setSaving(null);
             setSaved(saving.trim());
           }}
@@ -339,6 +343,11 @@ function NodeInspector({ id }: { id: string }) {
             <X size={14} />
           </button>
         </form>
+      )}
+      {refused && saving !== null && (
+        <p className="mt-2 text-[13px]" style={{ color: 'var(--bad-ink)' }} role="status" data-testid="preset-refused">
+          {t('瀏覽器存不了樣板，還沒存的改動太多：這次的改動沒有做。先匯出樣板。')}
+        </p>
       )}
       {saved !== null && saving === null && (
         <p className="muted mt-2 text-[13px]" role="status" data-testid="preset-saved">
