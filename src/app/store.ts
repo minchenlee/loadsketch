@@ -658,12 +658,9 @@ export const useApp = create<AppState>((set, get) => {
 function changeVersions(change: (list: Version[]) => Version[]): void {
   const r = updateVersions(storage(), useApp.getState().versions, change);
   useApp.setState({ versions: r.list });
-  if (r.full && !fullWarned) {
-    fullWarned = true;
-    useApp.setState({ error: t('瀏覽器的儲存空間滿了：有些版本只留到關閉這個頁面。匯出版本可以留一份檔案。') });
-  }
+  if (r.dropped) useApp.setState({ error: t('瀏覽器的儲存空間滿了：最舊的 {n} 個版本已經移除。要留下版本，先匯出成檔案。', { n: r.dropped }) });
+  if (r.refused) useApp.setState({ error: t('瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。') });
 }
-let fullWarned = false;
 
 /** A finished run leaves a version: the design and scenario that ran, and a summary of the result. */
 function recordVersion(): void {

@@ -166,15 +166,15 @@ describe('version file and storage', () => {
     const mem = new Map<string, string>();
     const store: Store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v) };
     const list = [fake(1), fake(2, { pinned: true }), fake(3)];
-    expect(saveVersions(store, list)).toEqual({ saved: list, full: false });
+    expect(saveVersions(store, list)).toEqual({ saved: list, dropped: 0 });
     expect(loadVersions(store)).toEqual(list);
 
     // room for two versions only
     const limit = versionFile(list.slice(0, 2)).length;
     const small: Store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => { if (v.length > limit) throw new Error('quota'); mem.set(k, v); } };
     const r = saveVersions(small, list);
-    expect(r.full).toBe(true);
-    expect(r.saved.map((v) => v.id)).toEqual(['v1', 'v2']);
+    expect(r.dropped).toBe(1);
+    expect(r.saved!.map((v) => v.id)).toEqual(['v1', 'v2']);
     expect(JSON.parse(mem.get(VERSIONS_KEY)!).versions).toHaveLength(2);
   });
 
@@ -182,7 +182,7 @@ describe('version file and storage', () => {
     expect(loadVersions(undefined)).toEqual([]);
     const broken: Store = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     expect(loadVersions(broken)).toEqual([]);
-    expect(saveVersions(broken, [fake(1, { pinned: true })]).full).toBe(true);
+    expect(saveVersions(broken, [fake(1, { pinned: true })]).saved).toBeNull();
   });
 });
 
@@ -218,5 +218,46 @@ describe('two tabs', () => {
     const broken: Store = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     const r = updateVersions(broken, [fake(1)], (l) => removeVersion(l, 'v1'));
     expect(r.list).toEqual([]);
+  });
+});
+
+describe('full storage', () => {
+  /** A fake storage that holds at most `room` characters. */
+  const quota = (room: number) => {
+    const mem = new Map<string, string>();
+    const store: Store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => { if (v.length > room) throw new Error('quota'); mem.set(k, v); } };
+    return store;
+  };
+
+  it('memory and storage stay the same: a version storage leaves out is gone from the list too', () => {
+    const store = quota(versionFile([fake(1)]).length + 5); // room for one version
+    let list: Version[] = [];
+    let r = updateVersions(store, list, (l) => addVersion(l, fake(1)));
+    list = r.list;
+    r = updateVersions(store, list, (l) => addVersion(l, fake(2)));
+    expect(r).toMatchObject({ dropped: 1, refused: false });
+    list = r.list;
+    expect(list.map((v) => v.id)).toEqual(['v2']);
+    expect(loadVersions(store)).toEqual(list);
+    // pinning the version that is left keeps it; nothing comes back or goes away unseen
+    r = updateVersions(store, list, (l) => pinVersion(l, 'v2', true));
+    expect(r.list.map((v) => [v.id, v.pinned])).toEqual([['v2', true]]);
+    expect(loadVersions(store)).toEqual(r.list);
+  });
+
+  it('when the pinned versions alone fill the storage, a new version is not added and the list stays', () => {
+    const store = quota(versionFile([fake(1, { pinned: true })]).length + 5);
+    let r = updateVersions(store, [], (l) => addVersion(l, fake(1, { pinned: true })));
+    expect(r.refused).toBe(false);
+    const before = r.list;
+    r = updateVersions(store, before, (l) => addVersion(l, fake(2)));
+    // the new unpinned version is the one left out
+    expect(r).toMatchObject({ dropped: 1, refused: false });
+    expect(r.list).toEqual(before);
+    // pinning it too: nothing fits, nothing changes
+    r = updateVersions(store, before, (l) => addVersion(l, fake(3, { pinned: true })));
+    expect(r).toMatchObject({ refused: true, dropped: 0 });
+    expect(r.list).toEqual(before);
+    expect(loadVersions(store)).toEqual(before);
   });
 });

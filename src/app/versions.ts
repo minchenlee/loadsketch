@@ -201,20 +201,20 @@ export function loadVersions(store: Store | undefined): Version[] {
 }
 
 /**
- * Saves the list. Full storage: the oldest unpinned versions are left out until it fits.
- * Returns the list that was saved (the whole list when the storage refuses everything: it then lives
- * until the page closes).
+ * Saves the list. Full storage: the oldest unpinned versions are left out until it fits, and
+ * `dropped` counts them. `saved` is null when even the pinned versions alone do not fit: nothing was
+ * saved. Without storage (`store` undefined) the list lives in memory only.
  */
-export function saveVersions(store: Store | undefined, list: Version[]): { saved: Version[]; full: boolean } {
-  if (!store) return { saved: list, full: false };
+export function saveVersions(store: Store | undefined, list: Version[]): { saved: Version[] | null; dropped: number } {
+  if (!store) return { saved: list, dropped: 0 };
   let keep = list;
   for (;;) {
     try {
       store.setItem(VERSIONS_KEY, versionFile(keep));
-      return { saved: keep, full: keep.length < list.length };
+      return { saved: keep, dropped: list.length - keep.length };
     } catch {
       const i = keep.map((v) => v.pinned).lastIndexOf(false);
-      if (i < 0) return { saved: list, full: true };
+      if (i < 0) return { saved: null, dropped: 0 };
       keep = keep.filter((_, j) => j !== i);
     }
   }
@@ -224,8 +224,13 @@ export function saveVersions(store: Store | undefined, list: Version[]): { saved
  * Changes the list the way another tab may have left it: reads the newest list from storage, applies
  * `change` to it and saves the result. Two tabs then do not overwrite each other's versions. Without
  * a list in storage (blocked storage, nothing saved yet), `change` applies to the list in memory.
+ *
+ * The list returned is always the list saved, so memory and storage never differ: versions full
+ * storage leaves out are gone (`dropped`), and a change that does not fit at all is not made
+ * (`refused`; the list stays as it was). A storage that takes no write at all (blocked) keeps the
+ * list in memory only.
  */
-export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[]): { list: Version[]; full: boolean } {
+export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[]): { list: Version[]; dropped: number; refused: boolean } {
   let base = memory;
   try {
     const text = store?.getItem(VERSIONS_KEY);
@@ -234,6 +239,14 @@ export function updateVersions(store: Store | undefined, memory: Version[], chan
   } catch {
     // unreadable storage: the list in memory
   }
-  const list = change(base);
-  return { list, full: saveVersions(store, list).full };
+  const next = change(base);
+  const r = saveVersions(store, next);
+  if (r.saved) return { list: r.saved, dropped: r.dropped, refused: false };
+  // the list as it was does not save either: the storage takes nothing (blocked), so the list lives in memory
+  try {
+    store!.setItem(VERSIONS_KEY, versionFile(base));
+  } catch {
+    return { list: next, dropped: 0, refused: false };
+  }
+  return { list: base, dropped: 0, refused: true };
 }
