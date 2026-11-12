@@ -30,7 +30,7 @@ If you find a bug, please open an issue with:
 - Your browser and operating system
 - Screenshots if applicable
 
-If the simulation gives a result you think is wrong, say what you expected and why (a formula, a paper, or how the real system behaves).
+If the simulation gives a result you think is wrong, use the issue form "The simulation differs from a real system": say what you expected and why (a formula, a paper, or how the real system behaves).
 
 ### Suggesting Features
 

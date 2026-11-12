@@ -75,6 +75,17 @@ npm run dev        # 模擬器：http://127.0.0.1:5317/app/　介紹頁：http:/
   <img alt="從 Terraform plan JSON 轉出的設計，附容量檢查結果" src="src/site/media/terraform-zh-light.webp">
 </picture>
 
+## 準不準？
+
+它是學習用的模型，不是容量規劃工具。
+
+- **可以信的**：方向和機制。哪裡先滿、慢的下游怎麼把上游卡住、重試怎麼把流量放大、為什麼突波過了系統還起不來。同一個情境下比較兩個設計，比看單一數字有用。
+- **有驗證的**：單一站和排隊理論對照。M/M/1 的平均延遲差距在 5% 內、p99 在 10% 內；M/M/4 和 M/D/1 的等待時間在 10% 內（`tests/queueing.test.ts`）。同一個種子結果完全一樣，兩個設計看到的流量也一樣。
+- **沒有做的**：封包和頻寬、記憶體和 CPU 核心、資料的內容（它會數讀到舊資料和遺失的寫入，但不能告訴你資料對不對）、真實產品特有的行為。這裡的「資料庫」是一般的資料庫，不是 PostgreSQL。
+- **不要**拿一次執行的絕對數字去決定正式環境要開幾台。那要量真的系統。
+
+假設都寫在 [docs/model.md](docs/model.md)（英文摘要：[docs/model.en.md](docs/model.en.md)）。如果模擬結果和真實系統、公式或論文對不上，請[開一個 issue](https://github.com/minchenlee/loadsketch/issues/new?template=sim-vs-real.yml)。我不知道這個模型離正式環境有多遠，回報是它變準的方法。
+
 ## 指令
 
 ```sh
@@ -140,7 +151,7 @@ npm run schema                             # 改了元件目錄後重新產生 s
 - `src/app/`：畫面（React Flow 畫布、檢視器、圖表）。
 - `cli/`：命令列工具。
 - `e2e/`：Playwright 畫面測試。
-- `docs/model.md`：模型怎麼算、假設是什麼。
+- `docs/model.md`：模型怎麼算、假設是什麼。英文摘要在 `docs/model.en.md`。
 - `src/site/`：介紹頁。上面會動的畫面是用 iframe 放進來的模擬器（`?embed=1`）。
 
 ## 設計

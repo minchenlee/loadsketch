@@ -1,0 +1,60 @@
+name: The simulation differs from a real system
+description: A run gives a result that a real system, a formula or a paper does not agree with.
+title: "Sim vs real: "
+labels: ["accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        loadsketch is a model, and a model can be wrong. Reports like this one are how it gets better.
+        English or 中文 are both fine. Please remove company names and internal details before you post.
+        What the model does and what it leaves out: [docs/model.en.md](https://github.com/minchenlee/loadsketch/blob/main/docs/model.en.md).
+  - type: textarea
+    id: design
+    attributes:
+      label: Design and scenario
+      description: A share link (the Share button in the top bar), the name of a built-in example, or the design and scenario JSON.
+    validations:
+      required: true
+  - type: textarea
+    id: simulated
+    attributes:
+      label: What the simulation shows
+      description: The numbers or the behaviour you saw. For example the error rate, p99, which component is the bottleneck, or a line from "Why it happened".
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What a real system does, or what the number should be.
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where your expectation comes from
+      options:
+        - A production system I operate or operated
+        - A load test or benchmark
+        - A formula or queueing theory
+        - A paper, a book or vendor documentation
+        - A public postmortem
+        - Intuition (that is fine, say so)
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: A link, a formula, or a short description of the real behaviour. Rough numbers are useful.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of difference is it?
+      options:
+        - A number is wrong (latency, error rate, utilization, cost)
+        - The behaviour is wrong (something happens that would not, or does not happen that would)
+        - Something is missing from the model
+        - The explanation text is wrong or misleading
+        - Not sure

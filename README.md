@@ -72,6 +72,17 @@ The examples are simplified models. Some refer to public information about well-
   <img alt="A design made from Terraform plan JSON, with capacity findings" src="src/site/media/terraform-en-light.webp">
 </picture>
 
+## How accurate is it?
+
+It is a model for learning, not a capacity planning tool.
+
+- **What you can trust:** the direction and the mechanism. Which part saturates first, how a slow dependency fills its callers, how retries multiply load, why a system stays down after the spike ends. A comparison of two designs under the same scenario is worth more than one number.
+- **What is checked:** single stations are tested against queueing theory. For M/M/1 the mean latency is within 5% and the p99 within 10%; M/M/4 and M/D/1 waits are within 10% (`tests/queueing.test.ts`). Every run is deterministic for a seed, and two designs see the same traffic.
+- **What it leaves out:** packets and bandwidth, memory and CPU cores, the contents of the data (it counts stale reads and lost writes, but cannot tell you if your data is correct), and the specific behaviour of real products. A "database" here is a generic database, not PostgreSQL.
+- **Do not** size a production system from an absolute number in a run. Measure the real system.
+
+The assumptions are written down in [docs/model.en.md](docs/model.en.md) (summary) and [docs/model.md](docs/model.md) (full, Chinese). If a run does not agree with a real system, a formula or a paper, please [open an issue](https://github.com/minchenlee/loadsketch/issues/new?template=sim-vs-real.yml). I do not know how far the model is from production systems, and reports are how it gets better.
+
 ## Run it locally
 
 Requirements: Node.js 22.18 or later.
@@ -126,6 +137,7 @@ npm run build          # type check, then bundle to dist/
 | `cli/` | The command line |
 | `examples/` | Designs and scenarios (JSON) |
 | `docs/model.md` | How the model works and what it assumes (Chinese) |
+| `docs/model.en.md` | The same, as an English summary |
 | `docs/design-system.md` | The look and motion rules of the UI (Chinese) |
 
 `AGENTS.md` has the rules for changing the code, for people and for coding agents.
