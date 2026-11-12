@@ -129,10 +129,13 @@ export function savePresets(store: Store | undefined, list: Preset[]): boolean {
  * Changes the list as it is in storage now: another tab may have saved presets since this one read
  * them (M8 review P2), as `updateVersions()` does for versions. Without a readable list in storage,
  * the change applies to the list in memory. `memoryOnly`: the result could not be saved.
+ *
+ * `unsaved`: the last write failed, so memory holds changes storage does not have. The change then
+ * applies to the list in memory; the older list in storage would undo them (M8 review round 2).
  */
-export function updatePresets(store: Store | undefined, memory: Preset[], change: (list: Preset[]) => Preset[]): { list: Preset[]; memoryOnly: boolean } {
+export function updatePresets(store: Store | undefined, memory: Preset[], change: (list: Preset[]) => Preset[], unsaved = false): { list: Preset[]; memoryOnly: boolean } {
   let base = memory;
-  try {
+  if (!unsaved) try {
     const text = store?.getItem(PRESETS_KEY);
     const r = text ? parsePresetFile(text) : null;
     if (r?.ok) base = r.presets.slice(0, MAX_PRESETS);
@@ -163,7 +166,7 @@ interface PresetState {
 
 export const usePresets = create<PresetState>((set, get) => {
   const write = (change: (list: Preset[]) => Preset[]) => {
-    const r = updatePresets(browserStore(), get().presets, change);
+    const r = updatePresets(browserStore(), get().presets, change, get().memoryOnly);
     set({ presets: r.list, memoryOnly: r.memoryOnly });
     return r.list;
   };
@@ -195,6 +198,7 @@ export const usePresets = create<PresetState>((set, get) => {
 // another tab changed the presets: show its list
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === PRESETS_KEY || e.key === null) usePresets.setState({ presets: loadPresets(browserStore()) });
+    // not while this tab holds changes it could not save: the list in storage is older
+    if ((e.key === PRESETS_KEY || e.key === null) && !usePresets.getState().memoryOnly) usePresets.setState({ presets: loadPresets(browserStore()) });
   });
 }

@@ -690,7 +690,7 @@ export const useApp = create<AppState>((set, get) => {
  * saves it. Full storage says so once.
  */
 function changeVersions(change: (list: Version[]) => Version[]): void {
-  const r = updateVersions(storage(), useApp.getState().versions, change);
+  const r = updateVersions(storage(), useApp.getState().versions, change, useApp.getState().versionsMemoryOnly);
   useApp.setState({ versions: r.list, versionsMemoryOnly: r.memoryOnly });
   if (r.dropped) useApp.setState({ error: t('瀏覽器的儲存空間滿了：最舊的 {n} 個版本已經移除。要留下版本，先匯出成檔案。', { n: r.dropped }) });
   if (r.refused) useApp.setState({ error: t('瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。') });
@@ -707,7 +707,8 @@ function recordVersion(): void {
 
 // another tab changed the versions: show its list
 window.addEventListener('storage', (e) => {
-  if (e.key === VERSIONS_KEY || e.key === null) useApp.setState({ versions: loadVersions(storage()) });
+  // not while this tab holds versions it could not save: the list in storage is older
+  if ((e.key === VERSIONS_KEY || e.key === null) && !useApp.getState().versionsMemoryOnly) useApp.setState({ versions: loadVersions(storage()) });
 });
 
 /** After the first run that follows the guesses of a lesson, add them to the guess log. */

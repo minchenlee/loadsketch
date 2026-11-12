@@ -229,10 +229,14 @@ export function saveVersions(store: Store | undefined, list: Version[]): { saved
  * storage leaves out are gone (`dropped`), and a change that does not fit at all is not made
  * (`refused`; the list stays as it was). Without storage, or with a storage that takes no write at
  * all (blocked), the list lives in memory only (`memoryOnly`): it is gone when the page closes.
+ *
+ * `unsaved`: the last change lived in memory only, so memory holds changes storage does not have.
+ * The change then applies to the list in memory; the older list in storage would undo them
+ * (M8 review round 2).
  */
-export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[]): { list: Version[]; dropped: number; refused: boolean; memoryOnly: boolean } {
+export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[], unsaved = false): { list: Version[]; dropped: number; refused: boolean; memoryOnly: boolean } {
   let base = memory;
-  try {
+  if (!unsaved) try {
     const text = store?.getItem(VERSIONS_KEY);
     const r = text ? parseVersionFile(text) : null;
     if (r?.ok) base = r.versions;

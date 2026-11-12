@@ -223,6 +223,19 @@ describe('two tabs', () => {
   });
 });
 
+describe('storage that reads but takes no write (M8 review round 2)', () => {
+  it('a change after a failed write starts from the list in memory, so the unsaved change stays', () => {
+    const mem = new Map<string, string>();
+    const store: Store = { getItem: (k) => mem.get(k) ?? null, setItem: () => { throw new Error('quota'); } };
+    mem.set(VERSIONS_KEY, versionFile([fake(1)]));
+    let r = updateVersions(store, loadVersions(store), (l) => addVersion(l, fake(2)));
+    expect(r.memoryOnly).toBe(true);
+    r = updateVersions(store, r.list, (l) => removeVersion(l, 'v1'), r.memoryOnly);
+    expect(r.list.map((v) => v.id)).toEqual(['v2']);
+    expect(r.memoryOnly).toBe(true);
+  });
+});
+
 describe('full storage', () => {
   /** A fake storage that holds at most `room` characters. */
   const quota = (room: number) => {

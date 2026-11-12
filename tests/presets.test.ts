@@ -98,4 +98,18 @@ describe('presets', () => {
     const m = updatePresets(undefined, tab1, (l) => [...l, { id: 'p9', name: 'X', kind: 'cache' }]);
     expect(m).toEqual({ list: [{ id: 'p9', name: 'X', kind: 'cache' }], memoryOnly: true });
   });
+
+  it('storage that reads but takes no write: a change after a failed write keeps the unsaved one (M8 review round 2)', () => {
+    const data = new Map<string, string>();
+    const s: Store = { getItem: (k) => data.get(k) ?? null, setItem: () => { throw new Error('quota'); } };
+    data.set(PRESETS_KEY, presetFile([{ id: 'p1', name: 'API', kind: 'service' }]));
+    let r = updatePresets(s, loadPresets(s), (l) => [...l, { id: 'p2', name: 'Redis', kind: 'cache' }]);
+    expect(r.memoryOnly).toBe(true);
+    r = updatePresets(s, r.list, (l) => [...l, { id: 'p3', name: 'DB', kind: 'database' }], r.memoryOnly);
+    expect(r.list.map((p) => p.name)).toEqual(['API', 'Redis', 'DB']);
+    // a removed preset does not come back with the next change
+    r = updatePresets(s, r.list, (l) => l.filter((p) => p.name !== 'API'), r.memoryOnly);
+    r = updatePresets(s, r.list, (l) => l, r.memoryOnly);
+    expect(r.list.map((p) => p.name)).toEqual(['Redis', 'DB']);
+  });
 });
