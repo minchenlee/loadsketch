@@ -1,7 +1,9 @@
-// The format guide for AI models (roadmap-next M5, Q13, Q14): one page in English, made from the
-// component catalog, so it cannot fall behind it. `npm run ai-guide` writes it to public/llms.txt
-// (served at /llms.txt); tests/ai-guide.test.ts fails when the file and the catalog differ.
-// The app puts the same text in the "copy a prompt for an AI" button.
+// The format guide for AI models (roadmap-next M5, Q13, Q14; M12 skill; M15 split), in English and
+// made from the component catalog, so it cannot fall behind it. `npm run ai-guide` (scripts/ai-guide.ts)
+// writes: the full guide (aiGuide(), public/llms-full.txt; the "copy a prompt for an AI" button puts
+// the same text in the prompt), its short index (llmsIndex(), public/llms.txt), and the Agent Skill
+// (skillMd() and referenceMd(), in skills/loadsketch/, public/skills/loadsketch/ and its zip).
+// tests/ai-guide.test.ts fails when a file and the catalog differ.
 import { EN } from '../i18n/en.ts';
 import { DESIGN_SCHEMA, DesignSchema, formatJson, type Design } from './design.ts';
 import { CATEGORY_LABEL, CLIENT_EDGE_LATENCY_MS, EDGE_PARAMS, INTER_REGION_MS, KINDS, type KindSpec, type ParamSpec } from './kinds.ts';
@@ -67,14 +69,17 @@ const SOURCE = 'written by the Terraform import (`loadsketch import`): where the
 
 const shape = DesignSchema.shape as Record<string, { description?: string }>;
 
-export function aiGuide(): string {
-  const out: string[] = [];
+/** The site; the guide, the skill and the reference are served from it. */
+export const SITE = 'https://loadsketch.mclee.dev';
+/** Where the skill's files are on the site (public/skills/loadsketch/). */
+export const SKILL_PATH = '/skills/loadsketch';
+/** The repository: the example designs and the README. */
+export const REPO = 'https://github.com/minchenlee/loadsketch';
+
+/** How to answer, the design, a node, an edge and how requests flow: the rules both the guide and the skill hold. */
+function rules(): string[] {
   const kinds = Object.values(KINDS);
-  out.push(
-    '# loadsketch design format',
-    '',
-    'loadsketch (https://loadsketch.mclee.dev) is a simulator for system designs: components (nodes), the calls between them (edges), and the traffic sent through them. This page tells an AI model how to read and write a design. It is made from the component catalog of the app, so it matches the app.',
-    '',
+  return [
     '## How to answer',
     '',
     '- Give back the whole design as one JSON object, in one ```json code block. No comments, no trailing commas.',
@@ -131,27 +136,73 @@ export function aiGuide(): string {
     '- A `queue` answers its caller at once; `worker` nodes connected after it process the messages and may call stores.',
     '- Use the edge parameter `on` ("read" or "write") to send only reads or only writes along an edge, or `apis` when the design has APIs.',
     '',
+  ];
+}
+
+/** One section per kind: what it does, its edges, its parameters. `level` is the heading. */
+function componentSections(level: string): string[] {
+  return Object.values(KINDS).flatMap((k) => {
+    const p = params(k.params);
+    return [
+      `${level} \`${k.kind}\` — ${k.labelEn}`,
+      '',
+      `${en(k.summary)}`,
+      '',
+      `Category: ${en(CATEGORY_LABEL[k.category])}. Outgoing edges: ${k.kind === 'cache' ? CACHE_ROUTING : ROUTING[k.routing]}`,
+      '',
+      ...(p.length ? ['Parameters (in `params`):', '', ...p] : ['No parameters.']),
+      '',
+    ];
+  });
+}
+
+/** The full guide (public/llms-full.txt; the prompt for an AI holds it): everything on one page. */
+export function aiGuide(): string {
+  return [
+    '# loadsketch design format',
+    '',
+    `loadsketch (${SITE}) is a simulator for system designs: components (nodes), the calls between them (edges), and the traffic sent through them. This page tells an AI model how to read and write a design. It is made from the component catalog of the app, so it matches the app.`,
+    '',
+    ...rules(),
     '## Components',
     '',
-  );
-  for (const k of kinds) {
-    out.push(`### \`${k.kind}\` — ${k.labelEn}`, '', `${en(k.summary)}`, '', `Category: ${en(CATEGORY_LABEL[k.category])}. Outgoing edges: ${k.kind === 'cache' ? CACHE_ROUTING : ROUTING[k.routing]}`, '');
-    const p = params(k.params);
-    out.push(...(p.length ? ['Parameters (in `params`):', '', ...p] : ['No parameters.']), '');
-  }
-  out.push('## Example', '', 'A complete, valid design:', '', '```json', formatJson(GUIDE_EXAMPLE), '```', '');
-  return out.join('\n');
+    ...componentSections('###'),
+    '## Example',
+    '',
+    'A complete, valid design:',
+    '',
+    '```json',
+    formatJson(GUIDE_EXAMPLE),
+    '```',
+    '',
+  ].join('\n');
 }
 
 export const SKILL_NAME = 'loadsketch';
 export const SKILL_DESCRIPTION =
   `Edit or create a system design for loadsketch (https://loadsketch.mclee.dev), a simulator for system designs. Use when the user wants to change, build or fix a loadsketch design (a JSON file whose schema is ${DESIGN_SCHEMA}), or asks for an architecture they will paste into loadsketch.`;
 
+/** The small design SKILL.md shows; tests/ai-guide.test.ts checks that it is valid. */
+export const SKILL_EXAMPLE: Design = {
+  schema: DESIGN_SCHEMA,
+  name: 'API with a database',
+  nodes: [
+    { id: 'users', kind: 'client', pos: [0, 200] },
+    { id: 'api', kind: 'service', label: 'API', pos: [300, 200], params: { instances: 1, concurrency: 16, serviceMs: { mean: 8, cv: 1 } } },
+    { id: 'db', kind: 'database', label: 'Postgres', pos: [600, 200] },
+  ],
+  edges: [
+    { from: 'users', to: 'api' },
+    { from: 'api', to: 'db', timeoutMs: 500 },
+  ],
+} as Design;
+
 /**
- * An Agent Skill (roadmap-next M12): YAML frontmatter, the steps for the agent, then the whole
- * format guide. One file, so the user downloads one thing; the guide is the same text as llms.txt.
+ * The Agent Skill (M12, split in M15): the steps, the rules, the fields, one line per kind and a
+ * small example. The parameters of each kind are in reference.md, one section per kind.
  */
 export function skillMd(): string {
+  const ref = `${SITE}${SKILL_PATH}/reference.md`;
   return [
     '---',
     `name: ${SKILL_NAME}`,
@@ -165,12 +216,73 @@ export function skillMd(): string {
     '## Steps',
     '',
     '1. Get the design JSON. If the user has not given it, ask for it: in loadsketch, File → "Paste design JSON" → "Copy only the design JSON", or File → "Save as JSON". A path to a saved `.json` file works too. To start from nothing, write a new design.',
-    '2. Change the design as the user asks, following the format guide below. Change only what was asked. Keep the ids and the `source` fields of everything you keep.',
-    '3. Check your answer against the guide: every field is allowed, every edge points to existing node ids, and every parameter is inside the limits.',
-    '4. Give back the whole design as one ```json code block (or write it to the file the user named). Say in a few lines what you changed and why.',
-    '5. Tell the user to paste it back: in loadsketch, File → "Paste design JSON", paste, look at the list of changes, and click "Replace the canvas". If the app says something is wrong, fix what it names and give the whole design again.',
+    `2. Before you set or add a component of a kind, read that kind's section in reference.md in this folder: the section whose heading names the kind (for example the one for \`cache\`). It lists the parameters, their limits and defaults. If reference.md is not there, read ${ref}.`,
+    '3. Change the design as the user asks, following the rules below. Change only what was asked. Keep the ids and the `source` fields of everything you keep.',
+    '4. Check your answer: every field is allowed, every edge points to existing node ids, and every parameter is inside the limits in reference.md.',
+    '5. Give back the whole design as one ```json code block (or write it to the file the user named). Say in a few lines what you changed and why.',
+    '6. Tell the user to paste it back: in loadsketch, File → "Paste design JSON", paste, look at the list of changes, and click "Replace the canvas". If the app says something is wrong, fix what it names and give the whole design again.',
     '',
-    aiGuide(),
+    ...rules(),
+    '## Components',
+    '',
+    `The kinds, with what each does. Their parameters (inside \`params\`) are in reference.md, one section per kind (also at ${ref}).`,
+    '',
+    ...Object.values(KINDS).map((k) => `- \`${k.kind}\` — ${k.labelEn}: ${en(k.summary)}`),
+    '',
+    '## Example',
+    '',
+    'A small, valid design:',
+    '',
+    '```json',
+    formatJson(SKILL_EXAMPLE),
+    '```',
+    '',
+  ].join('\n');
+}
+
+/** reference.md next to SKILL.md: every kind's parameters, one `## ` section per kind. */
+export function referenceMd(): string {
+  return [
+    '# loadsketch components',
+    '',
+    'One section per kind of component: what it does, where its outgoing edges go, and its parameters. Parameters go inside `params` of a node; leave one out to use its default. Times are in milliseconds unless the unit says otherwise. The rest of the format is in SKILL.md.',
+    '',
+    ...componentSections('##'),
+  ].join('\n');
+}
+
+/** The files public/llms.txt points to, by their path on the site. */
+export const LLMS_LINKS = {
+  full: '/llms-full.txt',
+  skill: `${SKILL_PATH}/SKILL.md`,
+  reference: `${SKILL_PATH}/reference.md`,
+  zip: '/skills/loadsketch.zip',
+};
+
+/** public/llms.txt: a short index (llmstxt.org): a title, a summary and links. */
+export function llmsIndex(): string {
+  return [
+    '# loadsketch',
+    '',
+    `> loadsketch (${SITE}) is a simulator for system designs: components (nodes), the calls between them (edges), and the traffic sent through them. A design is one JSON file (schema "${DESIGN_SCHEMA}"); the user pastes a design an AI model wrote with File → "Paste design JSON", and the app shows every change before it replaces the canvas.`,
+    '',
+    'The format pages below are made from the component catalog of the app, so they match it. To write a design, read the full guide; an AI agent can use the skill instead.',
+    '',
+    '## Format',
+    '',
+    `- [Full format guide](${SITE}${LLMS_LINKS.full}): every field, every component and its parameters, and an example, on one page`,
+    `- [Agent Skill](${SITE}${LLMS_LINKS.skill}): the steps, the rules, the fields and one line per component, for an AI agent`,
+    `- [Component reference](${SITE}${LLMS_LINKS.reference}): the parameters of each component, one section each`,
+    `- [Skill as a zip](${SITE}${LLMS_LINKS.zip}): SKILL.md and reference.md in a loadsketch folder, to unpack into ~/.claude/skills/`,
+    '',
+    '## Examples',
+    '',
+    `- [Example designs](${REPO}/tree/main/examples/designs): complete designs, one JSON file each`,
+    '',
+    '## Optional',
+    '',
+    `- [README](${REPO}/blob/main/README.md): what the app does, the CLI, and how to run it`,
+    '',
   ].join('\n');
 }
 

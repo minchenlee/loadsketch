@@ -1,14 +1,17 @@
 // The format guide for AI models (roadmap-next M5): made from the component catalog, kept in
-// public/llms.txt, and its example is a valid design.
+// public/llms-full.txt (M15: public/llms.txt is a short index), and its example is a valid design.
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GUIDE_EXAMPLE, SKILL_NAME, aiGuide, aiPrompt, skillMd } from '../src/schema/aiGuide.ts';
+import { GUIDE_EXAMPLE, LLMS_LINKS, REPO, SITE, SKILL_EXAMPLE, SKILL_NAME, aiGuide, aiPrompt, llmsIndex, referenceMd, skillMd } from '../src/schema/aiGuide.ts';
+import { aiGuideFiles } from '../scripts/ai-guide.ts';
+import { readStoredZip } from '../scripts/zip.ts';
 import { EN } from '../src/i18n/en.ts';
 import { EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { ApiSchema, DesignSchema, EdgeSchema, NodeSchema, NoteSchema, parseDesign } from '../src/schema/design.ts';
 
-const file = join(import.meta.dirname, '..', 'public', 'llms.txt');
+const root = join(import.meta.dirname, '..');
+const file = join(root, 'public', 'llms-full.txt');
 const blocks = (s: string) => [...s.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => m[1]);
 
 /** The text of a `## title` section, up to the next `## `. */
@@ -36,7 +39,21 @@ describe('ai guide', () => {
   });
 
 
-  it('public/llms.txt is the guide made from the catalog now (run npm run ai-guide when this fails)', () => {
+  it('every file made from the guide is up to date: llms.txt, llms-full.txt, SKILL.md, reference.md, their copies and the zip (run npm run ai-guide when this fails)', () => {
+    const made = aiGuideFiles();
+    expect(made.map(([name]) => name)).toEqual([
+      'public/llms.txt',
+      'public/llms-full.txt',
+      'skills/loadsketch/SKILL.md',
+      'skills/loadsketch/reference.md',
+      'public/skills/loadsketch/SKILL.md',
+      'public/skills/loadsketch/reference.md',
+      'public/skills/loadsketch.zip',
+    ]);
+    for (const [name, content] of made) {
+      const want = typeof content === 'string' ? Buffer.from(content, 'utf8') : content;
+      expect(readFileSync(join(root, name)).equals(want), name).toBe(true);
+    }
     expect(readFileSync(file, 'utf8')).toBe(aiGuide());
   });
 
@@ -81,12 +98,11 @@ describe('ai guide', () => {
   });
 });
 
-// The Agent Skill (roadmap-next M12): made from the same guide, in skills/ and served from public/.
+// The Agent Skill (roadmap-next M12; M15: SKILL.md short, the parameters in reference.md, a zip).
 describe('agent skill', () => {
-  const root = join(import.meta.dirname, '..');
-  const files = ['skills/loadsketch/SKILL.md', 'public/skills/loadsketch/SKILL.md'];
-  const front = (s: string) => {
-    const m = s.match(/^---\n([\s\S]*?)\n---\n/);
+  const read = (f: string) => readFileSync(join(root, f), 'utf8');
+  const front = (text: string) => {
+    const m = text.match(/^---\n([\s\S]*?)\n---\n/);
     if (!m) throw new Error('no frontmatter');
     return Object.fromEntries(m[1].split('\n').map((l) => {
       const at = l.indexOf(': ');
@@ -94,20 +110,76 @@ describe('agent skill', () => {
       return [l.slice(0, at), v.startsWith('"') ? JSON.parse(v) : v];
     }));
   };
+  /** A `## ` section of a markdown text, up to the next `## `. */
+  const part = (text: string, heading: string) => {
+    const at = text.indexOf(`\n${heading}\n`);
+    if (at < 0) throw new Error(`no section ${heading}`);
+    const end = text.indexOf('\n## ', at + 1);
+    return text.slice(at, end < 0 ? undefined : end);
+  };
 
-  it('SKILL.md in skills/ and in public/ is the skill made from the catalog now (run npm run ai-guide when this fails)', () => {
-    for (const f of files) expect(readFileSync(join(root, f), 'utf8'), f).toBe(skillMd());
-  });
-
-  it('a change to the catalog changes SKILL.md, so the file check above catches it', () => {
+  it('a change to the catalog makes the files out of date: a parameter changes the full guide, reference.md and the zip; a kind changes SKILL.md too', () => {
+    const now = new Map(aiGuideFiles().map(([n, c]) => [n, Buffer.from(c)]));
+    const changed = () => aiGuideFiles().filter(([n, c]) => !now.get(n)!.equals(Buffer.from(c))).map(([n]) => n);
     const spec = KINDS.cache.params;
     spec.zzProbe = { type: 'int', default: 1, min: 0, max: 2, label: 'x', help: 'y' };
     try {
-      expect(skillMd()).not.toBe(readFileSync(join(root, files[0]), 'utf8'));
-      expect(skillMd()).toContain('`zzProbe`');
+      expect(changed()).toEqual(['public/llms-full.txt', 'skills/loadsketch/reference.md', 'public/skills/loadsketch/reference.md', 'public/skills/loadsketch.zip']);
+      expect(referenceMd()).toContain('`zzProbe`');
     } finally {
       delete spec.zzProbe;
     }
+    const kinds = KINDS as Record<string, (typeof KINDS)['cache']>;
+    kinds.zz_probe = { ...KINDS.cache, kind: 'zz_probe' as 'cache', labelEn: 'Probe' };
+    try {
+      // llms.txt is an index of links: the catalog is not in it
+      expect(changed()).toEqual(aiGuideFiles().map(([n]) => n).filter((n) => n !== 'public/llms.txt'));
+      expect(skillMd()).toContain('- `zz_probe` — Probe: ');
+      expect(referenceMd()).toContain('## `zz_probe` — Probe');
+    } finally {
+      delete kinds.zz_probe;
+    }
+    expect(changed()).toEqual([]);
+  });
+
+  it('SKILL.md is short: at most 150 lines, without the parameters of the kinds', () => {
+    const s = skillMd();
+    expect(s.split('\n').length).toBeLessThanOrEqual(150);
+    expect(s).not.toContain('Parameters (in `params`)');
+    expect(s.length).toBeLessThan(aiGuide().length / 2);
+  });
+
+  it('every kind has a line in the SKILL.md list and a section in reference.md with all its parameters', () => {
+    const list = part(skillMd(), '## Components');
+    const ref = referenceMd();
+    for (const [kind, spec] of Object.entries(KINDS)) {
+      expect(list, kind).toContain(`- \`${kind}\` — ${spec.labelEn}: `);
+      const sec = part(ref, `## \`${kind}\` — ${spec.labelEn}`);
+      for (const p of Object.keys(spec.params)) expect(sec, `${kind}.${p}`).toContain(`- \`${p}\` — `);
+    }
+    // one section per kind, nothing else at that level
+    expect(ref.match(/^## /gm)).toHaveLength(Object.keys(KINDS).length);
+    expect(ref.match(/[㐀-鿿＀-￯]/g)).toBeNull();
+  });
+
+  it('SKILL.md holds the steps, the same rules as the full guide, and says to read reference.md (or its address) before setting a kind', () => {
+    const s = skillMd();
+    for (const h of ['## Steps', '## How to answer', '## The design', '## A node (component)', '## An edge (call)', '## How requests flow', '## Components', '## Example']) expect(s, h).toContain(`\n${h}\n`);
+    for (const h of ['## How to answer', '## The design', '## A node (component)', '## An edge (call)', '## How requests flow']) expect(part(s, h)).toBe(part(aiGuide(), h));
+    const steps = part(s, '## Steps');
+    expect(steps).toContain('read that kind\'s section in reference.md in this folder');
+    expect(steps).toContain(`${SITE}${LLMS_LINKS.reference}`);
+  });
+
+  it('the examples pass the schema with no warnings: the small one in SKILL.md, the full one in the guide', () => {
+    for (const [text, example] of [[skillMd(), SKILL_EXAMPLE], [aiGuide(), GUIDE_EXAMPLE]] as const) {
+      const json = blocks(text);
+      expect(json).toHaveLength(1);
+      expect(JSON.parse(json[0])).toEqual(example);
+      const r = parseDesign(JSON.parse(json[0]));
+      expect(r.ok && r.issues).toEqual([]);
+    }
+    expect(SKILL_EXAMPLE.nodes.length).toBeLessThan(GUIDE_EXAMPLE.nodes.length);
   });
 
   it('the frontmatter has only a name (the folder name) and a description of what it does and when to use it', () => {
@@ -115,29 +187,59 @@ describe('agent skill', () => {
     expect(Object.keys(f)).toEqual(['name', 'description']);
     expect(f.name).toBe(SKILL_NAME);
     expect(f.name).toMatch(/^[a-z0-9-]{1,64}$/);
-    for (const p of files) expect(p.split('/').at(-2)).toBe(f.name);
+    for (const p of ['skills/loadsketch/SKILL.md', 'public/skills/loadsketch/SKILL.md']) expect(p.split('/').at(-2)).toBe(f.name);
     expect(f.description.length).toBeGreaterThan(40);
     expect(f.description.length).toBeLessThanOrEqual(1024);
     expect(f.description).toContain('Use when');
     expect(f.description).not.toMatch(/[<>]/);
   });
 
-  it('the body holds the steps and the whole guide; its one example passes the schema', () => {
-    const s = skillMd();
-    expect(s).toContain('## Steps');
-    expect(s).toContain(aiGuide());
-    expect(s.split('\n').length).toBeLessThan(500);
-    const json = blocks(s);
-    expect(json).toHaveLength(1);
-    const r = parseDesign(JSON.parse(json[0]));
-    expect(r.ok && r.issues).toEqual([]);
-  });
-
   it('the steps name the menus and buttons by their English text in the app', () => {
-    const steps = section(skillMd(), 'Steps');
+    const steps = part(skillMd(), '## Steps');
     for (const zh of ['檔案', '貼上設計 JSON', '只複製設計 JSON', '存成 JSON', '換掉畫布']) {
       const en = zh === '檔案' ? `${EN[zh]} →` : `"${EN[zh]}"`;
       expect(steps, zh).toContain(en);
     }
+  });
+
+  it('the zip holds loadsketch/SKILL.md and loadsketch/reference.md, the same bytes each time', () => {
+    const zip = readFileSync(join(root, 'public/skills/loadsketch.zip'));
+    const entries = readStoredZip(zip);
+    expect([...entries.keys()]).toEqual(['loadsketch/SKILL.md', 'loadsketch/reference.md']);
+    expect(entries.get('loadsketch/SKILL.md')!.toString('utf8')).toBe(read('skills/loadsketch/SKILL.md'));
+    expect(entries.get('loadsketch/reference.md')!.toString('utf8')).toBe(read('skills/loadsketch/reference.md'));
+    const z = (): Buffer => aiGuideFiles().find(([n]) => n.endsWith('.zip'))![1] as Buffer;
+    expect(z().equals(z())).toBe(true);
+  });
+});
+
+// public/llms.txt (M15): a short index in the llmstxt.org form, every link to a file that exists.
+describe('llms.txt', () => {
+  it('is an H1, a blockquote summary and lists of links', () => {
+    const t = llmsIndex();
+    const lines = t.split('\n');
+    expect(lines[0]).toBe('# loadsketch');
+    expect(lines[2].startsWith('> ')).toBe(true);
+    expect(t.match(/^# /gm)).toHaveLength(1);
+    expect(lines.length).toBeLessThan(40);
+    expect(t).toContain('## Optional');
+  });
+
+  it('every link points to a file that exists: on the site (public/), or in the repository', () => {
+    const links = [...llmsIndex().matchAll(/\]\((https?:[^)]+)\)/g)].map((m) => m[1]);
+    expect(links.length).toBeGreaterThanOrEqual(5);
+    const made = new Set(aiGuideFiles().map(([n]) => n));
+    for (const url of links) {
+      if (url.startsWith(SITE)) {
+        const path = `public${url.slice(SITE.length)}`;
+        expect(made.has(path), url).toBe(true);
+        expect(existsSync(join(root, path)), url).toBe(true);
+      } else {
+        expect(url.startsWith(`${REPO}/`), url).toBe(true);
+        const path = url.slice(REPO.length).replace(/^\/(tree|blob)\/main\//, '');
+        expect(existsSync(join(root, path)), url).toBe(true);
+      }
+    }
+    for (const p of Object.values(LLMS_LINKS)) expect(links, p).toContain(`${SITE}${p}`);
   });
 });

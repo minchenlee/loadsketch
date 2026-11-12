@@ -12,10 +12,10 @@ import { describeChange, diffDesigns } from '../designDiff.ts';
 import { aiPrompt } from '../../schema/aiGuide.ts';
 import { t } from '../../i18n/index.ts';
 
-/** The guide is at the site's root (public/llms.txt); the app is at /app/. */
-export const guideUrl = () => new URL('../llms.txt', location.href).href;
-/** The Agent Skill (M12), made from the same guide: public/skills/loadsketch/SKILL.md. */
-export const skillUrl = () => new URL('../skills/loadsketch/SKILL.md', location.href).href;
+/** The full guide is at the site's root (public/llms-full.txt; /llms.txt is its index); the app is at /app/. */
+export const guideUrl = () => new URL('../llms-full.txt', location.href).href;
+/** The Agent Skill (M12; M15: SKILL.md and reference.md in a loadsketch folder): public/skills/loadsketch.zip. */
+export const skillUrl = () => new URL('../skills/loadsketch.zip', location.href).href;
 
 /** Reading waits this long after the last key, so a long paste is not read at every key. */
 const READ_MS = 200;
@@ -80,12 +80,12 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
               <a className="btn" href={guideUrl()} target="_blank" rel="noreferrer" title={t('給 AI 讀的格式說明（英文）。可以直接把這個網址給 AI。')} data-testid="paste-design-guide">
                 <FileText size={14} /> {t('格式說明')}
               </a>
-              <a className="btn" href={skillUrl()} download="SKILL.md" title={t('給 Claude Code 等 AI agent 用的技能檔：步驟和格式說明')} data-testid="paste-design-skill">
-                <Download size={14} /> {t('下載 SKILL.md')}
+              <a className="btn" href={skillUrl()} download="loadsketch.zip" title={t('給 Claude Code 等 AI agent 用的技能：SKILL.md（步驟和格式）和 reference.md（每種元件的參數），放在 loadsketch 資料夾裡')} data-testid="paste-design-skill">
+                <Download size={14} /> {t('下載 skill（zip）')}
               </a>
             </div>
             <p className="faint text-[13px]" data-testid="paste-design-skill-hint">
-              {t('用 Claude Code 等 AI agent 的話：把 SKILL.md 放到 ~/.claude/skills/loadsketch/，之後直接請它改設計 JSON。')}
+              {t('用 Claude Code 等 AI agent 的話：把 zip 解壓到 ~/.claude/skills/（會多一個 loadsketch 資料夾），之後直接請它改設計 JSON。')}
             </p>
             {copied === 'no' && (
               <p className="text-[13px]" style={{ color: 'var(--bad-ink)' }} data-testid="paste-design-copy-failed">

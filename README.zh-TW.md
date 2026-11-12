@@ -13,7 +13,7 @@
 - 16 種元件（負載平衡器、API 伺服器、快取、資料庫、佇列、CDN 等），每個參數都能調：台數、並行數、逾時、重試、保險絲、命中率。
 - 自訂服務：目錄裡沒有的服務（搜尋、金流商、寄信），自己填名稱、圖示、處理時間、容量、錯誤率、呼叫方式和每台價格。任何元件連同設定都能存成樣板，放在元件列的「我的樣板」，存在這個瀏覽器裡，也能匯出成檔案。
 - 版本和比較：每次執行會在這個瀏覽器留一個版本（設計、情境、結果摘要）。選最多 4 個版本並排，看指標差多少、哪個設定從什麼改成什麼。成對的範例一鍵就能比較，分享連結也能帶一組比較。
-- 讓 AI 改設計：「複製給 AI 的提示」會複製格式說明和目前的設計；把 AI 的回答貼回來，對話框用白話說哪裡不合格式、列出改了什麼，按確認才換掉畫布。格式說明也在 [`/llms.txt`](https://loadsketch.mclee.dev/llms.txt)。網站本身不呼叫任何 AI 模型。
+- 讓 AI 改設計：「複製給 AI 的提示」會複製格式說明和目前的設計；把 AI 的回答貼回來，對話框用白話說哪裡不合格式、列出改了什麼，按確認才換掉畫布。格式說明也在 [`/llms-full.txt`](https://loadsketch.mclee.dev/llms-full.txt)；[`/llms.txt`](https://loadsketch.mclee.dev/llms.txt) 是這幾頁的短索引。網站本身不呼叫任何 AI 模型。
 - 旁邊附排隊理論的值（M/G/c），可以對照模擬結果。
 - 設計和情境都是 JSON 檔（`loadsketch/design@1`、`loadsketch/scenario@1`），人和 agent 都能讀寫。JSON Schema 在 `schema/`。
 
@@ -107,7 +107,7 @@ npm run schema                             # 改了元件目錄後重新產生 s
 
 ## 從 AI agent 使用
 
-給 Claude Code 等 AI agent 用的[技能檔 SKILL.md](https://loadsketch.mclee.dev/skills/loadsketch/SKILL.md)。在檔案選單的「貼上設計 JSON」按「下載 SKILL.md」（或直接用連結下載），放到 `~/.claude/skills/loadsketch/SKILL.md`。之後請 agent 改設計：把設計 JSON 給它（「只複製設計 JSON」），再用「貼上設計 JSON」把它的回答貼回來。技能檔裡有步驟，和 `/llms.txt` 同一份格式說明；`npm run ai-guide` 從元件目錄產生這三個檔案。
+給 Claude Code 等 AI agent 用的技能（skill）。在檔案選單的「貼上設計 JSON」按「下載 skill（zip）」（或直接下載 [zip](https://loadsketch.mclee.dev/skills/loadsketch.zip)），解壓到 `~/.claude/skills/`，會多一個 `loadsketch` 資料夾，裡面有兩個檔。[`SKILL.md`](https://loadsketch.mclee.dev/skills/loadsketch/SKILL.md) 有步驟、規則、欄位和每種元件一行的一覽；[`reference.md`](https://loadsketch.mclee.dev/skills/loadsketch/reference.md) 有每種元件的參數，每種一段，agent 只讀它要用的那段。之後請 agent 改設計：把設計 JSON 給它（「只複製設計 JSON」），再用「貼上設計 JSON」把它的回答貼回來。`npm run ai-guide` 從元件目錄產生這些檔案和 `/llms.txt`、`/llms-full.txt`。
 
 ## 範例
 

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { readStoredZip } from '../scripts/zip.ts';
 import { plan } from '../tests/import/plan-helper.ts';
 import { importTerraform } from '../src/import/terraform/index.ts';
 
@@ -2656,7 +2657,7 @@ test.describe('paste design', () => {
     expect(errors).toEqual([]);
   });
 
-  test('ai guide: the prompt for an AI holds the format guide and the current design; the guide is served at /llms.txt', async ({ page }) => {
+  test('ai guide: the prompt for an AI holds the format guide and the current design; the guide is served at /llms-full.txt, its index at /llms.txt', async ({ page }) => {
     await catchClipboard(page);
     await page.goto('/app/?example=three-tier');
     await expect(page.locator('[data-node]')).toHaveCount(5);
@@ -2667,45 +2668,64 @@ test.describe('paste design', () => {
     await expect(dlg.getByTestId('paste-design-prompt')).toContainText('已複製');
     const prompt = await page.evaluate(() => (window as unknown as { __copied: string }).__copied);
     expect(prompt).toContain('# loadsketch design format');
-    expect(prompt).toContain('/llms.txt');
+    expect(prompt).toContain('/llms-full.txt');
     const design = await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { design(): unknown } } }).__loadsketch.getState().design());
     const blocks = [...prompt.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => m[1]);
     expect(JSON.parse(blocks.at(-1)!)).toEqual(design);
     // the link is the same guide, served by the site
     const href = await dlg.getByTestId('paste-design-guide').getAttribute('href');
-    expect(new URL(href!).pathname).toBe('/llms.txt');
+    expect(new URL(href!).pathname).toBe('/llms-full.txt');
     const res = await page.request.get(href!);
     expect(res.status()).toBe(200);
     expect(prompt).toContain(await res.text());
+    // /llms.txt is a short index that links to the full guide
+    const index = await page.request.get(new URL('/llms.txt', href!).href);
+    expect(index.status()).toBe(200);
+    const indexText = await index.text();
+    expect(indexText.startsWith('# loadsketch\n\n> ')).toBe(true);
+    expect(indexText).toContain('/llms-full.txt)');
+    expect(indexText.length).toBeLessThan(4000);
     await page.waitForTimeout(300); // the dialog's entrance
     await dlg.screenshot({ path: join(SHOTS, 'paste-design-ai.png') });
   });
 
-  test('skill: SKILL.md downloads from a fixed address next to the prompt, with a line on where to put it', async ({ page }) => {
+  test('skill: a zip with SKILL.md and reference.md downloads next to the prompt, with a line on where to unpack it; each file has its own address', async ({ page }) => {
     await page.goto('/app/?example=three-tier');
     await expect(page.locator('[data-node]')).toHaveCount(5);
     await page.getByTestId('file-menu').click();
     await page.getByTestId('paste-design-open').click();
     const dlg = page.getByTestId('paste-design');
     const link = dlg.getByTestId('paste-design-skill');
-    await expect(link).toContainText('下載 SKILL.md');
+    await expect(link).toContainText('下載 skill（zip）');
     await expect(dlg.getByTestId('paste-design-step1')).toContainText('複製給 AI 的提示');
-    await expect(dlg.getByTestId('paste-design-skill-hint')).toContainText('~/.claude/skills/loadsketch/');
+    await expect(dlg.getByTestId('paste-design-skill-hint')).toContainText('~/.claude/skills/');
+    await expect(dlg.getByTestId('paste-design-skill-hint')).toContainText('loadsketch');
     const href = await link.getAttribute('href');
-    expect(new URL(href!).pathname).toBe('/skills/loadsketch/SKILL.md');
-    expect(await link.getAttribute('download')).toBe('SKILL.md');
-    const res = await page.request.get(href!);
-    expect(res.status()).toBe(200);
-    const served = await res.text();
-    expect(served.startsWith('---\nname: loadsketch\ndescription: ')).toBe(true);
-    expect(served).toContain('# loadsketch design format');
-    // the same text as the guide at /llms.txt
-    const guide = await (await page.request.get(new URL('/llms.txt', href!).href)).text();
-    expect(served).toContain(guide);
-    // a click saves the file
+    expect(new URL(href!).pathname).toBe('/skills/loadsketch.zip');
+    expect(await link.getAttribute('download')).toBe('loadsketch.zip');
+    // the two files, each at its own address
+    const get = async (path: string) => {
+      const res = await page.request.get(new URL(path, href!).href);
+      expect(res.status(), path).toBe(200);
+      return res.text();
+    };
+    const skill = await get('/skills/loadsketch/SKILL.md');
+    const reference = await get('/skills/loadsketch/reference.md');
+    expect(skill.startsWith('---\nname: loadsketch\ndescription: ')).toBe(true);
+    expect(skill.split('\n').length).toBeLessThanOrEqual(150);
+    expect(skill).toContain('reference.md');
+    expect(reference).toContain('## `cache` — ');
+    // the full guide holds every section of reference.md
+    const full = await get('/llms-full.txt');
+    const sections = reference.slice(reference.indexOf('\n## `') + 1);
+    expect(full).toContain(`#${sections.replaceAll('\n## `', '\n### `').trimEnd()}`);
+    // a click saves the zip: loadsketch/SKILL.md and loadsketch/reference.md, the same as served
     const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
-    expect(download.suggestedFilename()).toBe('SKILL.md');
-    expect(readFileSync((await download.path())!, 'utf8')).toBe(served);
+    expect(download.suggestedFilename()).toBe('loadsketch.zip');
+    const entries = readStoredZip(readFileSync((await download.path())!));
+    expect([...entries.keys()]).toEqual(['loadsketch/SKILL.md', 'loadsketch/reference.md']);
+    expect(entries.get('loadsketch/SKILL.md')!.toString('utf8')).toBe(skill);
+    expect(entries.get('loadsketch/reference.md')!.toString('utf8')).toBe(reference);
     await expect(dlg).toBeVisible();
   });
 
