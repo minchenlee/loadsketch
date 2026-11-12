@@ -231,6 +231,10 @@ describe('FIFO queue and head-of-line blocking (#38)', () => {
     expect(held.nodes.q.redelivered ?? 0).toBe(0);
     expect(held.bottleneck?.node).toBe('q');
     expect(held.bottleneck?.why).toContain('一直失敗');
+    // at-most-once: a failed message is dropped and frees its group, so failures are not the cause
+    const dropped = simulate(d({ delivery: 'at_most_once', ordering: 'fifo', groups: 1 }, { serviceMs: { mean: 100, cv: 0 }, poisonRate: 0.01 }), sc());
+    expect(dropped.bottleneck?.node).toBe('q');
+    expect(dropped.bottleneck?.why).toContain('分組太少');
     // poison messages hold their groups: the text says so
     const poison = simulate(d({ ordering: 'fifo', groups: 8, visibilityTimeoutMs: 10000 }, { poisonRate: 0.01 }), sc());
     expect(poison.nodes.q.redelivered!).toBeGreaterThan(0);

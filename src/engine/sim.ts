@@ -724,7 +724,7 @@ interface QueueNodeState {
   msgs: Deque<QMsg>;
   /** at-least-once: delivered messages that are neither deleted nor visible again */
   hidden: number;
-  /** deliveries that a worker failed (whole run) */
+  /** at-least-once: deliveries that a worker failed, so the message stayed and held its group (whole run) */
   failedRx: number;
   consumers: { inst: Instance; edge: EdgeRT }[];
   rr: number;
@@ -4264,9 +4264,11 @@ export class Simulation {
     }
     const failed = (): void => {
       edge.w.fail++;
-      qs.failedRx++;
       // at-least-once: it comes back when the visibility timeout ends (its group stays blocked)
-      if (alo) return;
+      if (alo) {
+        qs.failedRx++;
+        return;
+      }
       qn.w.asyncFail++;
       this.freeGroup(qs, msg);
     };
