@@ -15,12 +15,15 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 
 - **Discrete-event simulation.** Every request goes through every component, with queues, timeouts, retries, circuit breakers and failures. Queueing theory values (M/G/c) are shown next to the simulated results.
 - **"Why it happened".** After every run, the simulator tells the story of the run in time order: overload, retries that multiply the load, failures, recovery or a stuck system.
-- **15 kinds of component, and every parameter can be changed.** Load balancer, API server, cache, database, queue, CDN and more: instances, concurrency, timeouts, retries, circuit breakers, hit rates.
-- **46 examples.** Retry storm, cache stampede, gray failure, split brain, a bad config push, poison messages in a FIFO queue, a region cutover, and more. Each one has a scenario and says what to look at.
+- **16 kinds of component, and every parameter can be changed.** Load balancer, API server, cache, database, queue, CDN and more: instances, concurrency, timeouts, retries, circuit breakers, hit rates.
+- **Custom services and presets.** A service that is not in the catalog (search, a payment provider, email) is a custom service: you give its name, icon, service time, capacity, error rate, calls and price per instance. Save any component with its settings as a preset; your presets are in the palette, kept in this browser, and can be exported to a file.
+- **47 examples.** Retry storm, cache stampede, gray failure, split brain, a bad config push, poison messages in a FIFO queue, a region cutover, and more. Each one has a scenario and says what to look at.
 - **On-call practice (8 incidents).** A fault is hidden. You see only the users' error rate and p99, pay points to open a component's metrics, name the component and the kind of fault, then fix the design on the canvas.
 - **Design briefs (6).** Start from requirements and an almost empty canvas: you choose the components and their sizes, then a run shows if the design holds. The brief gives how fast each part is, so a smaller number is not an answer. A reference design is one click away.
 - **Constraint problems (3).** Meet error-rate and p99 targets inside a monthly budget and a complexity limit. Every run shows its cost at sample prices.
 - **Terraform import.** Turn Terraform plan JSON into a design (ECS, Lambda, RDS, Aurora, SQS, ElastiCache, CloudFront and more). The import checks capacity first, and each finding runs as a scenario.
+- **Versions and compare.** Every run keeps a version (the design, the scenario and a summary of the result) in this browser. Pick up to 4 versions to see them side by side: the metrics, and every setting that changed, from what to what. Paired examples open as a comparison with one click, and a share link can carry a comparison.
+- **Edit a design with an AI.** "Copy a prompt for an AI" copies a format guide and the current design; paste the answer back. The dialog says in plain words what does not fit the format, lists what changed, and replaces the canvas only after you confirm. The guide is also at [`/llms.txt`](https://loadsketch.mclee.dev/llms.txt). The site itself does not call any AI model.
 - **Designs are JSON files.** Designs and scenarios (`loadsketch/design@1`, `loadsketch/scenario@1`) have a JSON Schema in `schema/`. They are easy to read and write for people and AI agents.
 - **A CLI.** The engine does not use the browser, so the CLI and the UI run the same engine.
 - **Share links with no server.** The design and the scenario are compressed into the part of the URL after `#`, which is never sent to a server.
@@ -37,7 +40,7 @@ The examples are simplified models. Some refer to public information about well-
   <img alt="After a run, the simulator tells the story of the run in time order" src="src/site/media/why-en-light.webp">
 </picture>
 
-### 46 examples
+### 47 examples
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/site/media/examples-en-dark.webp">
@@ -112,6 +115,8 @@ The CLI prints Chinese by default; use `--lang en` or `LOADSKETCH_LANG=en` for E
 - Click a component or a connection to change its parameters on the right.
 - Pick a scenario and a speed at the bottom, then press **Run**. The dots on a connection are requests: blue is a read, orange is a write, red is a failure. At 1× speed or slower you see single requests.
 - **Skip to end** computes the whole run at once.
+- To keep a component with its settings, select it and press **Save as preset** at the top of the right panel. It appears under **My presets** in the palette.
+- **Versions** (right panel) lists your runs. To change a design with an AI, use **Paste design JSON** in the file menu.
 - Panels: `⌘B` left, `⌥⌘B` right, `⌘J` bottom (Ctrl on Windows and Linux).
 - URL options: `?example=three-tier&scenario=spike&speed=0.1&autorun=1&theme=dark&lang=en`.
 

@@ -191,7 +191,7 @@ const SLIDES = [
   { id: 'why', title: tx('為什麼會這樣'), text: tx('每次跑完，告訴你發生了什麼。一步一步，照時間說。') },
   { id: 'constraints', title: tx('預算有限的題目'), text: tx('失敗率和延遲要達標，預算不能超過。越省，分數越高。') },
   { id: 'terraform', title: tx('匯入 Terraform'), text: tx('plan JSON 轉成設計。哪裡容量不夠，按一下就跑。') },
-  { id: 'examples', title: tx('46 個範例'), text: tx('快取擊穿、腦裂、壞設定推送。每一個都能跑，都能改。') },
+  { id: 'examples', title: tx('47 個範例'), text: tx('快取擊穿、腦裂、壞設定推送。每一個都能跑，都能改。') },
 ];
 
 function Carousel({ lang, theme }: { lang: Lang; theme: Theme }) {
@@ -538,7 +538,7 @@ function Site() {
       <Carousel {...live} />
 
       <Marquee />
-      <p className="site-wrap muted mt-8 text-center text-[16px]">{t('46 個範例，15 種元件。每個參數都能調。')}</p>
+      <p className="site-wrap muted mt-8 text-center text-[16px]">{t('47 個範例，16 種元件。每個參數都能調。')}</p>
 
       <Feature
         title={t('命令列，同一個引擎')}

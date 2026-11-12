@@ -101,6 +101,10 @@ node scripts/check-agents-md.ts
 - **畫布的動態**（進場、拖曳傾斜、換範例時的飛行）：`src/app/motion.ts` 和 `src/app/components/Canvas.tsx`。對話框的關閉動畫：`src/app/modal.ts` 的 `useExit()`。面板開關：`src/app/components/Slide.tsx` 的 `Slide`。
 - **手機版面（480px 以下）**：`src/app/phone.ts`、`src/app/components/Phone.tsx`（底部分頁和抽屜）；規則在 `docs/design-system.md` 第 8 節。
 - **右側面板的分頁**：`src/app/components/Inspector.tsx`（分頁清單和 `Tab` 型別）；元件從 `useApp` 讀狀態。
+- **版本和比較**：版本存在瀏覽器（`src/app/versions.ts`，格式 `loadsketch/versions@1`），面板是 `src/app/components/Versions.tsx`。比較畫面是 `src/app/components/Compare.tsx` 和 `src/app/compare.ts`。差異清單是 `src/app/designDiff.ts` 的 `diffDesigns()`；線的配對在 `pairEdges()`，貼上設計也用它。
+- **貼上設計**：`src/app/pasteDesign.ts`。`readPasted()` 用白話說哪裡不合格式；`keepSources()` 把模型漏掉的 Terraform 匯入來源補回，改過的值改標成使用者填（`src/app/sources.ts` 的 `editedSources()`）。對話框是 `src/app/components/PasteDesign.tsx`。
+- **元件樣板**：`src/app/presets.ts`（格式 `loadsketch/presets@1`，存在 localStorage，可以匯出和匯入）。只存名稱、種類和 params。元件列的「我的樣板」在 `src/app/components/Palette.tsx`；「存成樣板」在 `src/app/components/Inspector.tsx`。
+- **自訂服務**（kind `custom`，`src/schema/kinds.ts` 的 `CUSTOM_KIND`）：使用者自己填名稱、圖示、時間、容量、錯誤率、呼叫方式和價格。引擎走和 API 伺服器一樣的共用路徑。成本是台數 × 使用者填的單價（`src/learn/cost.ts`）。練習題不能用：`src/learn/constraints.ts` 的 `customUsed()`。新增一種練習題的判定時，要呼叫它。
 - **課程（範例題目、挑戰）**：`src/learn/lessons.ts`，格式在 `src/learn/lesson.ts`（`Lesson`、`Question`、`Challenge`）。
 - **值班題**：`src/learn/oncall.ts` 的 `INCIDENTS`。
 - **需求題**（從需求和幾乎空白的畫布開始）：`src/learn/briefs.ts` 的 `BRIEFS`。每題要有 `reference`（過關）和 `naive`（最常見的第一版，不過關），`tests/briefs.test.ts` 會跑這兩個設計。零件的速度是已知條件：處理時間不能比該種元件的預設值短（`floors` 可以另外給），命中率不能比預設高；`fixed` 的節點不能改也不能刪。題目用的情境裡，指定節點的事件（down、slow…）只能指向 `fixed` 的節點：使用者自己加的節點 id 事先不知道。
@@ -112,5 +116,7 @@ loadsketch is a discrete-event simulator for system designs, with a React UI and
 Rules: write a test that fails before the fix; keep `tests/golden.test.ts` hashes identical unless you mean to change behaviour (then `UPDATE_GOLDEN=1` and say why); UI text is Chinese source text in `t()`/`tx()` (`src/i18n/index.ts`), then run `node scripts/i18n-extract.ts` and fill `src/i18n/en.ts`; no native `<select>` or number inputs; speed budgets use CPU time (`cpuMs()` in `tests/helpers.ts`); the design format only gains optional fields.
 
 UI changes follow `docs/design-system.md`: glass only for things that float over other content, the spring curve only on `transform`, no decorative motion on data, grey edges and arrows, a faint category glow, and every animation off under `prefers-reduced-motion`.
+
+Versions, the compare view, pasted designs, component presets and the custom service: see "新增其他東西" (`src/app/versions.ts`, `src/app/designDiff.ts`, `src/app/pasteDesign.ts`, `src/app/presets.ts`, `CUSTOM_KIND` in `src/schema/kinds.ts`). A practice judge must reject a custom service (`customUsed()` in `src/learn/constraints.ts`).
 
 To add a component kind, follow "新增一種元件" above: `KINDS` in `src/schema/kinds.ts`, the kind sets in `src/schema/design.ts`, the `handle()` and `runJob()` switches in `src/engine/sim.ts`, `src/engine/scale.ts`, cost, complexity points, parameter groups, icon, card summary, English strings, tests and an example. Run `npm run test:quick` (about 10 s) after every change, the golden test after engine changes, and `npx playwright test` before you finish.

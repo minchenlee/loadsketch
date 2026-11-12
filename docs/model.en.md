@@ -40,6 +40,7 @@ API servers, API gateways, workers, caches, databases and object storage are all
 | Database | A primary and replicas. Replication lag, stale reads, read-your-writes, row locks, automatic failover, split brain with or without fencing. |
 | Sharded database | Keys map to shards; a hot key makes one shard busy. Fan-out reads with a quorum. |
 | Queue, worker | At-most-once or at-least-once delivery, visibility timeout, DLQ, message TTL, FIFO groups with head-of-line blocking, poison messages, transactional outbox. |
+| Custom service | A service that is not in the catalog (search, a payment provider, email). A station with the instances, slots, service time, queue limit, error rate and call order the user gives. It takes the same path as an API server (cache-aside with a cache and a database), without autoscaling, overload protection, an outbox or rollouts. Its icon and its price per instance are the user's. Practice problems do not allow it. |
 | Function | Like AWS Lambda: one request per environment, cold starts, a concurrency limit, a scaling rate. |
 | Autoscaling | Like the Kubernetes HPA: target utilization, boot time, a cold period, a scale-down stabilization window. Boot and control-plane dependencies can fail. |
 
@@ -56,7 +57,7 @@ API servers, API gateways, workers, caches, databases and object storage are all
 - The time series counts successes, failures and latency by **completion** time, like a monitoring dashboard.
 - Latency percentiles use a log-bucketed histogram; the error is below 0.5%.
 - Work that is not finished when the run stops (queued messages, pending retries) is counted in `unfinished`.
-- Cost and complexity points are for the practice problems only. Prices are sample values with roughly the ratios of AWS in 2026. They are not a quote and do not change the simulation.
+- Cost and complexity points are for the practice problems only. Prices are sample values with roughly the ratios of AWS in 2026. They are not a quote and do not change the simulation. A custom service costs its instances × the price per instance the user gives.
 
 ## 7. Checks against queueing theory
 
