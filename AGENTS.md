@@ -9,6 +9,7 @@
 - `src/schema/`：設計檔和情境檔的格式（zod）、元件種類（`kinds.ts`）、設計檢查。不依賴瀏覽器。
 - `src/engine/`：離散事件模擬。`sim.ts` 的 `Simulation` 是全部元件的行為；`scale.ts` 把大流量縮成 1/k 來跑；`theory.ts` 是排隊理論的對照。不依賴瀏覽器。
 - `src/core/index.ts`：給瀏覽器以外的程式（CLI、之後的 IaC 匯入）用的入口，轉出 schema、engine 和 `costOf`。不能碰到 `src/app/`、React、DOM，learn 只能用 `cost.ts`（`tests/boundary.test.ts` 沿 import 往下查）。
+- `src/schema/aiGuide.ts`：給 AI 讀的格式說明（英文），從 `KINDS`、`EDGE_PARAMS` 和英文翻譯產生。`npm run ai-guide` 寫到 `public/llms.txt`（網址 `/llms.txt`）；貼上設計的對話框（`src/app/components/PasteDesign.tsx`）用 `aiPrompt()` 複製給 AI 的提示。
 - `src/learn/`：課程、值班題、限制題、需求題、成本、診斷。讀模擬結果，不改引擎。
 - `src/site/main.tsx`：介紹頁（網址 `/`）。模擬器在 `/app/`（`app/index.html`）；介紹頁上會動的畫面是 iframe 裡的模擬器，用 `?embed=1`（`src/app/App.tsx` 的 `EMBED`）。
 - `src/app/`：React 介面。狀態在 `store.ts`（zustand）；模擬在 Web Worker 跑（`src/worker/sim.worker.ts`）。
@@ -30,6 +31,7 @@ node scripts/i18n-extract.ts
 npm run typecheck
 npx playwright test         # e2e，約 3 分鐘
 npm run schema              # 格式改了以後，重新產生 schema/*.json
+npm run ai-guide            # 元件、參數或它們的英文改了以後，重新產生 public/llms.txt（tests/ai-guide.test.ts 會檢查）
 npm run loadsketch -- run examples/designs/three-tier.json --json
 npm run loadsketch -- import terraform tests/import/fixtures/ecs-rds.plan.json --out /tmp/x.json   # 加 --answers <檔> 套答案檔；--report <檔.md> 寫報告；--strict 有確定的 high 就回傳 1
 node scripts/check-agents-md.ts
@@ -65,7 +67,7 @@ node scripts/check-agents-md.ts
 7. `src/app/paramLayout.ts` 的 `GROUPS`：每個參數都要分組（`tests/params-ui.test.ts` 會檢查沒有參數落在「其他」）。
 8. `src/app/ui.ts` 的 `ICONS`：`src/schema/kinds.ts` 的 `KINDS` 用到的 lucide 圖示名稱要在這裡。
 9. `src/app/components/ComponentNode.tsx` 的 `paramSummary()`：畫布卡片上的一行摘要。
-10. `src/i18n/en.ts`：跑 `node scripts/i18n-extract.ts` 後補英文。
+10. `src/i18n/en.ts`：跑 `node scripts/i18n-extract.ts` 後補英文。補完再跑 `npm run ai-guide`（`tests/ai-guide.test.ts` 會檢查 `public/llms.txt`）。
 11. 測試：在 `tests/components.test.ts` 加行為測試；加一個範例到 `examples/designs/`（`tests/examples.test.ts` 會要求它有分類：`src/app/examples.ts` 的 `CATEGORIES`），再跑 `UPDATE_GOLDEN=1 npx vitest run tests/golden.test.ts`。
 12. 格式改了：`npm run schema`。
 

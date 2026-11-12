@@ -1,14 +1,19 @@
 // Paste a design as JSON (roadmap-next M4, Q12, Q15): the text an AI or a person gives back. What is
 // wrong is said in plain words; a design that reads shows what it changes against the canvas, and
-// replaces the canvas only on a click. The current design can be copied from here, to give to an AI.
+// replaces the canvas only on a click. The prompt for an AI (M5: the format guide, the current design
+// and room for the request) and the design alone can be copied from here.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CircleX, ClipboardPaste, Copy, TriangleAlert, X } from 'lucide-react';
+import { Check, CircleX, ClipboardPaste, Copy, FileText, Sparkles, TriangleAlert, X } from 'lucide-react';
 import { useApp } from '../store.ts';
 import { useExit, useModal } from '../modal.ts';
 import { readPasted } from '../pasteDesign.ts';
 import { describeChange, diffDesigns } from '../designDiff.ts';
+import { aiPrompt } from '../../schema/aiGuide.ts';
 import { t } from '../../i18n/index.ts';
+
+/** The guide is at the site's root (public/llms.txt); the app is at /app/. */
+export const guideUrl = () => new URL('../llms.txt', location.href).href;
 
 /** Reading waits this long after the last key, so a long paste is not read at every key. */
 const READ_MS = 200;
@@ -20,7 +25,7 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
   const dirty = useApp((s) => s.dirty);
   const [text, setText] = useState('');
   const [read, setRead] = useState('');
-  const [copied, setCopied] = useState<'yes' | 'no' | null>(null);
+  const [copied, setCopied] = useState<'prompt' | 'design' | 'no' | null>(null);
   useEffect(() => {
     const h = setTimeout(() => setRead(text), READ_MS);
     return () => clearTimeout(h);
@@ -34,11 +39,12 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
     useApp.getState().load(result.design);
     close();
   };
-  const copy = async () => {
+  const copy = async (what: 'prompt' | 'design') => {
+    const st = useApp.getState();
     try {
-      await navigator.clipboard.writeText(useApp.getState().exportText());
-      setCopied('yes');
-      setTimeout(() => setCopied((c) => (c === 'yes' ? null : c)), 2000);
+      await navigator.clipboard.writeText(what === 'prompt' ? aiPrompt(st.design(), guideUrl()) : st.exportText());
+      setCopied(what);
+      setTimeout(() => setCopied((c) => (c === what ? null : c)), 2000);
     } catch {
       setCopied('no');
     }
@@ -55,17 +61,26 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 text-[14px] leading-relaxed">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="muted min-w-0 flex-1">{t('貼上 AI 或別人給你的設計 JSON。先看它和畫布差在哪裡，按「換掉畫布」才會換。')}</p>
-            <button className="btn shrink-0" onClick={() => void copy()} title={t('把畫布上的設計複製成 JSON，貼給 AI 修改')} data-testid="paste-design-copy">
-              {copied === 'yes' ? <Check size={14} /> : <Copy size={14} />} {copied === 'yes' ? t('已複製') : t('複製目前的設計')}
-            </button>
+          <div className="space-y-2" data-testid="paste-design-step1">
+            <p>{t('1. 複製給 AI 的提示，貼到你用的 AI（ChatGPT、Claude 等），在最後寫要改什麼。提示裡有格式說明和目前的設計。')}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button className="btn btn-primary" onClick={() => void copy('prompt')} data-testid="paste-design-prompt">
+                {copied === 'prompt' ? <Check size={14} /> : <Sparkles size={14} />} {copied === 'prompt' ? t('已複製') : t('複製給 AI 的提示')}
+              </button>
+              <button className="btn" onClick={() => void copy('design')} title={t('把畫布上的設計複製成 JSON，貼給 AI 修改')} data-testid="paste-design-copy">
+                {copied === 'design' ? <Check size={14} /> : <Copy size={14} />} {copied === 'design' ? t('已複製') : t('只複製設計 JSON')}
+              </button>
+              <a className="btn" href={guideUrl()} target="_blank" rel="noreferrer" title={t('給 AI 讀的格式說明（英文）。可以直接把這個網址給 AI。')} data-testid="paste-design-guide">
+                <FileText size={14} /> {t('格式說明')}
+              </a>
+            </div>
+            {copied === 'no' && (
+              <p className="text-[13px]" style={{ color: 'var(--bad-ink)' }} data-testid="paste-design-copy-failed">
+                {t('不能寫入剪貼簿。改用檔案選單的「存成 JSON」。')}
+              </p>
+            )}
           </div>
-          {copied === 'no' && (
-            <p className="text-[13px]" style={{ color: 'var(--bad-ink)' }} data-testid="paste-design-copy-failed">
-              {t('不能寫入剪貼簿。改用檔案選單的「存成 JSON」。')}
-            </p>
-          )}
+          <p className="border-t border-[var(--line)] pt-3">{t('2. 把 AI 的回答（或別人給你的設計 JSON）貼到下面。先看它和畫布差在哪裡，按「換掉畫布」才會換。')}</p>
           <textarea
             className="field block w-full resize-y font-mono text-[12.5px] leading-snug"
             // .field is a one-line control: this one is a box

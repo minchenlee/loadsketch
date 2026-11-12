@@ -2482,6 +2482,31 @@ test.describe('paste design', () => {
     expect(errors).toEqual([]);
   });
 
+  test('ai guide: the prompt for an AI holds the format guide and the current design; the guide is served at /llms.txt', async ({ page }) => {
+    await catchClipboard(page);
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.getByTestId('file-menu').click();
+    await page.getByTestId('paste-design-open').click();
+    const dlg = page.getByTestId('paste-design');
+    await dlg.getByTestId('paste-design-prompt').click();
+    await expect(dlg.getByTestId('paste-design-prompt')).toContainText('已複製');
+    const prompt = await page.evaluate(() => (window as unknown as { __copied: string }).__copied);
+    expect(prompt).toContain('# loadsketch design format');
+    expect(prompt).toContain('/llms.txt');
+    const design = await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { design(): unknown } } }).__loadsketch.getState().design());
+    const blocks = [...prompt.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => m[1]);
+    expect(JSON.parse(blocks.at(-1)!)).toEqual(design);
+    // the link is the same guide, served by the site
+    const href = await dlg.getByTestId('paste-design-guide').getAttribute('href');
+    expect(new URL(href!).pathname).toBe('/llms.txt');
+    const res = await page.request.get(href!);
+    expect(res.status()).toBe(200);
+    expect(prompt).toContain(await res.text());
+    await page.waitForTimeout(300); // the dialog's entrance
+    await dlg.screenshot({ path: join(SHOTS, 'paste-design-ai.png') });
+  });
+
   test('unsaved changes are named before replacing; a copy the clipboard refuses says so', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new Error('denied'); } } });

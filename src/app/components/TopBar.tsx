@@ -126,7 +126,7 @@ export function TopBar() {
   const fileItems: MenuItem[] = [
     { label: t('新設計'), icon: <FilePlus2 size={14} />, onSelect: () => load({ schema: DESIGN_SCHEMA, name: t('未命名設計'), nodes: [], edges: [] }), 'data-testid': 'new-design' },
     { label: t('開啟'), icon: <FolderOpen size={14} />, onSelect: () => file.current?.click() },
-    { label: t('貼上設計 JSON'), icon: <ClipboardPaste size={14} />, onSelect: () => setPasting(true), title: t('貼上 AI 或別人給你的設計 JSON；也可以從這裡複製目前的設計'), 'data-testid': 'paste-design-open' },
+    { label: t('貼上設計 JSON'), icon: <ClipboardPaste size={14} />, onSelect: () => setPasting(true), title: t('用 AI 改設計：複製給 AI 的提示，再把回答貼回來；也可以貼別人給你的設計 JSON'), 'data-testid': 'paste-design-open' },
     { label: t('匯入 Terraform'), icon: <FileInput size={14} />, onSelect: () => setImporting(true), title: t('把 Terraform plan（terraform show -json 的輸出）轉成設計'), 'data-testid': 'import-terraform' },
     { label: t('存成 JSON'), icon: <Download size={14} />, onSelect: save, sep: true, 'data-testid': 'save-json' },
   ];
