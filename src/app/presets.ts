@@ -125,6 +125,24 @@ export function savePresets(store: Store | undefined, list: Preset[]): boolean {
   }
 }
 
+/**
+ * Changes the list as it is in storage now: another tab may have saved presets since this one read
+ * them (M8 review P2), as `updateVersions()` does for versions. Without a readable list in storage,
+ * the change applies to the list in memory. `memoryOnly`: the result could not be saved.
+ */
+export function updatePresets(store: Store | undefined, memory: Preset[], change: (list: Preset[]) => Preset[]): { list: Preset[]; memoryOnly: boolean } {
+  let base = memory;
+  try {
+    const text = store?.getItem(PRESETS_KEY);
+    const r = text ? parsePresetFile(text) : null;
+    if (r?.ok) base = r.presets.slice(0, MAX_PRESETS);
+  } catch {
+    // unreadable storage: the list in memory
+  }
+  const list = change(base);
+  return { list, memoryOnly: !savePresets(store, list) };
+}
+
 const browserStore = (): Store | undefined => {
   try {
     return typeof localStorage === 'undefined' ? undefined : localStorage;
@@ -144,25 +162,39 @@ interface PresetState {
 }
 
 export const usePresets = create<PresetState>((set, get) => {
-  const write = (presets: Preset[]) => set({ presets, memoryOnly: !savePresets(browserStore(), presets) });
+  const write = (change: (list: Preset[]) => Preset[]) => {
+    const r = updatePresets(browserStore(), get().presets, change);
+    set({ presets: r.list, memoryOnly: r.memoryOnly });
+    return r.list;
+  };
   return {
     presets: loadPresets(browserStore()),
     memoryOnly: false,
     save: (node, name) => {
-      const p = presetFromNode(node, name, new Set(get().presets.map((x) => x.id)));
-      // the same name and kind again: the new settings replace the old ones, in its place
-      const at = get().presets.findIndex((x) => x.name === p.name && x.kind === p.kind);
-      const list = [...get().presets];
-      if (at >= 0) list[at] = { ...p, id: list[at].id };
-      else list.push(p);
-      write(list.slice(-MAX_PRESETS));
-      return at >= 0 ? list[at] : p;
+      let saved!: Preset;
+      write((presets) => {
+        const p = presetFromNode(node, name, new Set(presets.map((x) => x.id)));
+        // the same name and kind again: the new settings replace the old ones, in its place
+        const at = presets.findIndex((x) => x.name === p.name && x.kind === p.kind);
+        const list = [...presets];
+        if (at >= 0) list[at] = saved = { ...p, id: list[at].id };
+        else list.push((saved = p));
+        return list.slice(-MAX_PRESETS);
+      });
+      return saved;
     },
-    remove: (id) => write(get().presets.filter((p) => p.id !== id)),
+    remove: (id) => void write((presets) => presets.filter((p) => p.id !== id)),
     importPresets: (add) => {
-      const r = mergePresets(get().presets, add);
-      write(r.list);
+      let r!: ReturnType<typeof mergePresets>;
+      write((presets) => (r = mergePresets(presets, add)).list);
       return { added: r.added, full: r.full };
     },
   };
 });
+
+// another tab changed the presets: show its list
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === PRESETS_KEY || e.key === null) usePresets.setState({ presets: loadPresets(browserStore()) });
+  });
+}

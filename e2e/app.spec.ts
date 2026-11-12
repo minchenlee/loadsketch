@@ -2658,3 +2658,48 @@ test('presets: save a component with its settings, add it from the palette by cl
   await page.getByTestId('presets').screenshot({ path: join(SHOTS, 'presets-palette.png') });
   expect(errors).toEqual([]);
 });
+
+test('presets: two tabs open at once keep each other\'s presets, and one tab shows what the other saved (M8 review P2)', async ({ context }) => {
+  const a = await context.newPage();
+  await a.setViewportSize({ width: 1440, height: 1000 });
+  await a.goto('/app/?example=three-tier');
+  await a.evaluate(() => localStorage.removeItem('loadsketch-presets'));
+  const b = await context.newPage();
+  await b.setViewportSize({ width: 1440, height: 1000 });
+  await b.goto('/app/?example=three-tier');
+  await a.reload();
+  for (const [page, node, name] of [[a, 'api', 'API'], [b, 'cache', 'Redis']] as const) {
+    await page.locator(`[data-node="${node}"]`).click();
+    await page.getByTestId('preset-save').click();
+    await page.getByTestId('preset-name').fill(name);
+    await page.getByTestId('preset-save-confirm').click();
+  }
+  const names = (p: typeof a) => p.evaluate(() => (JSON.parse(localStorage.getItem('loadsketch-presets') ?? '{}').presets ?? []).map((x: { name: string }) => x.name));
+  expect(await names(b)).toEqual(['API', 'Redis']);
+  // the first tab shows the preset the second one saved
+  await expect(a.getByTestId('preset-item')).toHaveText(['API', 'Redis']);
+  await expect(b.getByTestId('preset-item')).toHaveText(['API', 'Redis']);
+});
+
+test.describe('phone layout: presets', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('presets: a preset tapped in the palette drawer adds the component and closes the drawer (M8 review P2)', async ({ page }) => {
+    await page.goto('/app/?example=three-tier');
+    await page.evaluate(() => localStorage.setItem('loadsketch-presets', JSON.stringify({ schema: 'loadsketch/presets@1', presets: [{ id: 'p1', name: '金流商', kind: 'service', params: { instances: 3 } }] })));
+    await page.reload();
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    const drawer = page.getByTestId('phone-drawer');
+    await page.getByTestId('phone-tab-palette').tap();
+    await expect(drawer).toHaveAttribute('data-open');
+    await drawer.getByTestId('preset-item').tap();
+    await expect(page.locator('[data-node]')).toHaveCount(6);
+    await expect(drawer).not.toHaveAttribute('data-open');
+    // the remove button leaves the drawer open
+    await page.getByTestId('phone-tab-palette').tap();
+    await expect(drawer).toHaveAttribute('data-open');
+    await drawer.getByTestId('preset-remove').tap();
+    await expect(drawer.getByTestId('preset-item')).toHaveCount(0);
+    await expect(drawer).toHaveAttribute('data-open');
+  });
+});

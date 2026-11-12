@@ -141,6 +141,7 @@ function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => 
               title={t('{kind}：{name}', { kind: t(spec.label), name: p.name })}
               className="sd-pal flex min-w-0 flex-1 cursor-grab items-center gap-2 px-1.5 py-1 text-left active:cursor-grabbing"
               data-testid="preset-item"
+              data-adds
             >
               <span className="sd-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={{ color: CATEGORY_COLOR[spec.category] }}>
                 {Icon && <Icon size={14} strokeWidth={2} />}

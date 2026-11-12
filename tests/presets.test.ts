@@ -1,7 +1,7 @@
 // Component presets (roadmap-next M8, Q21): a component with its settings under a name, kept in the
 // browser and in a file. The data layer: what a preset keeps, the file format, merging an import.
 import { describe, expect, it } from 'vitest';
-import { MAX_PRESETS, PRESETS_KEY, PRESETS_SCHEMA, loadPresets, mergePresets, parsePresetFile, presetFile, presetFromNode, readPreset, savePresets, usePresets, type Preset, type Store } from '../src/app/presets.ts';
+import { MAX_PRESETS, PRESETS_KEY, PRESETS_SCHEMA, loadPresets, mergePresets, parsePresetFile, presetFile, presetFromNode, readPreset, savePresets, updatePresets, usePresets, type Preset, type Store } from '../src/app/presets.ts';
 
 const mem = (): Store & { data: Map<string, string> } => {
   const data = new Map<string, string>();
@@ -83,5 +83,19 @@ describe('presets', () => {
     usePresets.getState().remove(a.id);
     expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Redis']);
     expect(usePresets.getState().importPresets([pay, pay])).toEqual({ added: 1, full: 0 });
+  });
+
+  it('two tabs: a change starts from the list in storage now, so one tab does not erase the other\'s presets (M8 review P2)', () => {
+    const s = mem();
+    // tab 1 loaded an empty list, then tab 2 saved "API"
+    const tab1: Preset[] = [];
+    savePresets(s, [{ id: 'p1', name: 'API', kind: 'service' }]);
+    const r = updatePresets(s, tab1, (l) => [...l, { id: 'p2', name: 'Redis', kind: 'cache' }]);
+    expect(r.list.map((p) => p.name)).toEqual(['API', 'Redis']);
+    expect(loadPresets(s).map((p) => p.name)).toEqual(['API', 'Redis']);
+    expect(r.memoryOnly).toBe(false);
+    // no storage: the change applies to the list in memory
+    const m = updatePresets(undefined, tab1, (l) => [...l, { id: 'p9', name: 'X', kind: 'cache' }]);
+    expect(m).toEqual({ list: [{ id: 'p9', name: 'X', kind: 'cache' }], memoryOnly: true });
   });
 });

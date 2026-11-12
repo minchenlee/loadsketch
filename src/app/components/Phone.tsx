@@ -76,7 +76,7 @@ export function PhoneDrawer() {
         </button>
       </div>
       {/* a component picked from the list goes on the canvas: the drawer closes to show it */}
-      <div key={which} className="sd-drawer-body" onClick={(e) => which === 'palette' && (e.target as HTMLElement).closest('[data-kind]') && setDrawer(null)}>
+      <div key={which} className="sd-drawer-body" onClick={(e) => which === 'palette' && (e.target as HTMLElement).closest('[data-kind], [data-adds]') && setDrawer(null)}>
         {which === 'palette' ? <Palette /> : which === 'inspector' ? <Inspector /> : which === 'metrics' ? <Metrics /> : null}
       </div>
     </div>
