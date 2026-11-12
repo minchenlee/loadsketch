@@ -155,8 +155,18 @@ export const INCIDENTS: Incident[] = [
 
 export const INCIDENT_BY_ID: Record<string, Incident> = Object.fromEntries(INCIDENTS.map((i) => [i.id, i]));
 
-/** Points: the component, the kind of fault, the fix; each opened component costs. */
-export const POINTS = { node: 40, fault: 30, fix: 30, open: -10 } as const;
+/**
+ * Points: the component, the kind of fault, the fix. The metrics of the first `free` components
+ * opened cost nothing; each one after them costs `open` (roadmap-next M10: a full score should not
+ * need a guess with no metrics at all).
+ */
+export const POINTS = { node: 40, fault: 30, fix: 30, open: -10, free: 2 } as const;
+
+/** What opening `opened` components costs (0 or less). */
+export function openCost(opened: number): number {
+  const paid = Math.max(0, opened - POINTS.free);
+  return paid ? paid * POINTS.open : 0;
+}
 
 export interface Score {
   node: boolean;
@@ -169,7 +179,7 @@ export interface Score {
 export function score(inc: Incident, guess: { node: string; fault: Fault }, opened: number, fixed: boolean): Score {
   const node = guess.node === inc.answer.node;
   const fault = guess.fault === inc.answer.fault;
-  const total = Math.max(0, (node ? POINTS.node : 0) + (fault ? POINTS.fault : 0) + (fixed ? POINTS.fix : 0) + opened * POINTS.open);
+  const total = Math.max(0, (node ? POINTS.node : 0) + (fault ? POINTS.fault : 0) + (fixed ? POINTS.fix : 0) + openCost(opened));
   return { node, fault, fixed, opened, total };
 }
 

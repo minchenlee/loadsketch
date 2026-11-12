@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Simulation } from '../src/engine/index.ts';
 import { parseScenario, type Design, type Scenario } from '../src/schema/design.ts';
-import { FAULTS, INCIDENTS, applyPatches, judgeFix, nodeSamples, score, symptoms, type Incident } from '../src/learn/oncall.ts';
+import { FAULTS, INCIDENTS, POINTS, applyPatches, judgeFix, nodeSamples, openCost, score, symptoms, type Incident } from '../src/learn/oncall.ts';
 
 const root = join(import.meta.dirname, '..');
 const example = (name: string) => JSON.parse(readFileSync(join(root, 'examples/designs', `${name}.json`), 'utf8')) as Design;
@@ -124,12 +124,18 @@ describe('score (Q9=A)', () => {
   const inc = INCIDENTS[0];
   const right = inc.answer;
 
-  it('component 40, fault 30, fix 30; each opened component −10; never below 0', () => {
+  it('component 40, fault 30, fix 30; the first 2 opened components are free, each one after −10; never below 0', () => {
+    expect(POINTS.free).toBe(2);
+    expect([0, 1, 2, 3, 4, 5].map(openCost)).toEqual([0, 0, 0, -10, -20, -30]);
     expect(score(inc, right, 0, false).total).toBe(70);
     expect(score(inc, right, 0, true).total).toBe(100);
-    expect(score(inc, right, 2, true).total).toBe(80);
-    expect(score(inc, { node: right.node, fault: 'traffic' }, 1, false)).toMatchObject({ node: true, fault: false, total: 30 });
-    expect(score(inc, { node: 'nope', fault: 'traffic' }, 3, false).total).toBe(0);
+    // a full score with two components looked at
+    expect(score(inc, right, 1, true).total).toBe(100);
+    expect(score(inc, right, 2, true).total).toBe(100);
+    expect(score(inc, right, 3, true).total).toBe(90);
+    expect(score(inc, right, 4, true).total).toBe(80);
+    expect(score(inc, { node: right.node, fault: 'traffic' }, 3, false)).toMatchObject({ node: true, fault: false, total: 30 });
+    expect(score(inc, { node: 'nope', fault: 'traffic' }, 5, false).total).toBe(0);
   });
 
   it('a fix that deletes a component does not count', () => {

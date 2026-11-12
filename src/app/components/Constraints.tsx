@@ -335,6 +335,7 @@ function ProblemBar({ id }: { id: string }) {
               {v.passed && <div className="faint mt-1 text-[13px]">{brief ? t('越便宜分數越高。送給使用者的流量和題目給的元件，每個設計都一樣貴，不列入比較。') : t('越便宜分數越高。')}</div>}
               <details className="mt-1">
                 <summary className="muted cursor-pointer text-[13px]">{t('成本和複雜度明細')}</summary>
+                <div className="faint text-[13px]" data-testid="problem-cost-note">{t('示意價格（接近 2026 年 AWS 的比例，不是報價），照這次執行的流量算一整個月。')}</div>
                 <CostTable cost={v.cost} design={run!.design} testId="problem-cost" />
                 <table className="mt-1 w-full text-[13px]" data-testid="problem-points">
                   <tbody>

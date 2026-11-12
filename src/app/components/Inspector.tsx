@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, TriangleAlert, CircleX, X } from 'lucide-react';
 import { KINDS, type ParamSpec } from '../../schema/kinds.ts';
 import { EDGE, isPercent, layout, specsOf, toggleOn, unitLabel } from '../paramLayout.ts';
-import { apiTraffic, edgeLatencyMs, ID_RE, regionsOf, type DesignApi, type DesignEdge, type ParamSource, type ParamValue } from '../../schema/design.ts';
+import { apiTraffic, edgeLatencyMs, ID_RE, regionsOf, STORE_KINDS, type DesignApi, type DesignEdge, type ParamSource, type ParamValue } from '../../schema/design.ts';
 import type { NodeResult } from '../../engine/index.ts';
 import { FAIL_LABEL, FAIL_REASONS } from '../../engine/index.ts';
 import { useApp } from '../store.ts';
@@ -351,6 +351,11 @@ function EdgeInspector({ id }: { id: string }) {
           <Trash2 size={14} />
         </button>
       </div>
+      {from?.kind === 'cache' && to && STORE_KINDS.has(to.kind) && (
+        <p className="muted mt-2 text-[13px] leading-snug" data-testid="edge-through-note">
+          {t('快取直接接資料庫：這條線是 read-through／write-through。讀取沒命中時，由快取自己去資料庫讀，再填進快取；寫入時，快取先寫進資料庫，再更新自己。呼叫快取的那一方不用另外連資料庫。')}
+        </p>
+      )}
       <ParamGroups
         kind={EDGE}
         values={edge as unknown as Record<string, ParamValue | undefined>}

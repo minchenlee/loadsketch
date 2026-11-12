@@ -11,7 +11,7 @@ import type { Design } from '../../schema/design.ts';
 import { localizeDesign } from '../../i18n/content.ts';
 import { t, tx } from '../../i18n/index.ts';
 import { sameScenario } from '../../learn/lesson.ts';
-import { FAULTS, INCIDENTS, INCIDENT_BY_ID, POINTS, judgeFix, nodeSamples, score, symptoms, type Fault } from '../../learn/oncall.ts';
+import { FAULTS, INCIDENTS, INCIDENT_BY_ID, POINTS, judgeFix, openCost, nodeSamples, score, symptoms, type Fault } from '../../learn/oncall.ts';
 import { EXAMPLES, useApp } from '../store.ts';
 import { Chart } from './Chart.tsx';
 import { PALETTE } from '../ui.ts';
@@ -272,10 +272,13 @@ function Watch() {
       <Chart testId="oncall-p99" title={t('使用者看到的 p99')} height={120} unit="ms" data={[xs, sym.map((x) => x.p99)]} series={[{ label: 'p99', color: 'var(--warn)' }]} />
 
       <div className="mt-3 text-[14px] font-medium">{t('元件')}</div>
-      <div className="faint text-[13px]">{t('每打開一個元件的指標扣 {n} 分。', { n: -POINTS.open })}</div>
+      <div className="faint text-[13px]" data-testid="oncall-open-rule">
+        {t('前 {free} 個元件的指標免費；第 {next} 個起，每打開一個扣 {n} 分。', { free: POINTS.free, next: POINTS.free + 1, n: -POINTS.open })}{' '}
+        {t('已打開 {k} 個。', { k: st.opened.length })}
+      </div>
       {!revealed && (
         <div className="faint text-[13px]" data-testid="oncall-canvas-note">
-          {t('畫布上就是這個系統。在畫布上按「執行」會重現問題，也會看到每個元件的指標：算打開全部元件（−{n} 分）。', { n: -POINTS.open * design.nodes.length })}
+          {t('畫布上就是這個系統。在畫布上按「執行」會重現問題，也會看到每個元件的指標：算打開全部元件（−{n} 分）。', { n: -openCost(design.nodes.length) })}
         </div>
       )}
       <ul className="mt-1 space-y-1">
@@ -290,7 +293,7 @@ function Watch() {
                 {!opened && !revealed && (
                   <button className="btn text-[13px]" onClick={() => st.open(n.id)} data-testid={`oncall-open-${n.id}`}>
                     <Eye size={12} />
-                    {t('打開指標（−{n} 分）', { n: -POINTS.open })}
+                    {st.opened.length < POINTS.free ? t('打開指標（免費）') : t('打開指標（−{n} 分）', { n: -POINTS.open })}
                   </button>
                 )}
               </div>
@@ -343,7 +346,7 @@ function Watch() {
           <ul className="muted mt-0.5 text-[13px]">
             <li>{sc.node ? t('元件答對 +{n}', { n: POINTS.node }) : t('元件答錯：是「{name}」', { name: name(inc.answer.node) })}</li>
             <li>{sc.fault ? t('故障種類答對 +{n}', { n: POINTS.fault }) : t('故障種類答錯：是「{f}」', { f: t(FAULTS.find((f) => f.id === inc.answer.fault)!.text) })}</li>
-            {sc.opened > 0 && <li>{t('打開 {k} 個元件 {n}', { k: sc.opened, n: sc.opened * POINTS.open })}</li>}
+            {sc.opened > 0 && <li>{openCost(sc.opened) < 0 ? t('打開 {k} 個元件（前 {free} 個免費）{n}', { k: sc.opened, free: POINTS.free, n: openCost(sc.opened) }) : t('打開 {k} 個元件（免費）', { k: sc.opened })}</li>}
             {sc.fixed && <li>{t('修好了 +{n}', { n: POINTS.fix })}</li>}
           </ul>
           <div className="mt-1.5">{t(inc.explain)}</div>

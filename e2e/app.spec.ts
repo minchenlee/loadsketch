@@ -1105,18 +1105,26 @@ test('on-call: a hidden fault, paid metrics, an answer with a score, then a fix 
   await expect(page.getByTestId('oncall-p99')).toBeVisible();
   // the incident runs on its own: the canvas did not run (its scenario has the fault, hidden)
   expect(await store((s) => s.status)).toBe('idle');
-  // component metrics are closed until paid for
+  // component metrics are closed until opened: the first 2 are free, then −10 each
+  await expect(page.getByTestId('oncall-open-rule')).toContainText('前 2 個元件的指標免費；第 3 個起，每打開一個扣 10 分。 已打開 0 個。');
   await expect(page.getByTestId('oncall-metrics-api')).toHaveCount(0);
+  await expect(page.getByTestId('oncall-open-api')).toHaveText('打開指標（免費）');
   await page.getByTestId('oncall-open-api').click();
   await expect(page.getByTestId('oncall-metrics-api')).toBeVisible();
   await expect(page.getByTestId('oncall-open-api')).toHaveCount(0);
+  await page.getByTestId('oncall-open-cache').click();
+  await expect(page.getByTestId('oncall-open-rule')).toContainText('已打開 2 個。');
+  await expect(page.getByTestId('oncall-open-lb')).toHaveText('打開指標（−10 分）');
+  await page.getByTestId('oncall-open-lb').click();
+  await expect(page.getByTestId('oncall-open-rule')).toContainText('已打開 3 個。');
   await expect(page.getByTestId('oncall-answer')).toBeDisabled();
   await page.screenshot({ path: join(SHOTS, 'oncall-watch.png') });
   await page.getByTestId('oncall-node-api').click();
   await page.getByTestId('oncall-fault-gray').click();
   await page.getByTestId('oncall-answer').click();
-  // 40 + 30 − 10
+  // 40 + 30 − 10 (3 components opened, 2 free)
   await expect(page.getByTestId('oncall-score')).toHaveText('得分：60');
+  await expect(page.getByTestId('oncall-reveal')).toContainText('打開 3 個元件（前 2 個免費）-10');
   await expect(page.getByTestId('oncall-page')).toContainText('系統：');
   await expect(page.getByTestId('oncall-reveal')).toContainText('outlier detection');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('loadsketch-oncall') ?? '{}'))).toEqual({ 'gray-errors': 60 });
@@ -2243,4 +2251,22 @@ test.describe('compare examples: links and the clipboard', () => {
     await page.waitForTimeout(2100);
     await expect(dlg.getByTestId('compare-share')).not.toContainText('Copied');
   });
+});
+
+test('a cache connected straight to a database: the edge says it is read-through / write-through', async ({ page }) => {
+  await page.goto('/app/?example=three-tier');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  const id = await page.evaluate(() => {
+    const st = (window as unknown as { __loadsketch: { getState(): { onConnect(c: { source: string; target: string }): void; edges: { id: string; source: string; target: string }[] } } }).__loadsketch;
+    st.getState().onConnect({ source: 'cache', target: 'db' });
+    return st.getState().edges.find((e) => e.source === 'cache' && e.target === 'db')!.id;
+  });
+  await page.evaluate((id) => (window as unknown as { __loadsketch: { setState(s: unknown): void } }).__loadsketch.setState({ selected: { type: 'edge', id } }), id);
+  await expect(page.getByTestId('edge-through-note')).toContainText('read-through／write-through');
+  // another edge does not say it
+  await page.evaluate(() => {
+    const st = (window as unknown as { __loadsketch: { getState(): { edges: { id: string; source: string; target: string }[] }; setState(s: unknown): void } }).__loadsketch;
+    st.setState({ selected: { type: 'edge', id: st.getState().edges.find((e) => e.source === 'api' && e.target === 'db')!.id } });
+  });
+  await expect(page.getByTestId('edge-through-note')).toHaveCount(0);
 });

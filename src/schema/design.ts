@@ -672,7 +672,7 @@ export function checkDesign(d: Design): Issue[] {
 
 /** Components that run their own work (stations); a GC pause only stalls these. */
 /** Kinds a cache reads through to (must match the engine's STORE_KINDS). */
-const STORE_KINDS = new Set(['database', 'sharded_db', 'object_storage']);
+export const STORE_KINDS = new Set(['database', 'sharded_db', 'object_storage']);
 const PAUSABLE = new Set(['service', 'worker', 'function', 'api_gateway', 'cache', 'database', 'sharded_db', 'object_storage']);
 
 export function checkScenario(s: Scenario, d?: Design): Issue[] {
