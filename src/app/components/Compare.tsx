@@ -3,7 +3,7 @@
 // overlays their failure share and p99 over time (from a run again; phones show the table only).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { GitCompareArrows, TriangleAlert, X } from 'lucide-react';
+import { Check, GitCompareArrows, Link, TriangleAlert, X } from 'lucide-react';
 import { useApp } from '../store.ts';
 import { METRICS, delta, overlay, rerunDiffers, type CompareItem, type RunSeries } from '../compare.ts';
 import { describeChange, describeScenarioChange, diffDesigns, diffScenarios } from '../designDiff.ts';
@@ -15,6 +15,7 @@ import { PALETTE } from '../ui.ts';
 import { Chart } from './Chart.tsx';
 import { useCauseHidden } from './OnCall.tsx';
 import { fmtWhen } from './Versions.tsx';
+import { copyLink, encodeCompare, MAX_SHARE_COMPARE } from '../share.ts';
 import { getLang, t } from '../../i18n/index.ts';
 
 type Again = { summary: VersionSummary; series: RunSeries } | { error: string };
@@ -74,6 +75,18 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
   });
   const metrics = METRICS;
 
+  // a link to this comparison: the baseline first (Q9=A: at most 2 runs)
+  const [shared, setShared] = useState(false);
+  const canShare = items.length <= MAX_SHARE_COMPARE;
+  const share = async () => {
+    const runs = [base, ...items.filter((x) => x !== base)].map((x) => ({ name: x.name, design: x.design, scenario: x.scenario }));
+    const r = await copyLink(await encodeCompare(runs));
+    if (r.long) useApp.setState({ error: t('分享連結很長（{n} 個字元），有些聊天軟體會截斷。大的設計建議用「存成 JSON」分享。', { n: r.url.length }) });
+    if (!r.copied) useApp.setState({ error: t('不能寫入剪貼簿：連結已放在網址列，從那裡複製。') });
+    setShared(true);
+    setTimeout(() => setShared(false), 2000);
+  };
+
   return createPortal(
     <div className="sd-backdrop fixed inset-0 z-50 flex items-center justify-center p-6" data-closing={closing || undefined} onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div ref={box} role="dialog" aria-modal="true" aria-label={t('比較版本')} className="panel sd-dialog flex max-h-[92vh] w-[min(1200px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="compare">
@@ -81,7 +94,16 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
           <GitCompareArrows size={18} className="muted" />
           <div className="text-[16px] font-semibold">{t('比較版本')}</div>
           <div className="muted sd-desk text-[13px]">{t('標著「基準」的那一欄是起點；其他欄顯示和它差多少。')}</div>
-          <button className="btn ml-auto" onClick={close} aria-label={t('關閉')} autoFocus>
+          <button
+            className="btn ml-auto"
+            onClick={() => void share()}
+            disabled={!canShare}
+            title={canShare ? t('複製一個連結，打開就是這組比較') : t('分享連結最多帶 {n} 個版本：只勾 {n} 個再比較，就能分享。', { n: MAX_SHARE_COMPARE })}
+            data-testid="compare-share"
+          >
+            {shared ? <Check size={14} /> : <Link size={14} />} <span className="sd-desk">{shared ? t('已複製') : t('分享')}</span>
+          </button>
+          <button className="btn" onClick={close} aria-label={t('關閉')} autoFocus>
             <X size={16} />
           </button>
         </div>

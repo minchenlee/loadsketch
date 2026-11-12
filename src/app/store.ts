@@ -224,6 +224,8 @@ export interface AppState {
   /** Adds versions from a file (runs already in the list are skipped). */
   importVersions: (add: Version[]) => void;
   openCompare: (items: CompareItem[]) => void;
+  /** Loads `open` on the canvas and compares the examples `a` (the baseline) and `b`. */
+  compareExamples: (a: string, b: string, open: string) => void;
   closeCompare: () => void;
 }
 
@@ -646,6 +648,15 @@ export const useApp = create<AppState>((set, get) => {
   },
   importVersions: (add) => changeVersions((l) => mergeVersions(l, add)),
   openCompare: (items) => set({ compare: items }),
+  compareExamples: (a, b, open) => {
+    if (!EXAMPLES[a] || !EXAMPLES[b]) return;
+    get().loadExample(open);
+    const item = (k: string): CompareItem => {
+      const sc = SCENARIOS[exampleScenario(k)] ?? defaultScenario();
+      return { key: `example:${k}`, name: t(EXAMPLES[k].name), design: localizeDesign(structuredClone(EXAMPLES[k])), scenario: structuredClone(sc) };
+    };
+    set({ compare: [item(a), item(b)] });
+  },
   closeCompare: () => set({ compare: null }),
   markPassed: (ids) => {
     const now = get().passed;

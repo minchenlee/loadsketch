@@ -1840,7 +1840,7 @@ test.describe('phone layout', () => {
     const box = (await page.getByTestId('example-browser').boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
-    const cards = page.getByTestId('example-browser').locator('button.card');
+    const cards = page.getByTestId('example-browser').locator('.card');
     const [a, b] = [(await cards.nth(0).boundingBox())!, (await cards.nth(1).boundingBox())!];
     expect(a.width).toBeGreaterThan(300);
     expect(b.y).toBeGreaterThan(a.y);
@@ -2024,6 +2024,8 @@ test('compare: at most 4 versions; a version compared with the same scenario sho
   await page.getByTestId('versions-compare').click();
   await expect(page.getByTestId('compare-col')).toHaveCount(3);
   await expect(page.getByTestId('compare-mixed')).toHaveCount(0);
+  // a share link holds 2 runs at most (Q9=A)
+  await expect(page.getByTestId('compare-share')).toBeDisabled();
 });
 
 test.describe('compare on a phone', () => {
@@ -2069,4 +2071,89 @@ test('versions: a browser that stores nothing says so on the versions tab, whate
   await page.getByTestId('tab-versions').click();
   await expect(page.getByTestId('version')).toHaveCount(2);
   await expect(page.getByTestId('versions-memory-only')).toBeVisible();
+});
+
+// a share link made before comparison links (the same one as tests/share.test.ts)
+const OLD_LINK_BODY = 'dY-xDsIwDER_BXmORApMmfgHRsQQJW5rNU2qJEVCVf4dBwp0YTzf8529gMVEnQe1QDI9jhoUuKBtGjCbfv92zw0I8HpENoOzO0d-qJPANqjrAmTZmRPGxOOBfJXGEfrMegoVkkLeilhRPdEP5LU7GfySh9OLvQlA260FbQzjpiKHNaRwJh-OXkcK_574-Ns3UkZtH6ztHHWm4C-gjpKTo25bMjUqTtzdSFlKeQI';
+
+// the link a share button put on the clipboard
+async function catchClipboard(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (s: string) => void ((window as unknown as { __copied: string }).__copied = s) } });
+  });
+}
+
+test.describe('compare examples', () => {
+  test('a paired example compares with its pair in one click; the link opens the same comparison', async ({ page, browser }) => {
+    await catchClipboard(page);
+    await page.goto('/app/?lang=en');
+    await page.getByTestId('open-examples').click();
+    await page.getByLabel('Search examples').fill('retry');
+    // only the examples in a pair have the button
+    await expect(page.getByTestId('example-retry-storm')).toBeVisible();
+    await expect(page.getByTestId('example-compare-adaptive-throttle')).toHaveCount(0);
+    await expect(page.getByTestId('example-compare-retry-storm')).toContainText('Retry budget');
+    await page.waitForTimeout(400); // the dialog's entrance
+    await page.getByTestId('example-browser').screenshot({ path: join(SHOTS, 'example-pairs.png') });
+    await page.getByTestId('example-compare-retry-budget').click();
+    await expect(page.getByTestId('example-browser')).toHaveCount(0);
+    const dlg = page.getByTestId('compare');
+    await expect(dlg.getByTestId('compare-col')).toHaveCount(2);
+    // the problem is the baseline, the fix is B; the clicked example is on the canvas
+    await expect(dlg.getByTestId('compare-col').nth(0)).toContainText('A · Retry storm');
+    await expect(dlg.getByTestId('compare-col').nth(0).getByTestId('compare-base')).toBeVisible();
+    await expect(dlg.getByTestId('compare-col').nth(1)).toContainText('B · Retry budget');
+    expect(await page.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().example)).toBe('retry-budget');
+    // the same scenario: no warning; the fix fails less
+    await expect(dlg.getByTestId('compare-mixed')).toHaveCount(0);
+    await expect(dlg.getByTestId('compare-row-errorRate').locator('[data-tone]')).toHaveAttribute('data-tone', 'better', { timeout: 60_000 });
+    await expect(dlg.getByTestId('compare-diff')).toHaveCount(1);
+    const changes = await dlg.getByTestId('compare-diff').locator('li').count();
+    expect(changes).toBeGreaterThan(0);
+
+    await dlg.getByTestId('compare-share').click();
+    await expect(dlg.getByTestId('compare-share')).toContainText('Copied');
+    const url = await page.evaluate(() => (window as unknown as { __copied: string }).__copied);
+    expect(url).toMatch(/\/app\/#c=1\.[A-Za-z0-9_-]+$/);
+
+    // a new tab opens the comparison: the baseline on the canvas, the same columns and changes
+    const other = await browser.newPage();
+    await other.goto(url.replace(/^https?:\/\/[^/]+/, '') .replace('/app/#', '/app/?lang=en#'));
+    const dlg2 = other.getByTestId('compare');
+    await expect(dlg2.getByTestId('compare-col')).toHaveCount(2);
+    await expect(dlg2.getByTestId('compare-col').nth(0)).toContainText('A · Retry storm');
+    await expect(dlg2.getByTestId('compare-col').nth(0).getByTestId('compare-base')).toBeVisible();
+    await expect(dlg2.getByTestId('compare-col').nth(1)).toContainText('B · Retry budget');
+    await expect(dlg2.getByTestId('compare-diff').locator('li')).toHaveCount(changes);
+    await expect(dlg2.getByTestId('compare-row-errorRate').locator('[data-tone]')).toHaveAttribute('data-tone', 'better', { timeout: 60_000 });
+    const docName = await other.evaluate(() => ((window as unknown as { __loadsketch: Store }).__loadsketch.getState().doc as { name: string }).name);
+    const baseName = await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { compare: { design: { name: string } }[] } } }).__loadsketch.getState().compare[0].design.name);
+    expect(docName).toBe(baseName);
+    await other.close();
+  });
+
+  test('the baseline chosen goes first in the link', async ({ page }) => {
+    await catchClipboard(page);
+    await page.goto('/app/?lang=en');
+    await page.getByTestId('open-examples').click();
+    await page.getByLabel('Search examples').fill('cache-stampede');
+    await page.getByTestId('example-compare-cache-stampede').click();
+    const dlg = page.getByTestId('compare');
+    await dlg.getByTestId('compare-set-base').click();
+    await dlg.getByTestId('compare-share').click();
+    await expect(dlg.getByTestId('compare-share')).toContainText('Copied');
+    const url = await page.evaluate(() => (window as unknown as { __copied: string }).__copied);
+    await page.goto('/app/?lang=en');
+    await page.goto(url.replace(/^https?:\/\/[^/]+/, '').replace('/app/#', '/app/?lang=en#'));
+    const cols = page.getByTestId('compare').getByTestId('compare-col');
+    await expect(cols).toHaveCount(2);
+    await expect(cols.nth(0).getByTestId('compare-base')).toBeVisible();
+    await expect(cols.nth(0)).toContainText('lease');
+  });
+
+  test('an old share link still opens one design, with no comparison', async ({ page }) => {
+    await page.goto('/app/?lang=en#s=1.' + OLD_LINK_BODY);
+    await expect(page.locator('[data-node]')).toHaveCount(2);
+    await expect(page.getByTestId('compare')).toHaveCount(0);
+  });
 });

@@ -12,24 +12,29 @@ import { Slide } from './components/Slide.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import { SCENARIOS, SPEEDS, useApp } from './store.ts';
 import { IS_MAC } from './ui.ts';
-import { decodeShare, isShareHash } from './share.ts';
+import { decodeLink, isShareHash } from './share.ts';
 import { t } from '../i18n/index.ts';
 import { PracticeOverlay } from './components/Practice.tsx';
 import { PhoneDrawer, PhoneTabs } from './components/Phone.tsx';
 import { CompareHost } from './components/Compare.tsx';
 import { isPhone, usePhone } from './phone.ts';
 
-/** Open the design and scenario of a share link (#s=…). False when the hash holds none. */
+/**
+ * Open the design and scenario of a share link (#s=…). A comparison link (#c=…) puts the baseline
+ * on the canvas and opens the compare view. False when the hash holds none.
+ */
 async function openShared(): Promise<boolean> {
   if (!isShareHash(location.hash)) return false;
-  const r = await decodeShare(location.hash);
+  const r = await decodeLink(location.hash);
   const st = useApp.getState();
   if (!r.ok) {
     useApp.setState({ error: t('打不開分享連結：{why}', { why: r.why }) });
     return false;
   }
-  st.load(r.value.design);
-  st.setScenario(r.value.scenario);
+  const first = r.kind === 'one' ? r.value : r.runs[0];
+  st.load(first.design);
+  st.setScenario(first.scenario);
+  if (r.kind === 'compare') st.openCompare(r.runs.map((x, i) => ({ key: `shared:${i}`, name: x.name || x.design.name, design: x.design, scenario: x.scenario })));
   return true;
 }
 

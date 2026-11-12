@@ -40,3 +40,19 @@ export function categorize(all: string[]): Category[] {
   const other = all.filter((e) => !known.has(e));
   return other.length ? [...cats, { id: 'other', label: tx('其他'), tier: 'start' as const, examples: other }] : cats;
 }
+
+/**
+ * Examples that come in pairs (roadmap-next M3, Q10=A): the problem first, then the same system
+ * with the fix. Both run the same scenario, so the compare view shows what the fix changes.
+ */
+export const PAIRS: [problem: string, fix: string][] = [
+  ['retry-storm', 'retry-budget'],
+  ['cache-stampede', 'cache-lease'],
+  ['gray-failure', 'gray-failure-outlier'],
+  ['slow-dependency', 'bulkhead-fallback'],
+];
+
+/** The pair an example is in, the problem first; null when it is in none. */
+export function pairOf(example: string): [string, string] | null {
+  return PAIRS.find((p) => p.includes(example)) ?? null;
+}

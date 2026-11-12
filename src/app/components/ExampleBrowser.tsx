@@ -1,8 +1,8 @@
 // The example browser: a dialog with categories on the left and example cards on the right.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, GraduationCap, Search, Trophy, X } from 'lucide-react';
+import { BookOpen, GitCompareArrows, GraduationCap, Search, Trophy, X } from 'lucide-react';
 import { EXAMPLES, SCENARIOS, exampleScenario, useApp } from '../store.ts';
-import { categorize, TIERS } from '../examples.ts';
+import { categorize, pairOf, TIERS } from '../examples.ts';
 import { LESSONS } from '../../learn/lessons.ts';
 import { useExit } from '../modal.ts';
 import { t } from '../../i18n/index.ts';
@@ -99,10 +99,12 @@ export function ExampleBrowser({ onClose }: { onClose: () => void }) {
                 const lesson = LESSONS[k];
                 const won = lesson ? lesson.challenges.filter((c) => passed.includes(c.id)).length : 0;
                 const sc = SCENARIOS[exampleScenario(k)];
+                const pair = pairOf(k);
+                const other = pair ? (pair[0] === k ? pair[1] : pair[0]) : null;
                 return (
+                  <div key={k} className={`card flex flex-col transition-colors hover:border-[var(--accent)] ${k === current ? 'border-[var(--accent)]' : ''}`}>
                   <button
-                    key={k}
-                    className={`card flex flex-col gap-1.5 p-3 text-left transition-colors hover:border-[var(--accent)] ${k === current ? 'border-[var(--accent)]' : ''}`}
+                    className="flex flex-1 flex-col gap-1.5 p-3 text-left"
                     onClick={() => {
                       loadExample(k);
                       close();
@@ -128,6 +130,22 @@ export function ExampleBrowser({ onClose }: { onClose: () => void }) {
                       )}
                     </div>
                   </button>
+                  {pair && other && EXAMPLES[other] && (
+                    <button
+                      className="flex items-center gap-1.5 border-t border-[var(--line)] px-3 py-1.5 text-left text-[13px] font-medium hover:bg-[var(--panel-2)]"
+                      style={{ color: 'var(--accent)' }}
+                      onClick={() => {
+                        useApp.getState().compareExamples(pair[0], pair[1], k);
+                        close();
+                      }}
+                      title={t('兩個範例用同一個情境跑，並排看差在哪裡')}
+                      data-testid={`example-compare-${k}`}
+                    >
+                      <GitCompareArrows size={13} className="shrink-0" />
+                      {t('和「{name}」比較', { name: t(EXAMPLES[other].name) })}
+                    </button>
+                  )}
+                  </div>
                 );
               })}
             </div>
