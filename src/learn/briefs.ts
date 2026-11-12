@@ -11,7 +11,7 @@ import { tx } from '../i18n/index.ts';
 import type { SimResult, WindowStat } from '../engine/index.ts';
 import { DESIGN_SCHEMA, edgeId, edgeLatencyMs, type Design, type DesignEdge, type DesignNode, type ParamValue, type Scenario } from '../schema/design.ts';
 import { KINDS } from '../schema/kinds.ts';
-import { judgeLimits, type Broken, type ProblemVerdict } from './constraints.ts';
+import { customUsed, judgeLimits, type Broken, type ProblemVerdict } from './constraints.ts';
 import { HOURS_PER_MONTH } from './cost.ts';
 
 /**
@@ -88,7 +88,7 @@ const value = (n: DesignNode, key: string): ParamValue | undefined => n.params?.
 
 /** The parts made faster than the brief allows, and given nodes that were changed or removed. */
 export function brokenGivens(b: Brief, d: Design): Broken[] {
-  const out: Broken[] = [];
+  const out: Broken[] = customUsed(d);
   const now = new Map(d.nodes.map((n) => [n.id, n]));
   // APIs replace the scenario's read share, so they would change the load the brief gives. A brief
   // that gives its own APIs (the mix of the load) keeps them as given: none added, removed, renamed

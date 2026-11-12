@@ -5,7 +5,7 @@
 import { tx } from '../i18n/index.ts';
 import type { WindowStat } from '../engine/index.ts';
 import type { Design, Scenario } from '../schema/design.ts';
-import { KINDS } from '../schema/kinds.ts';
+import { CUSTOM_KIND, KINDS } from '../schema/kinds.ts';
 import { settled } from './metrics.ts';
 
 /** What went wrong. `gray`: only one instance; `traffic`: the users sent much more (node: the client). */
@@ -255,7 +255,7 @@ export function judgeFix(
   original: Design,
   fixed: Design,
   result: { summary: { errorRate: number; latencyMs: { p99: number } }; nodes: Record<string, { arrivals: number; asyncFail?: number }> },
-): { ok: boolean; missing: string[]; idle: string[]; raised: string[]; lost: boolean } {
+): { ok: boolean; missing: string[]; idle: string[]; raised: string[]; lost: boolean; custom: string[] } {
   const have = new Set(fixed.nodes.map((n) => n.id));
   const missing = original.nodes.map((n) => n.id).filter((id) => !have.has(id));
   const idle = original.nodes.filter((n) => have.has(n.id) && !(result.nodes[n.id]?.arrivals > 0)).map((n) => n.id);
@@ -271,6 +271,8 @@ export function judgeFix(
   const g = inc.fixGoal;
   const jobs = Object.values(result.nodes).filter((n) => n.asyncFail !== undefined);
   const lost = jobs.reduce((x, n) => x + (n.asyncFail ?? 0), 0) > g.maxErrorRate * jobs.reduce((x, n) => x + n.arrivals, 0);
-  const ok = missing.length === 0 && idle.length === 0 && raised.length === 0 && !lost && result.summary.errorRate <= g.maxErrorRate && (g.maxP99Ms === undefined || result.summary.latencyMs.p99 <= g.maxP99Ms);
-  return { ok, missing, idle, raised, lost };
+  // a custom service can be made as fast as wanted: not a fix (Q20)
+  const custom = fixed.nodes.filter((n) => n.kind === CUSTOM_KIND).map((n) => n.id);
+  const ok = custom.length === 0 && missing.length === 0 && idle.length === 0 && raised.length === 0 && !lost && result.summary.errorRate <= g.maxErrorRate && (g.maxP99Ms === undefined || result.summary.latencyMs.p99 <= g.maxP99Ms);
+  return { ok, missing, idle, raised, lost, custom };
 }

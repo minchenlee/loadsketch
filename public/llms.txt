@@ -29,7 +29,7 @@ No other fields are allowed, at any level.
 ## A node (component)
 
 - `id` (required) — unique among the nodes.
-- `kind` (required) — one of "client", "dns", "cdn", "api_gateway", "load_balancer", "rate_limiter", "service", "circuit_breaker", "cache", "database", "sharded_db", "queue", "worker", "function", "object_storage".
+- `kind` (required) — one of "client", "dns", "cdn", "api_gateway", "load_balancer", "rate_limiter", "service", "circuit_breaker", "cache", "database", "sharded_db", "queue", "worker", "function", "custom", "object_storage".
 - `pos` (required) — [x, y] on the canvas, in pixels.
 - `label` — the name shown on the canvas, up to 60 characters.
 - `region` — the region (data center) it runs in, an id like "us-east". A call between two regions adds `interRegionMs`.
@@ -68,7 +68,7 @@ Edge parameters, written on the edge itself (not in `params`):
 
 - Every request starts at a `client` node and is a read or a write (or a call to one of the `apis`).
 - A component with instances (a "station") gives each instance `concurrency` slots. A request takes a free slot or waits in the queue; above `queueLimit` it is rejected. A request keeps its slot while it waits for its downstream calls.
-- A `service`, `worker` or `function` connected to both a `cache` and a store (`database`, `sharded_db`, `object_storage`) reads cache-aside: the cache first, the store only on a miss; a write goes to the store, then invalidates the cache.
+- A `service`, `custom`, `worker` or `function` connected to both a `cache` and a store (`database`, `sharded_db`, `object_storage`) reads cache-aside: the cache first, the store only on a miss; a write goes to the store, then invalidates the cache.
 - An edge from a `cache` straight to a store makes it read-through / write-through: on a miss the cache reads the store itself; on a write it writes the store first.
 - A `queue` answers its caller at once; `worker` nodes connected after it process the messages and may call stores.
 - Use the edge parameter `on` ("read" or "write") to send only reads or only writes along an edge, or `apis` when the design has APIs.
@@ -346,6 +346,23 @@ Parameters (in `params`):
 - `scalePer10s` — Scaling rate (per 10 s): integer 1–100000, default 1000. The most new environments started per 10 seconds. Requests past it are rejected (429). AWS Lambda allows 1000 per function every 10 seconds.
 - `errorRate` — Error rate: ratio 0–1, default 0. Share of messages that fail at random after processing.
 - `calls` — How to call the downstream: one of "sequential" (In order), "parallel" (Parallel); default "sequential". With several downstreams, call them in sequence or in parallel.
+
+### `custom` — Custom service
+
+A service the catalog does not have (search, payments, email, an AI model…): you give its name, icon, processing time, capacity, error rate and price. It handles requests, then calls its downstreams, like an API server (connected to both a cache and a DB, reads are cache-aside), but without autoscaling or overload protection. Not allowed in practice problems.
+
+Category: Compute. Outgoing edges: Calls its downstreams itself, in order: on a read, a cache and a store together mean cache-aside (cache first, the store only on a miss); on a write, the store first, then the cache is invalidated; other downstreams are called after.
+
+Parameters (in `params`):
+
+- `icon` — Icon: one of "Box" (Box), "Search" (Search), "CreditCard" (Payment), "Mail" (Email), "Bell" (Notification), "Image" (Image), "ShieldCheck" (Auth), "Bot" (AI model), "Cpu" (Compute), "Workflow" (Workflow); default "Box". The icon on the canvas. Looks only: it does not change the simulation.
+- `instances` — Instances: integer 1–1000, default 2. How many instances run at once. Traffic splits evenly across them.
+- `concurrency` — Concurrency per instance: integer 1–100000, default 32. How many requests each instance handles at once (threads, connections or workers). When full, they queue.
+- `serviceMs` — Process time: ms: a number (the mean) or {"mean": ms, "cv": 0–4} (cv 0 fixed, 1 exponential), mean up to 600000, default {"mean": 5, "cv": 1}. Own compute time, not counting the wait on downstream.
+- `queueLimit` — Max queue: integer 0–10000000, default 500. How many requests each instance queues. When full, reject right away (queue_full). 0 means no queueing.
+- `errorRate` — Error rate: ratio 0–1, default 0. Share of messages that fail at random after processing.
+- `calls` — How to call the downstream: one of "sequential" (In order (finish one before the next)), "parallel" (Parallel (send at once, wait for all)); default "sequential". With several downstreams, call them in sequence or in parallel.
+- `pricePerHour` — Price per instance per hour (USD): number 0–1000, default 0.08. For the cost estimate: US dollars for one instance running one hour. The default is the API server's.
 
 ### `object_storage` — Object storage
 

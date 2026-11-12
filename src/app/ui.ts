@@ -1,5 +1,15 @@
 import {
   Archive,
+  Bell,
+  Bot,
+  Box,
+  CreditCard,
+  Cpu,
+  Image,
+  Mail,
+  Search,
+  ShieldCheck,
+  Workflow,
   Cloud,
   Cog,
   Database,
@@ -16,10 +26,20 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import type { Category } from '../schema/kinds.ts';
+import { CUSTOM_KIND, KINDS, type Category } from '../schema/kinds.ts';
 
 export const ICONS: Record<string, LucideIcon> = {
   Archive,
+  Bell,
+  Bot,
+  Box,
+  CreditCard,
+  Cpu,
+  Image,
+  Mail,
+  Search,
+  ShieldCheck,
+  Workflow,
   Cloud,
   Cog,
   Database,
@@ -35,6 +55,14 @@ export const ICONS: Record<string, LucideIcon> = {
   Users,
   Zap,
 };
+
+/** A node's icon: a custom service shows the one its user picked (roadmap-next M7). */
+export function iconOf(n: { kind: string; params?: Record<string, unknown> }): LucideIcon | undefined {
+  const spec = KINDS[n.kind];
+  if (!spec) return undefined;
+  const own = n.kind === CUSTOM_KIND ? n.params?.icon : undefined;
+  return (typeof own === 'string' && ICONS[own]) || ICONS[spec.icon];
+}
 
 export const CATEGORY_COLOR: Record<Category, string> = {
   traffic: 'var(--cat-traffic)',

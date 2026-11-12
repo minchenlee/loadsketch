@@ -2434,6 +2434,172 @@
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
                 "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
               },
+              "kind": { "type": "string", "const": "custom" },
+              "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
+              "region": {
+                "description": "Region (data center) the node runs in, for example \"us-east\". A call between two regions takes interRegionMs; a region_down event takes the whole region down.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$"
+              },
+              "pos": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Canvas position [x, y] in pixels."
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "icon": {
+                    "description": "圖示。畫布上的圖示。只是外觀，不影響模擬。（預設 Box）",
+                    "type": "string",
+                    "enum": [
+                      "Box",
+                      "Search",
+                      "CreditCard",
+                      "Mail",
+                      "Bell",
+                      "Image",
+                      "ShieldCheck",
+                      "Bot",
+                      "Cpu",
+                      "Workflow"
+                    ]
+                  },
+                  "instances": {
+                    "description": "實例數。同時跑幾台。流量平均分給每一台。（預設 2）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "concurrency": {
+                    "description": "每台同時處理數。每台同時處理幾個請求（執行緒、連線或 worker 數）。滿了就排隊。（預設 32）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "serviceMs": {
+                    "description": "處理時間（ms）。自己的運算時間，不含等下游。 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。（預設 mean 5 ms、cv 1）",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Mean in ms (cv keeps its default)."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mean": { "type": "number", "minimum": 0, "description": "Mean in ms." },
+                          "cv": {
+                            "description": "Coefficient of variation: 0 fixed, 1 exponential.",
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          }
+                        },
+                        "required": ["mean"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "queueLimit": {
+                    "description": "排隊上限。每台最多排幾個請求。滿了就直接拒絕（queue_full）。0 表示不排隊。（預設 500）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000
+                  },
+                  "errorRate": {
+                    "description": "錯誤率。處理完後隨機失敗的比例。（0–1，預設 0）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "calls": {
+                    "description": "呼叫下游的方式。有多個下游時，依序還是平行呼叫。（預設 sequential）",
+                    "type": "string",
+                    "enum": ["sequential", "parallel"]
+                  },
+                  "pricePerHour": {
+                    "description": "每台每小時價格（美元）。估成本用：一台跑一小時多少美元。預設和 API Server 一樣。（預設 0.08）",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "description": "Set by `loadsketch import`: where the node and its params came from.",
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "description": "Resource addresses this node stands for (empty for a generated node; `x[*]` for a whole count/for_each block when there are more)."
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,47}$" },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "type": "string",
+                          "enum": [
+                            "iac",
+                            "aws-default",
+                            "estimate",
+                            "answer",
+                            "loadsketch-default"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["setting", "assumption"],
+                          "description": "setting: a configured value or limit; assumption: a performance assumption (time, concurrency)."
+                        },
+                        "from": {
+                          "description": "Resource attribute it came from, e.g. aws_appautoscaling_target.api.max_capacity.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "ref": {
+                          "description": "Where an aws-default or a table value is written down.",
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "measured": {
+                          "description": "The answer file says the value was measured.",
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": ["evidence", "role"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["from"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "kind", "pos"],
+            "additionalProperties": false,
+            "description": "Custom service：目錄裡沒有的服務（搜尋、付款、寄信、AI 模型…）：名稱、圖示、處理時間、容量、錯誤率和價格都自己填。它處理請求，再呼叫下游，和 API Server 一樣（同時連到 cache 和 DB 時，讀取走 cache-aside），但沒有自動擴充和過載保護。練習題裡不能用。"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$",
+                "description": "Unique id. Letters, digits, _ and -. Max 48 chars."
+              },
               "kind": { "type": "string", "const": "object_storage" },
               "label": { "description": "Display name.", "type": "string", "maxLength": 60 },
               "region": {

@@ -8,7 +8,7 @@ import { useApp } from '../store.ts';
 import { enterDelay } from '../motion.ts';
 import type { SdNode } from '../convert.ts';
 import { liveAt, viewTime, windowAt } from '../runtime.ts';
-import { CATEGORY_COLOR, ICONS, fmtN, pct, utilColor } from '../ui.ts';
+import { CATEGORY_COLOR, fmtN, iconOf, pct, utilColor } from '../ui.ts';
 import { useTick } from '../useTick.ts';
 import { t, tx } from '../../i18n/index.ts';
 
@@ -33,6 +33,7 @@ function paramSummary(n: DesignNode): string {
       return t('失敗 ≥ {p} 跳開', { p: pct(p.failureRatio as number) });
     case 'api_gateway':
     case 'service':
+    case 'custom':
     case 'worker':
       return t('{c} 並行 · {ms}', { c: String(p.concurrency), ms: ms('serviceMs') }) + (p.autoscale === 'on' ? ` · ${t('自動擴充')}` : '');
     case 'function':
@@ -174,7 +175,7 @@ function LiveRow({ id, station, expanded }: { id: string; station: boolean; expa
 export const ComponentNode = memo(function ComponentNode({ data }: NodeProps<SdNode>) {
   const n = data.node;
   const spec = KINDS[n.kind];
-  const Icon = ICONS[spec.icon];
+  const Icon = iconOf(n as { kind: string; params?: Record<string, unknown> });
   const color = CATEGORY_COLOR[spec.category];
   const count = instanceCount(n);
   const stacked = count > 1;

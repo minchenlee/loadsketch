@@ -3027,6 +3027,7 @@ export class Simulation {
         return;
       case 'api_gateway':
       case 'service':
+      case 'custom':
       case 'worker':
       case 'cache':
       case 'database':
@@ -3530,6 +3531,7 @@ export class Simulation {
         return;
       }
       case 'service':
+      case 'custom':
       case 'worker':
       case 'function': {
         this.at(this.workEnd(n, inst, this.dur(n, 'serviceMs', inst)), () => {
@@ -5025,7 +5027,7 @@ export class Simulation {
   private ownWorkMs(id: string): number | null {
     const n = this.byId.get(id);
     if (!n) return null;
-    if (n.kind === 'service' || n.kind === 'worker' || n.kind === 'function' || n.kind === 'api_gateway') return n.dist('serviceMs').mean;
+    if (n.kind === 'service' || n.kind === 'custom' || n.kind === 'worker' || n.kind === 'function' || n.kind === 'api_gateway') return n.dist('serviceMs').mean;
     if (n.kind === 'cache') return n.dist('opMs').mean;
     return null;
   }

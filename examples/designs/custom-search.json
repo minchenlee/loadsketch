@@ -1,0 +1,43 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "自訂服務：外部搜尋",
+  "description": "目錄裡沒有搜尋引擎，所以用「自訂服務」畫一個：3 台，每台同時 16 個查詢，每次約 25 ms，每台每小時 $0.30。商品 API 先查 Postgres，再呼叫搜尋（逾時 300 ms）。點搜尋元件，改它的處理時間、台數或價格，看延遲和成本怎麼變。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "商品 API",
+      "pos": [590, 200],
+      "params": { "instances": 3, "concurrency": 32, "serviceMs": { "mean": 4, "cv": 0.5 } }
+    },
+    {
+      "id": "db",
+      "kind": "database",
+      "label": "Postgres",
+      "pos": [920, 90],
+      "params": { "connections": 50 }
+    },
+    {
+      "id": "search",
+      "kind": "custom",
+      "label": "搜尋（Elasticsearch）",
+      "pos": [920, 320],
+      "params": {
+        "icon": "Search",
+        "instances": 3,
+        "concurrency": 16,
+        "serviceMs": { "mean": 25, "cv": 0.8 },
+        "queueLimit": 200,
+        "pricePerHour": 0.3
+      }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "lb" },
+    { "from": "lb", "to": "api" },
+    { "from": "api", "to": "db", "timeoutMs": 500 },
+    { "from": "api", "to": "search", "timeoutMs": 300 }
+  ]
+}

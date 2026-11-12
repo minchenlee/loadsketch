@@ -5,7 +5,7 @@
 import { tx } from '../i18n/index.ts';
 import type { SimResult, WindowStat } from '../engine/index.ts';
 import type { Design, DesignEdge, DesignNode, Scenario } from '../schema/design.ts';
-import { KINDS, resolveParams } from '../schema/kinds.ts';
+import { CUSTOM_KIND, KINDS, resolveParams } from '../schema/kinds.ts';
 import { costOf, type Cost } from './cost.ts';
 import type { Patch } from './oncall.ts';
 
@@ -18,6 +18,7 @@ export const KIND_POINTS: Record<string, number> = {
   load_balancer: 1,
   rate_limiter: 1,
   service: 1,
+  custom: 1,
   circuit_breaker: 1,
   cache: 2,
   database: 2,
@@ -169,6 +170,11 @@ export interface Broken {
   vars: Record<string, string | number>;
 }
 
+/** Custom services in a design: not allowed in practice problems (Q20), as they can be made as fast as wanted. */
+export function customUsed(d: Design): Broken[] {
+  return d.nodes.filter((n) => n.kind === CUSTOM_KIND).map((n) => ({ text: tx('練習題不能用自訂服務：「{name}」'), vars: { name: n.label ?? n.id } }));
+}
+
 /** Judge a run against the four limits: they are gates; past them, a cheaper design scores higher. */
 export function judgeLimits(limits: Problem['limits'], design: Design, run: { result: SimResult; windows: WindowStat[] }): ProblemVerdict {
   const cost = costOf(design, run);
@@ -196,7 +202,7 @@ const valueOf = (n: DesignNode, key: string): unknown => n.params?.[key] ?? KIND
  * no part is faster, no machine starts faster, and no cache hits more often.
  */
 export function brokenStart(start: Design, design: Design, result: SimResult): Broken[] {
-  const out: Broken[] = [];
+  const out: Broken[] = customUsed(design);
   const now = new Map(design.nodes.map((n) => [n.id, n]));
   for (const o of start.nodes) {
     const n = now.get(o.id);

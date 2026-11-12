@@ -1,5 +1,7 @@
 import { useReactFlow } from '@xyflow/react';
-import { CATEGORY_LABEL, KINDS, KIND_NAMES } from '../../schema/kinds.ts';
+import { CATEGORY_LABEL, CUSTOM_KIND, KINDS, KIND_NAMES } from '../../schema/kinds.ts';
+import { useConstraints } from './Constraints.tsx';
+import { useOnCall } from './OnCall.tsx';
 import { useApp } from '../store.ts';
 import { CATEGORY_COLOR, CATEGORY_ORDER, ICONS } from '../ui.ts';
 import { DRAG_MIME } from './Canvas.tsx';
@@ -9,6 +11,10 @@ import { t } from '../../i18n/index.ts';
 export function Palette() {
   const addNode = useApp((s) => s.addNode);
   const { screenToFlowPosition } = useReactFlow();
+  // a practice problem is open: a custom service is not allowed there (Q20), so it is not offered
+  const problem = useConstraints((s) => s.id !== null);
+  const incident = useOnCall((s) => s.id !== null);
+  const practice = problem || incident;
   return (
     <aside className="panel flex w-[232px] shrink-0 flex-col overflow-y-auto border-r" aria-label={t('元件')}>
       <div className="px-3 pt-3 pb-1">
@@ -16,7 +22,7 @@ export function Palette() {
         <div className="faint text-[13px]">{t('拖到畫布上，或點一下加到中間。')}</div>
       </div>
       {CATEGORY_ORDER.map((cat) => {
-        const kinds = KIND_NAMES.filter((k) => KINDS[k].category === cat);
+        const kinds = KIND_NAMES.filter((k) => KINDS[k].category === cat && !(practice && k === CUSTOM_KIND));
         if (!kinds.length) return null;
         return (
           <div key={cat} className="px-2 pt-2">

@@ -4,7 +4,7 @@
 import { tx } from '../i18n/index.ts';
 import type { SimResult, WindowStat } from '../engine/index.ts';
 import { edgeId, type Design, type DesignNode } from '../schema/design.ts';
-import { resolveParams } from '../schema/kinds.ts';
+import { CUSTOM_KIND, resolveParams } from '../schema/kinds.ts';
 
 export const HOURS_PER_MONTH = 730;
 
@@ -93,6 +93,13 @@ export function costOf(design: Design, run?: { result: SimResult; windows: Windo
   /** Millions per hour of a count measured over the run. */
   const mph = (count: number) => (run ? ((count / secs) * 3600) / 1e6 : 0);
   for (const n of design.nodes) {
+    // a custom service (Q19): instances × the price per instance the user gives
+    if (n.kind === CUSTOM_KIND) {
+      const k = machines(n, run);
+      const each = num(resolveParams(n.kind, n.params).pricePerHour);
+      items.push({ id: n.id, kind: n.kind, what: { text: tx('{k} 台 × 每台每小時 {p}'), vars: { k: fmtCount(k), p: `$${fmtCount(each)}` } }, perHour: money(k * each) });
+      continue;
+    }
     const m = MACHINE[n.kind];
     if (m) {
       const k = machines(n, run);

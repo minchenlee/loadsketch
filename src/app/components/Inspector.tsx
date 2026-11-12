@@ -12,7 +12,7 @@ import { Learn } from './Learn.tsx';
 import { ScenarioEditor } from './ScenarioEditor.tsx';
 import { DescriptionText, NoteText } from './Prose.tsx';
 import { LESSONS } from '../../learn/lessons.ts';
-import { CATEGORY_COLOR, ICONS, fmtMs, fmtN, pct } from '../ui.ts';
+import { CATEGORY_COLOR, fmtMs, fmtN, iconOf, pct } from '../ui.ts';
 import { t, tx } from '../../i18n/index.ts';
 import { EVIDENCE_LABEL, isGuess } from '../sources.ts';
 import { ImportChecks } from './ImportChecks.tsx';
@@ -291,7 +291,7 @@ function NodeInspector({ id }: { id: string }) {
   const remove = useApp((s) => s.remove);
   if (!node) return null;
   const spec = KINDS[node.kind];
-  const Icon = ICONS[spec.icon];
+  const Icon = iconOf(node as { kind: string; params?: Record<string, unknown> });
   return (
     <div>
       <div className="flex items-center gap-2.5">

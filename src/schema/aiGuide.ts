@@ -126,7 +126,7 @@ export function aiGuide(): string {
     '',
     '- Every request starts at a `client` node and is a read or a write (or a call to one of the `apis`).',
     '- A component with instances (a "station") gives each instance `concurrency` slots. A request takes a free slot or waits in the queue; above `queueLimit` it is rejected. A request keeps its slot while it waits for its downstream calls.',
-    '- A `service`, `worker` or `function` connected to both a `cache` and a store (`database`, `sharded_db`, `object_storage`) reads cache-aside: the cache first, the store only on a miss; a write goes to the store, then invalidates the cache.',
+    '- A `service`, `custom`, `worker` or `function` connected to both a `cache` and a store (`database`, `sharded_db`, `object_storage`) reads cache-aside: the cache first, the store only on a miss; a write goes to the store, then invalidates the cache.',
     '- An edge from a `cache` straight to a store makes it read-through / write-through: on a miss the cache reads the store itself; on a write it writes the store first.',
     '- A `queue` answers its caller at once; `worker` nodes connected after it process the messages and may call stores.',
     '- Use the edge parameter `on` ("read" or "write") to send only reads or only writes along an edge, or `apis` when the design has APIs.',

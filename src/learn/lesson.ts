@@ -5,6 +5,7 @@ import { KINDS } from '../schema/kinds.ts';
 import { edgeId, type Design, type ParamValue, type Scenario } from '../schema/design.ts';
 import { t, tx } from '../i18n/index.ts';
 import type { RunData } from './metrics.ts';
+import { customUsed } from './constraints.ts';
 
 export interface Option {
   id: string;
@@ -150,7 +151,7 @@ export function sameScenario(a: Scenario, b: Scenario): boolean {
 
 export function judge(c: Challenge, run: RunData, original: Design): Verdict {
   const goals = c.goals.map((g) => ({ ...g.check(run), text: t(g.text) }));
-  const broken = c.rules.flatMap((r) => r.check(run.design, original));
+  const broken = [...customUsed(run.design).map((b) => t(b.text, b.vars)), ...c.rules.flatMap((r) => r.check(run.design, original))];
   // no way round the system: a component of the example that gets no request (e.g. behind a weight-0 connection)
   for (const o of original.nodes) {
     if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('「{name}」沒有收到任何請求：不能繞過原本的元件', { name: o.label ? t(o.label) : o.id }));

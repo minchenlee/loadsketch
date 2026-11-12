@@ -514,6 +514,46 @@ export const KINDS: Record<string, KindSpec> = {
       },
     },
   },
+  // roadmap-next M7 (Q16, Q17, Q19): a service the user describes, on the engine's shared service path
+  custom: {
+    kind: 'custom', label: '自訂服務', labelEn: 'Custom service', category: 'compute', icon: 'Box', station: true, routing: 'plan',
+    summary: '目錄裡沒有的服務（搜尋、付款、寄信、AI 模型…）：名稱、圖示、處理時間、容量、錯誤率和價格都自己填。它處理請求，再呼叫下游，和 API Server 一樣（同時連到 cache 和 DB 時，讀取走 cache-aside），但沒有自動擴充和過載保護。練習題裡不能用。',
+    params: {
+      icon: {
+        type: 'enum', default: 'Box', label: '圖示',
+        options: [
+          { value: 'Box', label: '方塊' },
+          { value: 'Search', label: '搜尋' },
+          { value: 'CreditCard', label: '付款' },
+          { value: 'Mail', label: '郵件' },
+          { value: 'Bell', label: '通知' },
+          { value: 'Image', label: '圖片' },
+          { value: 'ShieldCheck', label: '驗證' },
+          { value: 'Bot', label: 'AI 模型' },
+          { value: 'Cpu', label: '運算' },
+          { value: 'Workflow', label: '流程' },
+        ],
+        help: '畫布上的圖示。只是外觀，不影響模擬。',
+      },
+      instances: instances(2),
+      concurrency: concurrency(32),
+      serviceMs: dist(5, 1, '處理時間', '自己的運算時間，不含等下游。'),
+      queueLimit: queueLimit(500),
+      errorRate,
+      calls: {
+        type: 'enum', default: 'sequential', label: '呼叫下游的方式',
+        options: [
+          { value: 'sequential', label: '依序（一個做完才下一個）' },
+          { value: 'parallel', label: '平行（同時發出，等全部回來）' },
+        ],
+        help: '有多個下游時，依序還是平行呼叫。',
+      },
+      pricePerHour: {
+        type: 'number', default: 0.08, min: 0, max: 1000, label: '每台每小時價格（美元）',
+        help: '估成本用：一台跑一小時多少美元。預設和 API Server 一樣。',
+      },
+    },
+  },
   object_storage: {
     kind: 'object_storage', label: 'Object Storage', labelEn: 'Object storage', category: 'data', icon: 'Archive', station: true, routing: 'leaf',
     summary: '物件儲存（像 S3）。容量很大但每次存取比較慢。讀取是 GET，寫入是 PUT。',
@@ -528,6 +568,9 @@ export const KINDS: Record<string, KindSpec> = {
 };
 
 export const KIND_NAMES = Object.keys(KINDS);
+
+/** The custom service (roadmap-next M7): not allowed in practice problems (Q20). */
+export const CUSTOM_KIND = 'custom';
 
 export const CATEGORY_LABEL: Record<Category, string> = {
   traffic: '流量',

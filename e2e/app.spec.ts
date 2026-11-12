@@ -2563,3 +2563,32 @@ test.describe('paste design', () => {
     expect(errors).toEqual([]);
   });
 });
+
+test('custom service: in the palette, with the icon its user picks; not offered in a practice problem (M7)', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app/?example=custom-search');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  // the example's search is a custom service: its card shows the search icon, not the default box
+  const card = page.locator('[data-node="search"]');
+  await expect(card).toContainText('搜尋（Elasticsearch）');
+  await expect(card.locator('svg.lucide-search').first()).toBeVisible();
+  // a new one from the palette: the box icon, then the icon picked in the inspector
+  await expect(page.locator('.sd-pal[data-kind="custom"]')).toContainText('自訂服務');
+  await page.locator('.sd-pal[data-kind="custom"]').click();
+  await expect(page.locator('[data-node]')).toHaveCount(6);
+  type S = { nodes: { id: string; data: { node: { kind: string; params?: Record<string, unknown> } } }[]; updateNode(id: string, p: { params: Record<string, unknown> }): void };
+  const id = await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().nodes.find((n) => n.data.node.kind === 'custom' && n.id !== 'search')!.id);
+  await expect(page.locator(`[data-node="${id}"] svg.lucide-box`).first()).toBeVisible();
+  await page.evaluate((nid) => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().updateNode(nid, { params: { icon: 'Bot' } }), id);
+  await expect(page.locator(`[data-node="${id}"] svg.lucide-bot`).first()).toBeVisible();
+  await page.screenshot({ path: join(SHOTS, 'custom-service.png') });
+  // a practice problem: not in the palette
+  await page.getByTestId('open-practice').click();
+  await page.getByTestId('brief-start-brief-notify').click();
+  await expect(page.getByTestId('problem-brief-notify')).toBeVisible();
+  await expect(page.locator('.sd-pal[data-kind="service"]')).toHaveCount(1);
+  await expect(page.locator('.sd-pal[data-kind="custom"]')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

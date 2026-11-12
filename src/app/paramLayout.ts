@@ -50,6 +50,7 @@ export const GROUPS: Record<string, GroupDef[]> = {
   service: SERVER,
   worker: SERVER,
   function: FUNCTION,
+  custom: [g('look', tx('外觀'), ['icon']), CAP, TIME, g('calls', tx('呼叫下游'), ['calls']), g('cost', tx('成本'), ['pricePerHour']), FAULT],
   load_balancer: [
     g('route', tx('轉送'), ['policy', 'latencyMs']),
     g('health', tx('Health check'), ['healthCheck', 'hcIntervalS', 'hcThreshold', 'hcTimeoutMs'], true),

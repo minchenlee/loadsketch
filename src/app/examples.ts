@@ -21,7 +21,7 @@ export const TIERS: { id: Tier; label: string; help: string }[] = [
 ];
 
 export const CATEGORIES: Category[] = [
-  { id: 'basics', label: tx('基礎架構'), tier: 'start', examples: ['three-tier', 'sharded', 'replica-lag', 'autoscale', 'hot-shard', 'location-writes', 'scatter-gather', 'quorum'] },
+  { id: 'basics', label: tx('基礎架構'), tier: 'start', examples: ['three-tier', 'sharded', 'replica-lag', 'autoscale', 'hot-shard', 'location-writes', 'scatter-gather', 'quorum', 'custom-search'] },
   { id: 'cache', label: tx('快取'), tier: 'start', examples: ['cache-stampede', 'cache-lease', 'url-shortener', 'cache-cold-restart', 'cdn-offload'] },
   { id: 'overload', label: tx('過載與重試'), tier: 'start', examples: ['retry-storm', 'retry-budget', 'adaptive-throttle', 'priority-shedding', 'tenant-limits', 'lifo-codel', 'flash-sale', 'serverless-db'] },
   { id: 'failure', label: tx('故障與韌性'), tier: 'start', examples: ['resilience', 'slow-dependency', 'bulkhead-fallback', 'gray-failure', 'gray-failure-outlier', 'hedged-reads', 'region-cutover', 'split-brain', 'bad-config-push', 'provisioning', 'blind-autoscaler'] },
