@@ -1891,6 +1891,34 @@ test.describe('phone layout', () => {
     await expect(hint).toHaveCount(0);
     expect(errors).toEqual([]);
   });
+
+  test('read-through hint on a phone: opening the design-check list closes it, so the list can be tapped', async ({ page }) => {
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    type S = { addNode(kind: string, x: number, y: number): void; onConnect(c: { source: string; target: string }): void; setDrawer(d: null): void; selected: unknown };
+    const st = <T,>(fn: (s: S) => T) => page.evaluate(`(${fn.toString()})(window.__loadsketch.getState())`) as Promise<T>;
+    // a component on its own: the design check has something to list
+    await st((s) => s.addNode('queue', 40, 40));
+    await st((s) => s.onConnect({ source: 'cache', target: 'db' }));
+    await st((s) => s.setDrawer(null));
+    const hint = page.getByTestId('edge-through-hint');
+    await expect(hint).toBeVisible();
+    await page.getByTestId('checks').tap();
+    const list = page.getByTestId('checks-list');
+    await expect(list).toBeVisible();
+    await expect(hint).toHaveCount(0);
+    // what is on top over the list is the list: its links take the tap
+    const onTop = await list.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return [[r.left + 8, r.top + 8], [r.right - 8, r.bottom - 8], [r.left + r.width / 2, r.top + r.height / 2]].every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+    });
+    expect(onTop).toBe(true);
+    await page.screenshot({ path: join(SHOTS, 'phone-read-through-checks.png') });
+    await list.locator('button:not([disabled])').first().tap();
+    await expect.poll(() => st((s) => s.selected)).not.toBeNull();
+    // the line keeps its label
+    await expect(page.getByTestId('edge-through-label')).toHaveCount(1);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------

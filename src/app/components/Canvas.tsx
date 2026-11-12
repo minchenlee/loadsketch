@@ -346,7 +346,12 @@ function Checks() {
       <button
         className="btn sd-over text-[14px]"
         style={{ color: errors ? 'var(--bad-ink)' : 'var(--warn-ink)' }}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          // the list takes the top of the canvas, where the one-time read-through hint sits on a phone:
+          // the hint goes (the line keeps its label)
+          if (!open) useApp.setState({ throughHint: null });
+          setOpen(!open);
+        }}
         aria-expanded={open}
         data-testid="checks"
       >
