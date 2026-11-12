@@ -2535,31 +2535,33 @@ test.describe('paste design', () => {
     await page.goto('/app/?example=three-tier');
     await expect(page.locator('[data-node]')).toHaveCount(5);
     const imported = importTerraform(JSON.parse(readFileSync(join(import.meta.dirname, '..', 'tests/import/fixtures/ecs-rds.plan.json'), 'utf8'))).design;
-    type S = { load(d: unknown): void; design(): { nodes: { id: string; source?: unknown }[]; edges: { source?: unknown }[] } };
+    type S = { load(d: unknown): void; design(): { nodes: { id: string; source?: { params?: Record<string, { evidence: string }> } }[]; edges: { source?: unknown }[] } };
     await page.evaluate((d) => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().load(d), imported);
     await expect(page.locator('[data-node]')).toHaveCount(imported.nodes.length);
     const sourced = imported.nodes.filter((n) => n.source).length + imported.edges.filter((e) => e.source).length;
-    // the model's answer: every source gone, one component changed
+    // the model's answer: every source gone, one imported value changed (ECS desired_count 3 → 9)
     const answer = JSON.parse(JSON.stringify(imported, (k, v) => (k === 'source' ? undefined : v)));
-    const changed = answer.nodes.find((n: { id: string; kind: string }) => n.kind !== 'client' && imported.nodes.find((x) => x.id === n.id)?.source);
-    changed.region = 'eu-west';
+    answer.nodes.find((n: { id: string }) => n.id === 'ecs_service_api').params.instances = 9;
 
     await page.getByTestId('file-menu').click();
     await page.getByTestId('paste-design-open').click();
     const dlg = page.getByTestId('paste-design');
     await dlg.getByTestId('paste-design-text').fill(JSON.stringify(answer, null, 2));
     const note = dlg.getByTestId('paste-design-sources');
-    await expect(note).toContainText(`有 ${sourced - 1} 個元件或線沒有改`);
+    await expect(note).toContainText(`貼上的 JSON 少了 ${sourced} 個元件或線的匯入來源`);
     await expect(note).toContainText('已經從畫布補回');
-    await expect(note).toContainText('有 1 個改過的元件或線少了匯入時的來源資訊');
+    await expect(note).toContainText('有 1 個匯入的值改過了：來源改標成「使用者填」');
     await dlg.getByTestId('paste-design-apply').click();
     await expect(dlg).toHaveCount(0);
     const after = await page.evaluate(() => {
       const d = (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().design();
-      return { nodes: d.nodes.filter((n) => n.source).map((n) => n.id), edges: d.edges.filter((e) => e.source).length };
+      const api = d.nodes.find((n) => n.id === 'ecs_service_api')!;
+      return { nodes: d.nodes.filter((n) => n.source).length, edges: d.edges.filter((e) => e.source).length, instances: api.source?.params?.instances?.evidence, max: api.source?.params?.maxInstances?.evidence };
     });
-    expect(after.nodes).not.toContain(changed.id);
-    expect(after.nodes.length + after.edges).toBe(sourced - 1);
+    expect(after.nodes + after.edges).toBe(sourced);
+    // the changed value is the user's now; the others still come from Terraform
+    expect(after.instances).toBe('answer');
+    expect(after.max).toBe('iac');
     expect(errors).toEqual([]);
   });
 });

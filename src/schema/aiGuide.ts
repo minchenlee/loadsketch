@@ -63,7 +63,7 @@ export const GUIDE_EXAMPLE: Design = {
 } as Design;
 
 /** Written by `loadsketch import`; the app keeps it, and a model must not drop it. */
-const SOURCE = 'written by the Terraform import (`loadsketch import`): where the component or edge and its values came from. Keep it exactly as it is on everything you keep; do not write one on a new component or edge.';
+const SOURCE = 'written by the Terraform import (`loadsketch import`): where the component or edge and its values came from. Keep it exactly as it is on everything you keep, also when you change a value (the app marks changed values itself); do not write one on a new component or edge.';
 
 const shape = DesignSchema.shape as Record<string, { description?: string }>;
 
@@ -81,7 +81,7 @@ export function aiGuide(): string {
     '- Change only what you were asked to change. Keep the ids of the components you keep: the app compares the two designs by id and shows the user every change before it replaces the canvas.',
     '- New ids: letters, digits, `_` and `-`, starting with a letter or digit, at most 48 characters, no spaces.',
     '- Give each new component a position `pos` [x, y] in pixels. Traffic goes left to right: put a component about 300 px right of its caller, and spread components that share a caller about 120–240 px apart vertically.',
-    '- A design made by the Terraform import has `source` fields on its components and edges. Copy each `source` unchanged onto every component and edge you keep; leave it out on a new one.',
+    '- A design made by the Terraform import has `source` fields on its components and edges. Copy each `source` unchanged onto every component and edge you keep, also when you change one of its values: the app marks the changed values itself. Leave it out on a new one.',
     '- Leave out a parameter to use its default. Times are in milliseconds unless the unit says otherwise.',
     '- The traffic (requests per second, read share, faults) is the scenario, not the design: set it in the app.',
     '- The user pastes the answer with File → "Paste design JSON". If something is wrong, the app says what and where.',

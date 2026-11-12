@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { keepSources, readPasted, stripFence, jsonProblem, MAX_PROBLEMS } from '../src/app/pasteDesign.ts';
+import { keepSources, readPasted, stripFence, jsonProblem, blankStrings, MAX_PROBLEMS, MAX_PASTE_CHARS } from '../src/app/pasteDesign.ts';
+import { cpuMs } from './helpers.ts';
 import { diffDesigns } from '../src/app/designDiff.ts';
 import { importTerraform } from '../src/import/terraform/index.ts';
 import type { Design } from '../src/schema/design.ts';
@@ -86,6 +87,25 @@ describe('paste design', () => {
     expect(problems('{\n  // the name\n  "name": "x"\n}')[0]).toContain('註解');
   });
 
+  it('the hint scan is linear: a broken 256 KB paste full of escaped quotes reads at once (M4 review round 2)', () => {
+    const bad = '{"a": "' + '\\"'.repeat(128 * 1024);
+    expect(bad.length).toBeGreaterThan(256 * 1024);
+    let p!: ReturnType<typeof readPasted>;
+    expect(cpuMs(() => (p = readPasted(bad)))).toBeLessThan(300);
+    expect(p.ok).toBe(false);
+    // the same strings as the old pattern: closed ones emptied; one not closed on its line left as it is
+    expect(blankStrings('{"a": "x\\"y", "b": 1}')).toBe('{"": "", "": 1}');
+    expect(blankStrings('{"a": "no end\n"b": "x"}')).toBe('{"": "no end\n"": ""}');
+    expect(blankStrings('"a\\\nb"')).toBe('"a\\\nb"');
+  });
+
+  it('a paste bigger than 2 MB is not read: it is said to be too big', () => {
+    const p = problems(' '.repeat(MAX_PASTE_CHARS + 1));
+    expect(p).toHaveLength(1);
+    expect(p[0]).toContain('太大');
+    expect(MAX_PASTE_CHARS).toBe(2 * 1024 * 1024);
+  });
+
   it('design checks after the format: a line to a component that is not there', () => {
     const p = problems(edit((d) => d.edges.push({ from: 'api', to: 'nowhere' })));
     expect(p.join(' ')).toContain('nowhere');
@@ -126,17 +146,49 @@ describe('paste design', () => {
       expect(k.design).toEqual(canvas);
     });
 
-    it('one that changed is counted, not given an old source that may not fit', () => {
+    it('a value the answer changed is marked as the user\'s, as the inspector does; the resource stays (M5 review round 2)', () => {
+      // the model kept every source, as told, and changed one imported value
+      const d = JSON.parse(JSON.stringify(canvas)) as Design;
+      const api = d.nodes.find((x) => x.id === 'ecs_service_api')!;
+      expect(api.source!.params!.instances).toMatchObject({ evidence: 'iac', from: 'aws_ecs_service.api.desired_count' });
+      (api.params as Record<string, unknown>).instances = 9;
+      const k = keep(d);
+      const src = k.design.nodes.find((x) => x.id === 'ecs_service_api')!.source!;
+      expect(src.params!.instances).toEqual({ evidence: 'answer', role: 'setting' });
+      expect(src.params!.maxInstances).toEqual(canvas.nodes.find((x) => x.id === 'ecs_service_api')!.source!.params!.maxInstances);
+      expect(src.from).toEqual(['aws_ecs_service.api']);
+      expect(k).toMatchObject({ restored: 0, edited: 1, dropped: 0 });
+      // the canvas is not changed
+      expect(canvas.nodes.find((x) => x.id === 'ecs_service_api')!.source!.params!.instances!.evidence).toBe('iac');
+    });
+
+    it('a changed component or line that lost its source gets it back, with the changed values marked', () => {
       const d = bare();
-      const n = d.nodes.find((x) => x.kind !== 'client' && canvas.nodes.find((c) => c.id === x.id)?.source)!;
-      n.region = 'eu-west';
-      const e = d.edges.find((x) => canvas.edges.find((c) => c.from === x.from && c.to === x.to)?.source)!;
+      const n = d.nodes.find((x) => x.id === 'ecs_service_api')!;
+      (n.params as Record<string, unknown>).instances = 9;
+      const e = d.edges.find((x) => x.from === 'ecs_service_api' && x.to === 'db_instance_main')!;
       e.timeoutMs = 1234;
       const k = keep(d);
-      expect(k.dropped).toBe(2);
-      expect(k.design.nodes.find((x) => x.id === n.id)!.source).toBeUndefined();
-      expect(k.design.edges.find((x) => x.from === e.from && x.to === e.to)!.source).toBeUndefined();
-      expect(k.restored).toBe(canvas.nodes.filter((x) => x.source).length + canvas.edges.filter((x) => x.source).length - 2);
+      const all = canvas.nodes.filter((x) => x.source).length + canvas.edges.filter((x) => x.source).length;
+      expect(k).toMatchObject({ restored: all, edited: 2, dropped: 0 });
+      expect(k.design.nodes.find((x) => x.id === n.id)!.source!.params!.instances!.evidence).toBe('answer');
+      expect(k.design.edges.find((x) => x.from === e.from && x.to === e.to)!.source!.params!.timeoutMs).toEqual({ evidence: 'answer', role: 'setting' });
+      // a component that became another kind: its old source does not fit, so it is only counted
+      const other = bare();
+      other.nodes.find((x) => x.id === 'db_instance_main')!.kind = 'sharded_db' as never;
+      expect(keep(other).dropped).toBe(1);
+    });
+
+    it('at the size limit of the format: 2000 lines, half of them with a new id, in well under a second', () => {
+      const nodes = Array.from({ length: 300 }, (_, i) => ({ id: `n${i}`, kind: 'service', pos: [0, 0] }));
+      const edges = Array.from({ length: 2000 }, (_, i) => ({ from: `n${i % 300}`, to: `n${(i * 7 + 1 + Math.floor(i / 300)) % 300}`, source: { line: 'definite' } }));
+      const big = { schema: 'loadsketch/design@1', name: 'big', nodes, edges } as unknown as Design;
+      const pasted = JSON.parse(JSON.stringify(big, (k, v) => (k === 'source' ? undefined : v))) as Design;
+      pasted.edges.forEach((e, i) => { if (i % 2) e.id = `x${i}`; });
+      const changes = diffDesigns(big, pasted);
+      let k!: ReturnType<typeof keepSources>;
+      expect(cpuMs(() => (k = keepSources(big, pasted, changes)))).toBeLessThan(300);
+      expect(k.restored).toBe(2000);
     });
 
     it('a source the paste kept is left alone; a design with no sources is returned as it is', () => {

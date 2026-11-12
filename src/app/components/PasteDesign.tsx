@@ -126,18 +126,24 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
                     </ul>
                   )}
                 </div>
-                {!!kept && (kept.restored > 0 || kept.dropped > 0) && (
+                {!!kept && (kept.restored > 0 || kept.edited > 0 || kept.dropped > 0) && (
                   <div className="space-y-1" data-testid="paste-design-sources">
                     {kept.restored > 0 && (
                       <p className="flex gap-1.5">
                         <Check size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--ok)' }} />
-                        <span>{t('有 {n} 個元件或線沒有改，但貼上的 JSON 少了匯入時的來源資訊（source）：已經從畫布補回。', { n: kept.restored })}</span>
+                        <span>{t('貼上的 JSON 少了 {n} 個元件或線的匯入來源（source）：已經從畫布補回。', { n: kept.restored })}</span>
+                      </p>
+                    )}
+                    {kept.edited > 0 && (
+                      <p className="flex gap-1.5">
+                        <Check size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--ok)' }} />
+                        <span>{t('有 {n} 個匯入的值改過了：來源改標成「使用者填」，和在設定面板改值一樣。', { n: kept.edited })}</span>
                       </p>
                     )}
                     {kept.dropped > 0 && (
                       <p className="flex gap-1.5">
                         <TriangleAlert size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--warn)' }} />
-                        <span>{t('有 {n} 個改過的元件或線少了匯入時的來源資訊（source）。換掉後，這些元件或線就看不到值是從哪裡來的。', { n: kept.dropped })}</span>
+                        <span>{t('有 {n} 個元件換了種類，匯入時的來源不再適用：換掉後，它們就看不到值是從哪裡來的。', { n: kept.dropped })}</span>
                       </p>
                     )}
                   </div>

@@ -2,7 +2,8 @@
 // What is wrong is said in plain words, with where it is (which component, which line) and what was
 // expected, not as a schema path. Nothing here touches the canvas: the dialog shows the result.
 import type { z } from 'zod';
-import { DesignSchema, checkDesign, edgeId, type Design, type DesignEdge, type Issue } from '../schema/design.ts';
+import { DesignSchema, checkDesign, edgeId, type Design, type DesignEdge, type Issue, type ParamSource } from '../schema/design.ts';
+import { editedSources } from './sources.ts';
 import type { Change } from './designDiff.ts';
 import { KINDS } from '../schema/kinds.ts';
 import { t, tx } from '../i18n/index.ts';
@@ -21,7 +22,11 @@ export function stripFence(text: string): string {
   return m ? m[1].trim() : s;
 }
 
+/** A paste longer than this is not read (a design at the format's limits is well under it). */
+export const MAX_PASTE_CHARS = 2 * 1024 * 1024;
+
 export function readPasted(text: string): PasteResult {
+  if (text.length > MAX_PASTE_CHARS) return { ok: false, problems: [t('貼上的內容太大（{mb} MB）。一份設計最多 {max} MB：只貼設計的 JSON。', { mb: (text.length / 1024 / 1024).toFixed(1), max: MAX_PASTE_CHARS / 1024 / 1024 })] };
   const src = stripFence(text);
   if (!src) return { ok: false, problems: [t('沒有內容。貼上一份設計的 JSON。')] };
   let value: unknown;
@@ -58,7 +63,7 @@ export function jsonProblem(src: string, message: string): string {
   }
   const where = line ? t('第 {line} 行第 {col} 個字附近', { line, col: col ?? 1 }) : '';
   // the usual slips are looked for outside the strings: a URL in a description is not a comment
-  const bare = src.replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
+  const bare = blankStrings(src);
   const hint = /,\s*[}\]]/.test(bare)
     ? t('最後一項後面多了逗號。')
     : /'[^'\n]*'\s*:/.test(bare)
@@ -69,6 +74,48 @@ export function jsonProblem(src: string, message: string): string {
           ? t('JSON 不能有註解（// 或 /* */）。')
           : '';
   return [where ? t('這不是有效的 JSON：{where}有問題。', { where }) : t('這不是有效的 JSON。'), hint].filter(Boolean).join(' ');
+}
+
+/**
+ * The text with each string's content taken out ("…" becomes ""), in one pass (M4 review round 2: a
+ * pattern retried at every quote took quadratic time on a long unclosed string). A string not closed
+ * on its line is left as it is: it is not a string to JSON either.
+ */
+export function blankStrings(src: string): string {
+  const out: string[] = [];
+  let from = 0;
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    if (src.charCodeAt(i) !== 34) {
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    let closed = false;
+    while (j < n) {
+      const c = src[j];
+      if (c === '"') {
+        closed = true;
+        break;
+      }
+      if (c === '\n') break;
+      if (c === '\\') {
+        if (j + 1 < n && src[j + 1] !== '\n') {
+          j += 2;
+          continue;
+        }
+        break;
+      }
+      j++;
+    }
+    if (closed) {
+      out.push(src.slice(from, i), '""');
+      i = from = j + 1;
+    } else i = j; // every quote up to here is inside the unclosed one: none of them closes either
+  }
+  out.push(src.slice(from));
+  return out.join('');
 }
 
 type Obj = Record<string, unknown>;
@@ -257,49 +304,102 @@ function schemaProblem(d: Obj, issue: z.core.$ZodIssue, prefix: PropertyKey[] = 
   }
 }
 
-/** What `keepSources` did: the design to load, and how many sources it put back or could not. */
+/** What `keepSources` did: the design to load, and what it did to the sources. */
 export interface KeptSources {
   design: Design;
-  /** Components and lines that lost their `source` without any other change: put back from the canvas. */
+  /** Components and lines that lost their `source`: put back from the canvas. */
   restored: number;
-  /** Components and lines that lost their `source` and changed too: the old source would not fit. */
+  /** Imported values the answer changed: their source now says the user gave them, as in the inspector. */
+  edited: number;
+  /** Components that lost their `source` and became another kind: the old source would not fit. */
   dropped: number;
 }
 
+type Patch = Record<string, unknown>;
+
 /**
  * A design from the Terraform import has `source` on its components and lines (M5 review P2). A model
- * that rewrites the design can leave it out, and the change list does not compare it. A component or
- * line that lost its source but is otherwise the same gets it back from the canvas; one that also
- * changed is only counted, so the dialog can say so.
+ * can leave it out, and the change list does not compare it: a component or line that lost it gets it
+ * back from the canvas (the resource it stands for has not changed). A value the answer changed is
+ * no longer the one from Terraform: its source is classed again with editedSources(), as when the
+ * value is typed in the inspector (M5 review round 2). A component that became another kind is only
+ * counted. Linear in the size of the designs: it runs while the dialog renders.
  */
 export function keepSources(canvas: Design, pasted: Design, changes: Change[]): KeptSources {
   let restored = 0;
+  let edited = 0;
   let dropped = 0;
-  const changedNodes = new Set(changes.flatMap((c) => (c.type === 'node-changed' ? [c.node] : [])));
-  const changedEdges = new Set(changes.flatMap((c) => (c.type === 'edge-changed' ? [c.edge] : [])));
+  // what changed, from the change list: values by component and by line, and components of another kind
+  const pn = new Map(pasted.nodes.map((n) => [n.id, n]));
+  const pe = new Map(pasted.edges.map((e) => [edgeId(e), e]));
+  const nodePatch = new Map<string, Patch>();
+  const edgePatch = new Map<string, Patch>();
+  const otherKind = new Set<string>();
+  const add = (m: Map<string, Patch>, id: string, k: string, v: unknown) => {
+    let p = m.get(id);
+    if (!p) m.set(id, (p = {}));
+    p[k] = v;
+  };
+  for (const c of changes) {
+    if (c.type === 'node-changed') {
+      if (c.field === 'kind') otherKind.add(c.node);
+      else if (c.field.startsWith('params.')) {
+        const k = c.field.slice('params.'.length);
+        add(nodePatch, c.node, k, (pn.get(c.node)?.params as Patch | undefined)?.[k]);
+      }
+    } else if (c.type === 'edge-changed' && c.field !== 'from' && c.field !== 'to') {
+      add(edgePatch, c.edge, c.field, (pe.get(c.edge) as unknown as Patch | undefined)?.[c.field]);
+    }
+  }
+  const classed = <S extends { params?: Record<string, ParamSource> }>(s: S, patch: Patch | undefined): S => {
+    if (!patch) return s;
+    edited += Object.keys(patch).length;
+    return { ...s, params: editedSources(s.params, patch) };
+  };
+
   const cn = new Map(canvas.nodes.map((n) => [n.id, n]));
   const nodes = pasted.nodes.map((n) => {
     const was = cn.get(n.id);
-    if (n.source || !was?.source) return n;
-    if (changedNodes.has(n.id)) return dropped++, n;
-    restored++;
-    return { ...n, source: was.source };
+    const lost = !n.source && !!was?.source;
+    if (lost && otherKind.has(n.id)) return dropped++, n;
+    const source = n.source ?? (lost ? was!.source : undefined);
+    if (!source) return n;
+    if (lost) restored++;
+    const next = classed(source, nodePatch.get(n.id));
+    return next === n.source ? n : { ...n, source: next };
   });
+
   // lines: by id, then by caller and callee, as the change list matches them
-  const ids = new Map(canvas.edges.map((e) => [edgeId(e), e]));
+  const byId = new Map(canvas.edges.map((e) => [edgeId(e), e]));
+  const pastedIds = new Set(pe.keys());
+  const byEnds = new Map<string, DesignEdge[]>();
+  for (const x of canvas.edges) {
+    if (pastedIds.has(edgeId(x))) continue;
+    const key = `${x.from}\u0000${x.to}`;
+    const list = byEnds.get(key);
+    if (list) list.push(x);
+    else byEnds.set(key, [x]);
+  }
   const used = new Set<DesignEdge>();
   const match = (e: DesignEdge) => {
-    const byId = ids.get(edgeId(e));
-    const m = byId && !used.has(byId) ? byId : canvas.edges.find((x) => !used.has(x) && x.from === e.from && x.to === e.to && !pasted.edges.some((y) => edgeId(y) === edgeId(x)));
+    let m = byId.get(edgeId(e));
+    if (m && used.has(m)) m = undefined;
+    if (!m) {
+      const list = byEnds.get(`${e.from}\u0000${e.to}`);
+      while (list?.length && used.has(list[list.length - 1])) list.pop();
+      m = list?.pop();
+    }
     if (m) used.add(m);
     return m;
   };
   const edges = pasted.edges.map((e) => {
     const was = match(e);
-    if (e.source || !was?.source) return e;
-    if (changedEdges.has(edgeId(e))) return dropped++, e;
-    restored++;
-    return { ...e, source: was.source };
+    const lost = !e.source && !!was?.source;
+    const source = e.source ?? (lost ? was!.source : undefined);
+    if (!source) return e;
+    if (lost) restored++;
+    const next = classed(source, edgePatch.get(edgeId(e)));
+    return next === e.source ? e : { ...e, source: next };
   });
-  return { design: restored ? { ...pasted, nodes, edges } : pasted, restored, dropped };
+  return { design: restored || edited ? { ...pasted, nodes, edges } : pasted, restored, edited, dropped };
 }
