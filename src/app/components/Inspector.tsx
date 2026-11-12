@@ -16,6 +16,7 @@ import { CATEGORY_COLOR, ICONS, fmtMs, fmtN, pct } from '../ui.ts';
 import { t, tx } from '../../i18n/index.ts';
 import { EVIDENCE_LABEL, isGuess } from '../sources.ts';
 import { ImportChecks } from './ImportChecks.tsx';
+import { Versions } from './Versions.tsx';
 
 const CV_PRESETS = [
   { value: 0, label: tx('固定（cv 0）') },
@@ -545,11 +546,11 @@ function DesignInfo() {
   );
 }
 
-type Tab = 'design' | 'scenario' | 'learn' | 'checks';
+type Tab = 'design' | 'scenario' | 'learn' | 'versions' | 'checks';
 
 /**
- * Three tabs: the settings of the design or the selected part, the scenario (traffic and events), and the results (lesson questions, SLA, cost, the story
- * of the run, challenges). A lesson example opens on the lesson; selecting a part shows its settings.
+ * Four tabs: the settings of the design or the selected part, the scenario (traffic and events), the results (lesson questions, SLA, cost, the story
+ * of the run, challenges) and the versions (one per finished run). A lesson example opens on the lesson; selecting a part shows its settings.
  */
 const WIDTH_KEY = 'loadsketch-right-width';
 const DEFAULT_W = 340;
@@ -678,6 +679,7 @@ export function Inspector() {
         {tabBtn('design', t('設定'))}
         {tabBtn('scenario', t('情境'))}
         {tabBtn('learn', t('結果'))}
+        {tabBtn('versions', t('版本'))}
         {hasChecks && tabBtn('checks', t('檢查'))}
       </div>
       <div className="flex-1 overflow-y-auto p-3" role="tabpanel">
@@ -685,6 +687,8 @@ export function Inspector() {
           <ImportChecks onRun={() => open('learn')} />
         ) : tab === 'learn' ? (
           <Learn />
+        ) : tab === 'versions' ? (
+          <Versions />
         ) : tab === 'scenario' ? (
           <ScenarioEditor />
         ) : selected?.type === 'node' ? (

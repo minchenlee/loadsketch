@@ -1846,3 +1846,86 @@ test.describe('phone layout', () => {
     expect(b.y).toBeGreaterThan(a.y);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Versions and compare (roadmap-next M1–M3)
+
+type Store = { getState(): Record<string, unknown> & { run(): void; finish(): void; status: string; updateNode(id: string, p: { params: Record<string, unknown> }): void } };
+/** Runs the design on the canvas to the end and waits for the result. */
+async function runToEnd(page: Page) {
+  await page.evaluate(() => {
+    const st = (window as unknown as { __loadsketch: Store }).__loadsketch.getState();
+    st.run();
+  });
+  await page.waitForTimeout(200);
+  await page.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().finish());
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().status), { timeout: 60_000 }).toBe('done');
+}
+
+test('versions: every run leaves one; rename, pin, delete, load back, keep after a reload', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/app/?example=three-tier&scenario=steady&theme=light');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  await page.getByTestId('tab-versions').click();
+  await expect(page.getByTestId('versions-empty')).toBeVisible();
+
+  await runToEnd(page);
+  const rows = page.getByTestId('version');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first().getByTestId('version-numbers')).toContainText('p99');
+  // the same design and scenario again: the same result, so no second version
+  await runToEnd(page);
+  await expect(rows).toHaveCount(1);
+
+  // one more API server: a new version at the top
+  await page.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().updateNode('api', { params: { instances: 4 } }));
+  await runToEnd(page);
+  await expect(rows).toHaveCount(2);
+
+  // rename and pin the older one
+  const older = rows.nth(1);
+  await older.getByTestId('version-name').fill('3 台');
+  await older.getByTestId('version-pin').click();
+  await expect(older).toHaveAttribute('data-pinned', 'true');
+  await page.screenshot({ path: join(SHOTS, 'versions-light.png') });
+
+  // load it back: the canvas has 3 API servers again
+  await older.getByTestId('version-load').click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { design(): { nodes: { id: string; params?: { instances?: number } }[] } } } }).__loadsketch.getState().design().nodes.find((n) => n.id === 'api')?.params?.instances)).toBe(3);
+
+  // delete the newer one
+  await page.getByTestId('tab-versions').click();
+  await rows.nth(0).getByTestId('version-delete').click();
+  await expect(rows).toHaveCount(1);
+
+  // still there after a reload
+  await page.reload();
+  await page.getByTestId('tab-versions').click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first().getByTestId('version-name')).toHaveValue('3 台');
+  await expect(rows.first()).toHaveAttribute('data-pinned', 'true');
+  expect(errors).toEqual([]);
+});
+
+test('versions: export to a file and import it again', async ({ page }) => {
+  await page.goto('/app/?example=three-tier&scenario=steady&theme=dark');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  await runToEnd(page);
+  await page.getByTestId('tab-versions').click();
+  await expect(page.getByTestId('version')).toHaveCount(1);
+  await page.screenshot({ path: join(SHOTS, 'versions-dark.png') });
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('versions-export').click()]);
+  const path = await download.path();
+  const text = readFileSync(path!, 'utf8');
+  expect(JSON.parse(text).schema).toBe('loadsketch/versions@1');
+  // empty the list, then import the file
+  await page.getByTestId('version-delete').click();
+  await expect(page.getByTestId('version')).toHaveCount(0);
+  await page.getByTestId('versions-import-file').setInputFiles({ name: 'v.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+  await expect(page.getByTestId('version')).toHaveCount(1);
+  // a file that is not a version file: an error, the list stays
+  await page.getByTestId('versions-import-file').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"a":1}') });
+  await expect(page.getByText('不是 loadsketch 匯出的版本檔')).toBeVisible();
+  await expect(page.getByTestId('version')).toHaveCount(1);
+});

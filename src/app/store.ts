@@ -28,6 +28,18 @@ import { LESSONS } from '../learn/lessons.ts';
 import type { Finding } from '../import/terraform/index.ts';
 import { editedSources } from './sources.ts';
 import { markNew, planEntrance } from './motion.ts';
+import { addVersion, loadVersions, mergeVersions, pinVersion, removeVersion, renameVersion, saveVersions, summarize, type Version } from './versions.ts';
+
+/** localStorage, or undefined where it is blocked (private mode in some browsers). */
+function storage(): Storage | undefined {
+  try {
+    return localStorage;
+  } catch {
+    return undefined;
+  }
+}
+/** The simulator inside another page (?embed=1): its looping runs leave no versions. */
+const EMBEDDED = new URLSearchParams(location.search).has('embed');
 
 /** ?lang= first, then the saved choice, then the browser language. Set before any text is made. */
 function initialLang(): Lang {
@@ -153,6 +165,8 @@ export interface AppState {
   future: Snapshot[];
   /** The last Terraform import: its checks, shown while that design is the one loaded (`loads`). */
   imported: { file: string; loads: number; findings: Finding[] } | null;
+  /** Every finished run leaves a version, newest first (versions.ts; kept in localStorage). */
+  versions: Version[];
 
   load: (d: Design, origin?: () => Design) => void;
   /** Load a design from `loadsketch import terraform` (in the browser) with its checks. */
@@ -197,6 +211,13 @@ export interface AppState {
    */
   setApis: (apis: DesignApi[], renamed?: Record<string, string>) => void;
   setSlo: (slo: Slo) => void;
+  renameVersion: (id: string, name: string) => void;
+  pinVersion: (id: string, pinned: boolean) => void;
+  removeVersion: (id: string) => void;
+  /** Puts a version's design and scenario on the canvas. */
+  loadVersion: (id: string) => void;
+  /** Adds versions from a file (runs already in the list are skipped). */
+  importVersions: (add: Version[]) => void;
 }
 
 /** The canvas at one point of the edit history. */
@@ -312,6 +333,7 @@ export const useApp = create<AppState>((set, get) => {
   past: [],
   future: [],
   imported: null,
+  versions: loadVersions(storage()),
 
   load: (d, origin) => {
     get().stop();
@@ -604,6 +626,16 @@ export const useApp = create<AppState>((set, get) => {
     saveGuessLog([]);
     set({ guessLog: [] });
   },
+  renameVersion: (id, name) => setVersions(renameVersion(get().versions, id, name)),
+  pinVersion: (id, pinned) => setVersions(pinVersion(get().versions, id, pinned)),
+  removeVersion: (id) => setVersions(removeVersion(get().versions, id)),
+  loadVersion: (id) => {
+    const v = get().versions.find((x) => x.id === id);
+    if (!v) return;
+    get().load(structuredClone(v.design));
+    set({ scenario: structuredClone(v.scenario) });
+  },
+  importVersions: (add) => setVersions(mergeVersions(get().versions, add)),
   markPassed: (ids) => {
     const now = get().passed;
     const add = ids.filter((id) => !now.includes(id));
@@ -618,6 +650,25 @@ export const useApp = create<AppState>((set, get) => {
   },
   };
 });
+
+/** Sets the version list and saves it; full storage says so once. */
+function setVersions(list: Version[]): void {
+  useApp.setState({ versions: list });
+  const r = saveVersions(storage(), list);
+  if (r.full && !fullWarned) {
+    fullWarned = true;
+    useApp.setState({ error: t('瀏覽器的儲存空間滿了：有些版本只留到關閉這個頁面。匯出版本可以留一份檔案。') });
+  }
+}
+let fullWarned = false;
+
+/** A finished run leaves a version: the design and scenario that ran, and a summary of the result. */
+function recordVersion(): void {
+  const s = useApp.getState();
+  if (EMBEDDED || !s.ran || !s.result) return;
+  const { design, scenario } = s.ran;
+  setVersions(addVersion(s.versions, { at: Date.now(), name: design.name, pinned: false, design, scenario, summary: summarize(design, s.result, s.windows) }));
+}
 
 /** After the first run that follows the guesses of a lesson, add them to the guess log. */
 function logGuesses(): void {
@@ -643,6 +694,7 @@ connect((m) => {
     const sec = m.tView / 1000;
     useApp.setState({ status: 'done', result: m.result, tView: m.tView, windows: live.windows.filter((w) => w.t <= sec + 1e-9), timeline: live.timeline.filter((e) => e.t <= sec) });
     logGuesses();
+    recordVersion();
     return;
   }
   const now = performance.now();
