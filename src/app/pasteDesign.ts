@@ -3,7 +3,7 @@
 // expected, not as a schema path. Nothing here touches the canvas: the dialog shows the result.
 import type { z } from 'zod';
 import { DesignSchema, checkDesign, type Design, type Issue } from '../schema/design.ts';
-import { EDGE_PARAMS, KINDS } from '../schema/kinds.ts';
+import { KINDS } from '../schema/kinds.ts';
 import { t, tx } from '../i18n/index.ts';
 
 export type PasteResult =
@@ -56,13 +56,15 @@ export function jsonProblem(src: string, message: string): string {
     [line, col] = [before.length, before[before.length - 1].length + 1];
   }
   const where = line ? t('第 {line} 行第 {col} 個字附近', { line, col: col ?? 1 }) : '';
-  const hint = /,\s*[}\]]/.test(src)
+  // the usual slips are looked for outside the strings: a URL in a description is not a comment
+  const bare = src.replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
+  const hint = /,\s*[}\]]/.test(bare)
     ? t('最後一項後面多了逗號。')
-    : /'[^'\n]*'\s*:/.test(src)
+    : /'[^'\n]*'\s*:/.test(bare)
       ? t('JSON 的名稱和文字要用雙引號 "，不能用單引號。')
-      : /(^|[{,]\s*)[A-Za-z_][\w-]*\s*:/m.test(src)
+      : /(^|[{,]\s*)[A-Za-z_][\w-]*\s*:/m.test(bare)
         ? t('欄位名稱要加雙引號，例如 "nodes"。')
-        : /\/\/|\/\*/.test(src)
+        : /\/\/|\/\*/.test(bare)
           ? t('JSON 不能有註解（// 或 /* */）。')
           : '';
   return [where ? t('這不是有效的 JSON：{where}有問題。', { where }) : t('這不是有效的 JSON。'), hint].filter(Boolean).join(' ');
@@ -122,33 +124,57 @@ const TYPE_WORD: Record<string, string> = {
   object: tx('物件 {...}'),
 };
 
-/** The keys a place accepts, to guess what a key that is not known was meant to be. */
-function knownKeys(d: Obj, path: PropertyKey[]): string[] {
-  const [top, i, sub] = path;
-  if (top === undefined) return Object.keys(DesignSchema.shape);
-  if (top === 'nodes' && typeof i === 'number') {
-    const n = (d.nodes as unknown[])[i];
-    const spec = isObj(n) && typeof n.kind === 'string' ? KINDS[n.kind] : undefined;
-    if (sub === 'params') return spec ? Object.keys(spec.params) : [];
-    return ['id', 'kind', 'label', 'region', 'replicaRegion', 'pos', 'params', 'source'];
+/** Zod's own description of a schema (v4: `_zod.def`). */
+type Def = { type: string; shape?: Record<string, Schema>; element?: Schema; innerType?: Schema; options?: Schema[]; discriminator?: string; items?: Schema[] };
+type Schema = { _zod: { def: Def } };
+const defOf = (x: Schema): Def => x._zod.def;
+
+/** The schema at a path of the design, following the data (a node's kind picks its schema, a value picks the form of a union). */
+function schemaAt(d: unknown, path: PropertyKey[]): Schema | undefined {
+  let sch: Schema | undefined = DesignSchema as unknown as Schema;
+  let v: unknown = d;
+  const settle = () => {
+    for (let guard = 0; sch && guard < 20; guard++) {
+      const def = defOf(sch);
+      if (def.type === 'optional' || def.type === 'nullable' || def.type === 'default') sch = def.innerType;
+      else if (def.type === 'union' && def.options) {
+        const opts = def.options;
+        // a discriminated union (the node kinds): the option with this kind
+        const disc = def.discriminator;
+        const picked = disc && isObj(v)
+          ? opts.find((o) => { const sh = defOf(o).shape?.[disc]; return !!sh && (defOf(sh) as { values?: unknown[] }).values?.includes(v![disc as keyof typeof v]); })
+          : opts.find((o) => (isObj(v) ? defOf(o).type === 'object' : Array.isArray(v) ? ['array', 'tuple'].includes(defOf(o).type) : !['object', 'array', 'tuple'].includes(defOf(o).type)));
+        sch = picked;
+      } else return;
+    }
+  };
+  settle();
+  for (const k of path) {
+    if (!sch) return undefined;
+    const def = defOf(sch);
+    sch = def.type === 'object' ? def.shape?.[k as string] : def.type === 'array' ? def.element : def.type === 'tuple' ? def.items?.[k as number] : undefined;
+    v = isObj(v) || Array.isArray(v) ? (v as Record<PropertyKey, unknown>)[k as never] : undefined;
+    settle();
   }
-  if (top === 'edges') return ['id', 'from', 'to', 'apis', 'source', ...Object.keys(EDGE_PARAMS)];
-  if (top === 'apis') return ['name', 'op', 'share', 'label'];
-  return [];
+  return sch;
 }
 
+/** The keys a place accepts, to guess what a key that is not known was meant to be. */
+function knownKeys(d: Obj, path: PropertyKey[]): string[] {
+  const sch = schemaAt(d, path);
+  const def = sch && defOf(sch);
+  return def?.type === 'object' && def.shape ? Object.keys(def.shape) : [];
+}
+
+/** Edit distance where two letters swapped count as one edit (widht → width). */
 function distance(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    let prev = row[0];
-    row[0] = i;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++)
     for (let j = 1; j <= b.length; j++) {
-      const cur = row[j];
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
-      prev = cur;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
     }
-  }
-  return row[b.length];
+  return d[a.length][b.length];
 }
 
 function closest(key: string, known: string[]): string | undefined {

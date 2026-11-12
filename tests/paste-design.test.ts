@@ -63,6 +63,26 @@ describe('paste design', () => {
     expect(problems(edit((d) => (d.foo = 1)))[0]).toMatch(/^設計沒有「foo」這個欄位。可以用的有：schema, name, /);
   });
 
+  it('an unknown field inside a nested object is matched against that object\'s own fields (M4 review P2)', () => {
+    expect(problems(edit((d) => (d.nodes[2].params.serviceMs = { mean: 10, cvv: 1 })))).toEqual(['元件「api」（第 3 個）的設定「serviceMs」沒有「cvv」這個欄位。是不是「cv」？']);
+    const p = problems(edit((d) => (d.nodes[2].params.serviceMs = { mean: 10, instances: 1 })));
+    expect(p).toEqual(['元件「api」（第 3 個）的設定「serviceMs」沒有「instances」這個欄位。可以用的有：mean, cv。']);
+    // an object of its own: a note
+    expect(problems(edit((d) => (d.notes = [{ id: 'n1', text: 'x', pos: [0, 0], widht: 200 }])))).toEqual(['第 1 個便利貼沒有「widht」這個欄位。是不是「width」？']);
+  });
+
+  it('the hint for a JSON slip does not read inside strings (M4 review P2/P3)', () => {
+    // a URL in a string is not a comment; a broken file without a known cause gets no hint
+    const p = problems('{\n  "description": "see https://example.com",\n  "name": "x"\n  "nodes": []\n}');
+    expect(p[0]).not.toContain('註解');
+    expect(p[0]).toMatch(/^這不是有效的 JSON：第 4 行/);
+    expect(problems('{\n  "name": "a, }",\n  "x" 1\n}')[0]).not.toContain('逗號');
+    expect(problems('{\n  "name": "it\'s: ok",\n  "x" 1\n}')[0]).not.toContain('單引號');
+    expect(problems('{\n  "name": "a b: c",\n  "x" 1\n}')[0]).not.toContain('欄位名稱要加雙引號');
+    // a real comment still gets it
+    expect(problems('{\n  // the name\n  "name": "x"\n}')[0]).toContain('註解');
+  });
+
   it('design checks after the format: a line to a component that is not there', () => {
     const p = problems(edit((d) => d.edges.push({ from: 'api', to: 'nowhere' })));
     expect(p.join(' ')).toContain('nowhere');
