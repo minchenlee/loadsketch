@@ -18,6 +18,7 @@ import {
   saveVersions,
   summarize,
   versionFile,
+  updateVersions,
   type Store,
   type Version,
 } from '../src/app/versions.ts';
@@ -182,5 +183,40 @@ describe('version file and storage', () => {
     const broken: Store = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     expect(loadVersions(broken)).toEqual([]);
     expect(saveVersions(broken, [fake(1, { pinned: true })]).full).toBe(true);
+  });
+});
+
+describe('two tabs', () => {
+  const shared = () => {
+    const mem = new Map<string, string>();
+    return { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) } as Store;
+  };
+
+  it('a change in one tab does not undo what the other tab did', () => {
+    const store = shared();
+    // both tabs open with the same list
+    saveVersions(store, [fake(1), fake(2)]);
+    let tabA = loadVersions(store);
+    let tabB = loadVersions(store);
+    // tab A pins v1 and deletes v2
+    tabA = updateVersions(store, tabA, (l) => pinVersion(l, 'v1', true)).list;
+    tabA = updateVersions(store, tabA, (l) => removeVersion(l, 'v2')).list;
+    // tab B still shows its old list, and finishes a run
+    tabB = updateVersions(store, tabB, (l) => addVersion(l, fake(3))).list;
+    expect(tabB.map((v) => v.id)).toEqual(['v3', 'v1']);
+    expect(tabB.find((v) => v.id === 'v1')!.pinned).toBe(true);
+    // tab A renames: tab B's run stays
+    tabA = updateVersions(store, tabA, (l) => renameVersion(l, 'v1', 'base')).list;
+    expect(loadVersions(store).map((v) => [v.id, v.name, v.pinned])).toEqual([
+      ['v3', 'run 3', false],
+      ['v1', 'base', true],
+    ]);
+  });
+
+  it('without a list in storage, the change applies to the list in memory', () => {
+    expect(updateVersions(undefined, [fake(1)], (l) => addVersion(l, fake(2))).list.map((v) => v.id)).toEqual(['v2', 'v1']);
+    const broken: Store = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
+    const r = updateVersions(broken, [fake(1)], (l) => removeVersion(l, 'v1'));
+    expect(r.list).toEqual([]);
   });
 });

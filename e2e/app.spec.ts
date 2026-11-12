@@ -1929,3 +1929,24 @@ test('versions: export to a file and import it again', async ({ page }) => {
   await expect(page.getByText('不是 loadsketch 匯出的版本檔')).toBeVisible();
   await expect(page.getByTestId('version')).toHaveCount(1);
 });
+
+test('versions: two tabs do not overwrite each other', async ({ context }) => {
+  const a = await context.newPage();
+  await a.goto('/app/?example=three-tier&scenario=steady');
+  await expect(a.locator('[data-node]')).toHaveCount(5);
+  await runToEnd(a);
+  const b = await context.newPage();
+  await b.goto('/app/?example=three-tier&scenario=steady');
+  await expect(b.locator('[data-node]')).toHaveCount(5);
+  // tab A pins its version; tab B, opened before, then finishes another run
+  await a.getByTestId('tab-versions').click();
+  await a.getByTestId('version-pin').click();
+  await b.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().updateNode('api', { params: { instances: 4 } }));
+  await runToEnd(b);
+  await b.getByTestId('tab-versions').click();
+  await expect(b.getByTestId('version')).toHaveCount(2);
+  await expect(b.locator('[data-testid="version"][data-pinned]')).toHaveCount(1);
+  // tab A shows tab B's run without a reload
+  await expect(a.getByTestId('version')).toHaveCount(2);
+  await expect(a.locator('[data-testid="version"][data-pinned]')).toHaveCount(1);
+});

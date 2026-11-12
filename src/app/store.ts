@@ -28,7 +28,7 @@ import { LESSONS } from '../learn/lessons.ts';
 import type { Finding } from '../import/terraform/index.ts';
 import { editedSources } from './sources.ts';
 import { markNew, planEntrance } from './motion.ts';
-import { addVersion, loadVersions, mergeVersions, pinVersion, removeVersion, renameVersion, saveVersions, summarize, type Version } from './versions.ts';
+import { VERSIONS_KEY, addVersion, loadVersions, mergeVersions, pinVersion, removeVersion, renameVersion, summarize, updateVersions, type Version } from './versions.ts';
 
 /** localStorage, or undefined where it is blocked (private mode in some browsers). */
 function storage(): Storage | undefined {
@@ -626,16 +626,16 @@ export const useApp = create<AppState>((set, get) => {
     saveGuessLog([]);
     set({ guessLog: [] });
   },
-  renameVersion: (id, name) => setVersions(renameVersion(get().versions, id, name)),
-  pinVersion: (id, pinned) => setVersions(pinVersion(get().versions, id, pinned)),
-  removeVersion: (id) => setVersions(removeVersion(get().versions, id)),
+  renameVersion: (id, name) => changeVersions((l) => renameVersion(l, id, name)),
+  pinVersion: (id, pinned) => changeVersions((l) => pinVersion(l, id, pinned)),
+  removeVersion: (id) => changeVersions((l) => removeVersion(l, id)),
   loadVersion: (id) => {
     const v = get().versions.find((x) => x.id === id);
     if (!v) return;
     get().load(structuredClone(v.design));
     set({ scenario: structuredClone(v.scenario) });
   },
-  importVersions: (add) => setVersions(mergeVersions(get().versions, add)),
+  importVersions: (add) => changeVersions((l) => mergeVersions(l, add)),
   markPassed: (ids) => {
     const now = get().passed;
     const add = ids.filter((id) => !now.includes(id));
@@ -651,10 +651,13 @@ export const useApp = create<AppState>((set, get) => {
   };
 });
 
-/** Sets the version list and saves it; full storage says so once. */
-function setVersions(list: Version[]): void {
-  useApp.setState({ versions: list });
-  const r = saveVersions(storage(), list);
+/**
+ * Changes the version list as it is in storage now (another tab may have changed it), shows it and
+ * saves it. Full storage says so once.
+ */
+function changeVersions(change: (list: Version[]) => Version[]): void {
+  const r = updateVersions(storage(), useApp.getState().versions, change);
+  useApp.setState({ versions: r.list });
   if (r.full && !fullWarned) {
     fullWarned = true;
     useApp.setState({ error: t('瀏覽器的儲存空間滿了：有些版本只留到關閉這個頁面。匯出版本可以留一份檔案。') });
@@ -667,8 +670,14 @@ function recordVersion(): void {
   const s = useApp.getState();
   if (EMBEDDED || !s.ran || !s.result) return;
   const { design, scenario } = s.ran;
-  setVersions(addVersion(s.versions, { at: Date.now(), name: design.name, pinned: false, design, scenario, summary: summarize(design, s.result, s.windows) }));
+  const v = { at: Date.now(), name: design.name, pinned: false, design, scenario, summary: summarize(design, s.result, s.windows) };
+  changeVersions((l) => addVersion(l, v));
 }
+
+// another tab changed the versions: show its list
+window.addEventListener('storage', (e) => {
+  if (e.key === VERSIONS_KEY || e.key === null) useApp.setState({ versions: loadVersions(storage()) });
+});
 
 /** After the first run that follows the guesses of a lesson, add them to the guess log. */
 function logGuesses(): void {

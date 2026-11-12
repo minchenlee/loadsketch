@@ -219,3 +219,21 @@ export function saveVersions(store: Store | undefined, list: Version[]): { saved
     }
   }
 }
+
+/**
+ * Changes the list the way another tab may have left it: reads the newest list from storage, applies
+ * `change` to it and saves the result. Two tabs then do not overwrite each other's versions. Without
+ * a list in storage (blocked storage, nothing saved yet), `change` applies to the list in memory.
+ */
+export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[]): { list: Version[]; full: boolean } {
+  let base = memory;
+  try {
+    const text = store?.getItem(VERSIONS_KEY);
+    const r = text ? parseVersionFile(text) : null;
+    if (r?.ok) base = r.versions;
+  } catch {
+    // unreadable storage: the list in memory
+  }
+  const list = change(base);
+  return { list, full: saveVersions(store, list).full };
+}
