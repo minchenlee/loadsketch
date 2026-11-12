@@ -101,7 +101,7 @@ node scripts/check-agents-md.ts
 - **畫布的動態**（進場、拖曳傾斜、換範例時的飛行）：`src/app/motion.ts` 和 `src/app/components/Canvas.tsx`。對話框的關閉動畫：`src/app/modal.ts` 的 `useExit()`。面板開關：`src/app/components/Slide.tsx` 的 `Slide`。
 - **手機版面（480px 以下）**：`src/app/phone.ts`、`src/app/components/Phone.tsx`（底部分頁和抽屜）；規則在 `docs/design-system.md` 第 8 節。
 - **右側面板的分頁**：`src/app/components/Inspector.tsx`（分頁清單和 `Tab` 型別）；元件從 `useApp` 讀狀態。
-- **版本和比較**：版本存在瀏覽器（`src/app/versions.ts`，格式 `loadsketch/versions@1`），面板是 `src/app/components/Versions.tsx`。比較畫面是 `src/app/components/Compare.tsx` 和 `src/app/compare.ts`。差異清單是 `src/app/designDiff.ts` 的 `diffDesigns()`；線的配對在 `pairEdges()`，貼上設計也用它。
+- **版本和比較**：版本存在瀏覽器（`src/app/versions.ts`，格式 `loadsketch/versions@1`），面板是 `src/app/components/Versions.tsx`。比較畫面是 `src/app/components/Compare.tsx` 和 `src/app/compare.ts`；重跑時每個版本一個 worker（`src/worker/compare.worker.ts`），這個分頁跑完的曲線留在記憶體（`src/app/curves.ts` 的 `curves`，最多 8 個，不存進 localStorage），有曲線的版本不重跑。差異清單是 `src/app/designDiff.ts` 的 `diffDesigns()`；線的配對在 `pairEdges()`，貼上設計也用它。
 - **貼上設計**：`src/app/pasteDesign.ts`。`readPasted()` 用白話說哪裡不合格式；`keepSources()` 把模型漏掉的 Terraform 匯入來源補回，改過的值改標成使用者填（`src/app/sources.ts` 的 `editedSources()`）。對話框是 `src/app/components/PasteDesign.tsx`。
 - **元件樣板**：`src/app/presets.ts`（格式 `loadsketch/presets@1`，存在 localStorage，可以匯出和匯入）。只存名稱、種類和 params。元件列的「我的樣板」在 `src/app/components/Palette.tsx`；「存成樣板」在 `src/app/components/Inspector.tsx`。
 - **自訂服務**（kind `custom`，`src/schema/kinds.ts` 的 `CUSTOM_KIND`）：使用者自己填名稱、圖示、時間、容量、錯誤率、呼叫方式和價格。引擎走和 API 伺服器一樣的共用路徑。成本是台數 × 使用者填的單價（`src/learn/cost.ts`）。練習題不能用：`src/learn/constraints.ts` 的 `customUsed()`。新增一種練習題的判定時，要呼叫它。

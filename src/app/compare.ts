@@ -31,6 +31,9 @@ export interface RunSeries {
   p99: (number | null)[];
 }
 
+/** A run again in the compare view: its summary and series, or why it failed. */
+export type Again = { summary: VersionSummary; series: RunSeries } | { error: string };
+
 export function seriesOf(windows: WindowStat[]): RunSeries {
   const out: RunSeries = { t: [], failShare: [], p99: [] };
   for (const w of windows) {
@@ -40,6 +43,14 @@ export function seriesOf(windows: WindowStat[]): RunSeries {
     out.p99.push(w.latency.count ? w.latency.p99 : null);
   }
   return out;
+}
+
+/**
+ * The series of a run up to the end of its traffic (`durationMs`): the span the live run shows and a
+ * finished run keeps (src/app/curves.ts), so a series kept and a series from a run again are the same.
+ */
+export function seriesUpTo(windows: WindowStat[], durationMs: number): RunSeries {
+  return seriesOf(windows.filter((w) => w.t <= durationMs / 1000 + 1e-9));
 }
 
 /**

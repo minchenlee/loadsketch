@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, GitCompareArrows, Link, TriangleAlert, X } from 'lucide-react';
 import { useApp } from '../store.ts';
-import { METRICS, delta, overlay, rerunDiffers, type CompareItem, type RunSeries } from '../compare.ts';
+import { METRICS, delta, overlay, rerunDiffers, type Again, type CompareItem } from '../compare.ts';
+import { keptRuns } from '../curves.ts';
 import { describeChange, describeScenarioChange, diffDesigns, diffScenarios } from '../designDiff.ts';
 import type { VersionSummary } from '../versions.ts';
 import type { CompareReply, CompareRequest } from '../../worker/compare.worker.ts';
@@ -18,20 +19,35 @@ import { fmtWhen } from './Versions.tsx';
 import { copyLink, encodeCompare, MAX_SHARE_COMPARE } from '../share.ts';
 import { getLang, t } from '../../i18n/index.ts';
 
-type Again = { summary: VersionSummary; series: RunSeries } | { error: string };
-
-/** Runs every item again in a worker; the results arrive one by one. */
+/**
+ * Each item's run again: the curve this tab kept when there is one (M14 B), else a worker of its own,
+ * all at the same time (M14 A, at most MAX_COMPARE). Results arrive one by one; closing the view or
+ * another comparison stops every worker.
+ */
 function useRunsAgain(items: CompareItem[]): (Again | undefined)[] {
-  const [again, setAgain] = useState<(Again | undefined)[]>(() => items.map(() => undefined));
+  const [again, setAgain] = useState<(Again | undefined)[]>(() => keptRuns(items));
   useEffect(() => {
-    const w = new Worker(new URL('../../worker/compare.worker.ts', import.meta.url), { type: 'module' });
-    w.onmessage = (ev: MessageEvent<CompareReply>) => {
-      const r = ev.data;
-      setAgain((a) => a.map((x, i) => (i === r.i ? ('error' in r ? { error: r.error } : { summary: r.summary, series: r.series }) : x)));
-    };
-    const req: CompareRequest = { lang: getLang(), runs: items.map((x) => ({ design: x.design, scenario: x.scenario })) };
-    w.postMessage(req);
-    return () => w.terminate();
+    const kept = keptRuns(items);
+    setAgain(kept);
+    const workers = items.flatMap((x, i) => {
+      if (kept[i]) return [];
+      const w = new Worker(new URL('../../worker/compare.worker.ts', import.meta.url), { type: 'module' });
+      w.onmessage = (ev: MessageEvent<CompareReply>) => {
+        const r = ev.data;
+        setAgain((a) => a.map((y, j) => (j === r.i ? ('error' in r ? { error: r.error } : { summary: r.summary, series: r.series }) : y)));
+        w.terminate();
+      };
+      // a worker that cannot start or load: that version's line says so, the others go on
+      w.onerror = (ev) => {
+        ev.preventDefault();
+        setAgain((a) => a.map((y, j) => (j === i ? { error: ev.message || t('無法啟動') } : y)));
+        w.terminate();
+      };
+      const req: CompareRequest = { lang: getLang(), i, design: x.design, scenario: x.scenario };
+      w.postMessage(req);
+      return [w];
+    });
+    return () => workers.forEach((w) => w.terminate());
   }, [items]);
   return again;
 }

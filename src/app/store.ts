@@ -29,8 +29,9 @@ import { LESSONS } from '../learn/lessons.ts';
 import type { Finding } from '../import/terraform/index.ts';
 import { editedSources } from './sources.ts';
 import { markNew, planEntrance } from './motion.ts';
-import type { CompareItem } from './compare.ts';
-import { VERSIONS_KEY, loadVersions, newId, summarize, updateVersions, versionChanges, viewVersions, type Version, type VersionChange } from './versions.ts';
+import { VERSIONS_KEY, loadVersions, newId, sameRun, summarize, updateVersions, versionChanges, viewVersions, type Version, type VersionChange } from './versions.ts';
+import { seriesOf, type CompareItem } from './compare.ts';
+import { curves } from './curves.ts';
 
 /** localStorage, or undefined where it is blocked (private mode in some browsers). */
 function storage(): Storage | undefined {
@@ -722,6 +723,8 @@ function changeVersions(change: VersionChange): void {
   const r = updateVersions(storage(), useApp.getState().versions, change, pendingVersions);
   pendingVersions = r.pending;
   useApp.setState({ versions: r.list, versionsMemoryOnly: r.memoryOnly });
+  // the kept curves follow the list: another id for the same run, a removed version (M14)
+  curves.follow(r.list);
   if (r.dropped) useApp.setState({ error: t('瀏覽器的儲存空間滿了：最舊的 {n} 個版本已經移除。要留下版本，先匯出成檔案。', { n: r.dropped }) });
   if (r.refused && r.memoryOnly) useApp.setState({ error: t('瀏覽器存不了版本，還沒存的改動已經有 {n} 個：這次的改動沒有做。先匯出成檔案。', { n: r.pending.length }) });
   else if (r.refused) useApp.setState({ error: t('瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。') });
@@ -735,12 +738,19 @@ function recordVersion(): void {
   const v = { at: Date.now(), name: design.name, pinned: false, design, scenario, summary: summarize(design, s.result, s.windows) };
   // the id is fixed now, so changes made later find this version after a replay
   changeVersions(versionChanges.add({ ...v, id: newId(v.at, new Set(s.versions.map((x) => x.id))) }));
+  // keep this run's curve for the compare view (M14 B): under the id its version has now (a version
+  // of the same run keeps its id), and with that version's design and scenario
+  const kept = useApp.getState().versions.find((x) => sameRun(x, v));
+  if (kept) curves.put(kept.id, kept, seriesOf(s.windows));
 }
 
 // another tab changed the versions: show its list
 window.addEventListener('storage', (e) => {
   // its list, with this tab's unsaved changes on top
-  if (e.key === VERSIONS_KEY || e.key === null) useApp.setState({ versions: viewVersions(storage(), useApp.getState().versions, pendingVersions) });
+  if (e.key === VERSIONS_KEY || e.key === null) {
+    useApp.setState({ versions: viewVersions(storage(), useApp.getState().versions, pendingVersions) });
+    curves.follow(useApp.getState().versions);
+  }
 });
 
 /** After the first run that follows the guesses of a lesson, add them to the guess log. */

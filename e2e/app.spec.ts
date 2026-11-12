@@ -2182,6 +2182,100 @@ test('compare: at most 4 versions; a version compared with the same scenario sho
   await expect(page.getByTestId('compare-share')).toBeDisabled();
 });
 
+test.describe('compare runs less (M14)', () => {
+  test.beforeEach(async ({ page }) => {
+    // count the compare workers and the most alive at once (the dev build's StrictMode starts the
+    // effect twice: the first set is stopped at once), and note if "running each version again" shows
+    await page.addInitScript(() => {
+      const w = window as unknown as { __cw: number; __cwEnd: number; __cwMax: number; __cwDone: number; __sawRunning: boolean };
+      Object.assign(w, { __cw: 0, __cwEnd: 0, __cwMax: 0, __cwDone: 0, __sawRunning: false });
+      const Real = window.Worker;
+      window.Worker = class extends Real {
+        private ended = false;
+        private compare = false;
+        constructor(url: string | URL, opts?: WorkerOptions) {
+          super(url, opts);
+          this.compare = String(url).includes('compare.worker');
+          if (!this.compare) return;
+          w.__cw++;
+          w.__cwMax = Math.max(w.__cwMax, w.__cw - w.__cwEnd);
+          this.addEventListener('message', () => w.__cwDone++);
+        }
+        terminate() {
+          if (this.compare && !this.ended) w.__cwEnd++;
+          this.ended = true;
+          super.terminate();
+        }
+      };
+      new MutationObserver(() => {
+        if (document.querySelector('[data-testid="compare-running"]')) w.__sawRunning = true;
+      }).observe(document, { childList: true, subtree: true });
+    });
+  });
+  const counts = (page: Page) => page.evaluate(() => {
+    const w = window as unknown as { __cw: number; __cwEnd: number; __cwMax: number; __cwDone: number; __sawRunning: boolean };
+    return { workers: w.__cw, alive: w.__cw - w.__cwEnd, most: w.__cwMax, replies: w.__cwDone, sawRunning: w.__sawRunning };
+  });
+  const openTwo = (page: Page) => page.evaluate(() => {
+    const st = (window as unknown as { __loadsketch: { getState(): { versions: { id: string; name: string; at: number; design: unknown; scenario: unknown; summary: unknown }[]; openCompare(i: unknown[]): void } } }).__loadsketch.getState();
+    st.openCompare(st.versions.slice(0, 2).reverse().map((v) => ({ key: v.id, name: v.name, at: v.at, design: v.design, scenario: v.scenario, summary: v.summary })));
+  });
+
+  test('compare: two versions just run show their charts at once, with no run again; after a reload they run again, side by side', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await runToEnd(page);
+    await page.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().updateNode('api', { params: { instances: 4 } }));
+    await runToEnd(page);
+
+    await openTwo(page);
+    const dlg = page.getByTestId('compare');
+    await expect(dlg.getByTestId('compare-chart-p99')).toBeVisible();
+    await expect(dlg.getByTestId('compare-chart-fail')).toBeVisible();
+    await expect(dlg.getByTestId('compare-col')).toHaveCount(2);
+    await page.waitForTimeout(300);
+    expect(await counts(page)).toEqual({ workers: 0, alive: 0, most: 0, replies: 0, sawRunning: false });
+    await expect(dlg.getByTestId('compare-stale')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(dlg).toHaveCount(0);
+
+    // a reload keeps the versions, not the curves: both run again, each in a worker of its own
+    await page.reload();
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await openTwo(page);
+    await expect(dlg.getByTestId('compare-col')).toHaveCount(2);
+    await expect(dlg.getByTestId('compare-running')).toHaveCount(0, { timeout: 60_000 });
+    await expect(dlg.getByTestId('compare-chart-p99')).toBeVisible();
+    // the two ran at the same time; each worker stops after its answer
+    expect(await counts(page)).toMatchObject({ most: 2, alive: 0, replies: 2, sawRunning: true });
+    // the same design, scenario and seed: the run again gives the numbers the versions have
+    await expect(dlg.getByTestId('compare-stale')).toHaveCount(0);
+    await expect(dlg.getByText('重跑失敗')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('compare: a deleted version run again keeps a new curve under its new id', async ({ page }) => {
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await runToEnd(page);
+    await page.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().updateNode('api', { params: { instances: 4 } }));
+    await runToEnd(page);
+    // delete the newer version, then run that design again: a new version, and a curve for it again
+    const ids = () => page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { versions: { id: string }[] } } }).__loadsketch.getState().versions.map((v) => v.id));
+    const [newer] = await ids();
+    await page.evaluate((id) => (window as unknown as { __loadsketch: { getState(): { removeVersion(id: string): void } } }).__loadsketch.getState().removeVersion(id), newer);
+    expect(await ids()).toHaveLength(1);
+    await runToEnd(page);
+    expect(await ids()).toHaveLength(2);
+    await openTwo(page);
+    await expect(page.getByTestId('compare').getByTestId('compare-chart-p99')).toBeVisible();
+    await page.waitForTimeout(300);
+    expect((await counts(page)).workers).toBe(0);
+  });
+});
+
 test.describe('compare on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
   test('the table and the changes, no charts', async ({ page }) => {

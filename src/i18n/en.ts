@@ -1398,6 +1398,7 @@ export const EN: Record<string, string> = {
   "為什麼會這樣": "Why it happened",
   "無上限": "No limit",
   "無伺服器函式（像 AWS Lambda）。每個執行環境一次只處理 1 個請求。沒有空的環境就開一個新的（冷啟動，這個請求要多等）；用完閒置一段時間後收回。同時的環境數到上限、或開新環境的速度超過擴充速率時，新請求被拒（throttle，429）；從 queue 來的訊息則留在 queue 裡等。": "A serverless function (like AWS Lambda). Each execution environment handles one request at a time. With no free environment it starts a new one (a cold start: that request waits longer); an environment idle for a while is reclaimed. When the environments reach the limit, or new ones would start faster than the scaling rate, new requests are rejected (throttled, 429); messages from a queue stay in the queue.",
+  "無法啟動": "could not start",
   "然後選 plan.json。檔案只在瀏覽器裡讀，不會上傳。匯入後，「檢查」分頁列出發現；猜的值用虛線框標出來。": "Then pick plan.json. The file is read in the browser only; nothing is uploaded. After the import, the Check tab lists the findings, and guessed values have a dashed frame.",
   "熱度": "Key heat",
   "熱門 key 過期時，很多請求同時沒命中，一起去查 DB。合併查詢：快取後面直接接 DB 時，同一個 key 只查一次，其他請求等結果。Lease：服務自己查 DB 時，第一個沒命中的拿到 lease 去查，其他的稍等再問一次快取。": "When a hot key expires, many requests miss at once and all read the DB. Coalesce: when the cache reads the DB itself, each key is read once and the other requests wait for the result. Lease: when the service reads the DB, the first miss gets a lease and reads; the others wait a moment and ask the cache again.",
