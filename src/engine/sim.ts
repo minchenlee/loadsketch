@@ -724,6 +724,8 @@ interface QueueNodeState {
   msgs: Deque<QMsg>;
   /** at-least-once: delivered messages that are neither deleted nor visible again */
   hidden: number;
+  /** deliveries that a worker failed (whole run) */
+  failedRx: number;
   consumers: { inst: Instance; edge: EdgeRT }[];
   rr: number;
   lastT: number;
@@ -1275,7 +1277,7 @@ export class Simulation {
       }
       if (rt.kind === 'queue') {
         const groups = rt.str('ordering') === 'fifo' ? Math.max(1, rt.num('groups')) : 0;
-        rt.queue = { node: rt, msgs: new Deque(), hidden: 0, consumers: [], rr: 0, lastT: 0, groups, busy: new Set(), parked: new Map(), parkedN: 0, fns: [] };
+        rt.queue = { node: rt, msgs: new Deque(), hidden: 0, failedRx: 0, consumers: [], rr: 0, lastT: 0, groups, busy: new Set(), parked: new Map(), parkedN: 0, fns: [] };
       }
       if (rt.kind === 'circuit_breaker') {
         const size = Math.max(1, Math.ceil(rt.num('windowS')));
@@ -4262,6 +4264,7 @@ export class Simulation {
     }
     const failed = (): void => {
       edge.w.fail++;
+      qs.failedRx++;
       // at-least-once: it comes back when the visibility timeout ends (its group stays blocked)
       if (alo) return;
       qn.w.asyncFail++;
@@ -4949,8 +4952,8 @@ export class Simulation {
       // messages behind it wait (head-of-line blocking). More workers do not help.
       const worker = this.busiestDownstream(b.node);
       if (r.holBlocked && (!worker || worker.peak < 0.7)) {
-        // (no redelivery: nothing fails; the groups are too few for the traffic)
-        if (!r.redelivered) {
+        // (no failed delivery: the groups are too few for the traffic)
+        if (!this.byId.get(b.node)?.queue?.failedRx) {
           return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是同一組一次只能處理一則，分組太少，訊息在等同組的前一則做完。', { name: b.label, k: r.queueDepthEnd ?? 0 });
         }
         return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是一直失敗的訊息卡住自己的分組，同組後面的訊息都在等（head-of-line blocking）。', { name: b.label, k: r.queueDepthEnd ?? 0 });

@@ -223,10 +223,14 @@ describe('FIFO queue and head-of-line blocking (#38)', () => {
   it('the bottleneck text: too few groups without failures is not blamed on failing messages', () => {
     // 1 group, 100 ms per message, 200 messages per second: the queue grows, nothing fails
     const few = simulate(d({ ordering: 'fifo', groups: 1 }, { serviceMs: { mean: 100, cv: 0 } }), sc());
-    expect(few.nodes.q.redelivered ?? 0).toBe(0);
     expect(few.bottleneck?.node).toBe('q');
     expect(few.bottleneck?.why).toContain('分組太少');
     expect(few.bottleneck?.why).not.toContain('一直失敗');
+    // failed messages that did not come back yet (long visibility timeout) hold their groups too
+    const held = simulate(d({ ordering: 'fifo', groups: 64, visibilityTimeoutMs: 120000 }, { poisonRate: 1 }), sc());
+    expect(held.nodes.q.redelivered ?? 0).toBe(0);
+    expect(held.bottleneck?.node).toBe('q');
+    expect(held.bottleneck?.why).toContain('一直失敗');
     // poison messages hold their groups: the text says so
     const poison = simulate(d({ ordering: 'fifo', groups: 8, visibilityTimeoutMs: 10000 }, { poisonRate: 0.01 }), sc());
     expect(poison.nodes.q.redelivered!).toBeGreaterThan(0);
