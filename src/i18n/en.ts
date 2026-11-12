@@ -1202,6 +1202,8 @@ export const EN: Record<string, string> = {
   "會員（App、網頁）": "Members (app, web)",
   "會換掉畫布上的設計，之後這一題不計分。": "It replaces the design on the canvas, and this brief keeps no score after that.",
   "有 {k} 個請求因為排隊滿了被拒絕。": "{k} requests were rejected because the queue was full.",
+  "有 {n} 個元件或線沒有改，但貼上的 JSON 少了匯入時的來源資訊（source）：已經從畫布補回。": "{n} components or lines are unchanged, but the pasted JSON left out their import source (source): put back from the canvas.",
+  "有 {n} 個改過的元件或線少了匯入時的來源資訊（source）。換掉後，這些元件或線就看不到值是從哪裡來的。": "{n} changed components or lines lost their import source (source). After the replace, they no longer show where their values came from.",
   "有人按了「弄壞它」": "Someone pressed “Break it”",
   "有多個下游時，依序還是平行呼叫。": "With several downstreams, call them in sequence or in parallel.",
   "有多個使用者節點時，依權重分配情境的總流量。": "With several Users nodes, split the scenario total traffic by weight.",

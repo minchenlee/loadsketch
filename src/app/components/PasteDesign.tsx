@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { Check, CircleX, ClipboardPaste, Copy, FileText, Sparkles, TriangleAlert, X } from 'lucide-react';
 import { useApp } from '../store.ts';
 import { useExit, useModal } from '../modal.ts';
-import { readPasted } from '../pasteDesign.ts';
+import { keepSources, readPasted } from '../pasteDesign.ts';
 import { describeChange, diffDesigns } from '../designDiff.ts';
 import { aiPrompt } from '../../schema/aiGuide.ts';
 import { t } from '../../i18n/index.ts';
@@ -31,12 +31,17 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
     return () => clearTimeout(h);
   }, [text]);
   const result = useMemo(() => (read.trim() ? readPasted(read) : null), [read]);
-  const changes = useMemo(() => (result?.ok ? diffDesigns(useApp.getState().design(), result.design) : []), [result]);
+  const { changes, kept } = useMemo(() => {
+    if (!result?.ok) return { changes: [], kept: null };
+    const canvas = useApp.getState().design();
+    const changes = diffDesigns(canvas, result.design);
+    return { changes, kept: keepSources(canvas, result.design, changes) };
+  }, [result]);
   const ready = result?.ok && read === text;
 
   const apply = () => {
-    if (!result?.ok) return;
-    useApp.getState().load(result.design);
+    if (!kept) return;
+    useApp.getState().load(kept.design);
     close();
   };
   const copy = async (what: 'prompt' | 'design') => {
@@ -121,6 +126,22 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
                     </ul>
                   )}
                 </div>
+                {!!kept && (kept.restored > 0 || kept.dropped > 0) && (
+                  <div className="space-y-1" data-testid="paste-design-sources">
+                    {kept.restored > 0 && (
+                      <p className="flex gap-1.5">
+                        <Check size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--ok)' }} />
+                        <span>{t('有 {n} 個元件或線沒有改，但貼上的 JSON 少了匯入時的來源資訊（source）：已經從畫布補回。', { n: kept.restored })}</span>
+                      </p>
+                    )}
+                    {kept.dropped > 0 && (
+                      <p className="flex gap-1.5">
+                        <TriangleAlert size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--warn)' }} />
+                        <span>{t('有 {n} 個改過的元件或線少了匯入時的來源資訊（source）。換掉後，這些元件或線就看不到值是從哪裡來的。', { n: kept.dropped })}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
                 {!!result.warnings.length && (
                   <div data-testid="paste-design-warnings">
                     <div className="muted mb-1">{t('設計檢查（可以換，但要注意）：')}</div>

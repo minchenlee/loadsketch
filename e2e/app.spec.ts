@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { plan } from '../tests/import/plan-helper.ts';
+import { importTerraform } from '../src/import/terraform/index.ts';
 
 const SHOTS = join(import.meta.dirname, '..', 'test-results', 'shots');
 mkdirSync(SHOTS, { recursive: true });
@@ -2525,5 +2526,40 @@ test.describe('paste design', () => {
     await dlg.getByTestId('paste-design-text').fill(text);
     await expect(dlg.getByTestId('paste-design-diff')).toContainText('differs from the canvas in 1 places');
     await expect(dlg.getByTestId('paste-design-unsaved')).toContainText('not saved');
+  });
+
+  test('sources from the Terraform import: an answer that left them out gets them back, and the dialog says so (M5 review P2)', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    const imported = importTerraform(JSON.parse(readFileSync(join(import.meta.dirname, '..', 'tests/import/fixtures/ecs-rds.plan.json'), 'utf8'))).design;
+    type S = { load(d: unknown): void; design(): { nodes: { id: string; source?: unknown }[]; edges: { source?: unknown }[] } };
+    await page.evaluate((d) => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().load(d), imported);
+    await expect(page.locator('[data-node]')).toHaveCount(imported.nodes.length);
+    const sourced = imported.nodes.filter((n) => n.source).length + imported.edges.filter((e) => e.source).length;
+    // the model's answer: every source gone, one component changed
+    const answer = JSON.parse(JSON.stringify(imported, (k, v) => (k === 'source' ? undefined : v)));
+    const changed = answer.nodes.find((n: { id: string; kind: string }) => n.kind !== 'client' && imported.nodes.find((x) => x.id === n.id)?.source);
+    changed.region = 'eu-west';
+
+    await page.getByTestId('file-menu').click();
+    await page.getByTestId('paste-design-open').click();
+    const dlg = page.getByTestId('paste-design');
+    await dlg.getByTestId('paste-design-text').fill(JSON.stringify(answer, null, 2));
+    const note = dlg.getByTestId('paste-design-sources');
+    await expect(note).toContainText(`有 ${sourced - 1} 個元件或線沒有改`);
+    await expect(note).toContainText('已經從畫布補回');
+    await expect(note).toContainText('有 1 個改過的元件或線少了匯入時的來源資訊');
+    await dlg.getByTestId('paste-design-apply').click();
+    await expect(dlg).toHaveCount(0);
+    const after = await page.evaluate(() => {
+      const d = (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().design();
+      return { nodes: d.nodes.filter((n) => n.source).map((n) => n.id), edges: d.edges.filter((e) => e.source).length };
+    });
+    expect(after.nodes).not.toContain(changed.id);
+    expect(after.nodes.length + after.edges).toBe(sourced - 1);
+    expect(errors).toEqual([]);
   });
 });

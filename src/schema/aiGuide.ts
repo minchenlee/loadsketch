@@ -62,6 +62,9 @@ export const GUIDE_EXAMPLE: Design = {
   ],
 } as Design;
 
+/** Written by `loadsketch import`; the app keeps it, and a model must not drop it. */
+const SOURCE = 'written by the Terraform import (`loadsketch import`): where the component or edge and its values came from. Keep it exactly as it is on everything you keep; do not write one on a new component or edge.';
+
 const shape = DesignSchema.shape as Record<string, { description?: string }>;
 
 export function aiGuide(): string {
@@ -78,6 +81,7 @@ export function aiGuide(): string {
     '- Change only what you were asked to change. Keep the ids of the components you keep: the app compares the two designs by id and shows the user every change before it replaces the canvas.',
     '- New ids: letters, digits, `_` and `-`, starting with a letter or digit, at most 48 characters, no spaces.',
     '- Give each new component a position `pos` [x, y] in pixels. Traffic goes left to right: put a component about 300 px right of its caller, and spread components that share a caller about 120–240 px apart vertically.',
+    '- A design made by the Terraform import has `source` fields on its components and edges. Copy each `source` unchanged onto every component and edge you keep; leave it out on a new one.',
     '- Leave out a parameter to use its default. Times are in milliseconds unless the unit says otherwise.',
     '- The traffic (requests per second, read share, faults) is the scenario, not the design: set it in the app.',
     '- The user pastes the answer with File → "Paste design JSON". If something is wrong, the app says what and where.',
@@ -91,7 +95,7 @@ export function aiGuide(): string {
     '- `edges` (required) — the calls, up to 2000.',
     `- \`apis\` — ${shape.apis?.description ?? ''} Each API: \`name\` (an id), \`op\` ("read" or "write"), \`share\` (a weight, default 1), \`label\`.`,
     `- \`interRegionMs\` — ${shape.interRegionMs?.description ?? ''}`,
-    '- `notes` — sticky notes on the canvas: {"id", "text", "pos", "width"}.',
+    '- `notes` — sticky notes on the canvas. Each note: `id`, `text`, `pos` ([x, y]), `width` (pixels, optional).',
     '',
     'No other fields are allowed, at any level.',
     '',
@@ -104,10 +108,13 @@ export function aiGuide(): string {
     '- `region` — the region (data center) it runs in, an id like "us-east". A call between two regions adds `interRegionMs`.',
     '- `replicaRegion` — database and sharded_db only: the region of the read replicas when it differs.',
     '- `params` — the settings of its kind (below). Parameters go inside `params`, never next to `id` and `kind`.',
+    `- \`source\` — ${SOURCE}`,
     '',
     '## An edge (call)',
     '',
     'An edge is a call from `from` to `to` (node ids). The caller waits for the answer: a slow callee keeps the caller busy. Optional `id`; optional `apis` (a list of API names: only requests to those APIs take this edge).',
+    '',
+    `- \`source\` — ${SOURCE}`,
     '',
     `The first edge from a client is the internet: its \`latencyMs\` defaults to ${CLIENT_EDGE_LATENCY_MS} ms. Other edges default to 0.5 ms (one data center); between regions add ${INTER_REGION_MS} ms by default.`,
     '',

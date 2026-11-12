@@ -2,7 +2,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readPasted, stripFence, jsonProblem, MAX_PROBLEMS } from '../src/app/pasteDesign.ts';
+import { keepSources, readPasted, stripFence, jsonProblem, MAX_PROBLEMS } from '../src/app/pasteDesign.ts';
+import { diffDesigns } from '../src/app/designDiff.ts';
+import { importTerraform } from '../src/import/terraform/index.ts';
+import type { Design } from '../src/schema/design.ts';
 import { setLang } from '../src/i18n/index.ts';
 
 const root = join(import.meta.dirname, '..');
@@ -102,5 +105,46 @@ describe('paste design', () => {
     setLang('en');
     const p = problems(edit((d) => (d.nodes[2].params.instances = '3')));
     expect(p[0]).not.toMatch(/[一-鿿]/);
+  });
+
+  describe('sources from the Terraform import (M5 review P2)', () => {
+    const canvas = importTerraform(JSON.parse(readFileSync(join(root, 'tests/import/fixtures/ecs-rds.plan.json'), 'utf8'))).design;
+    // what a model gives back when it drops every source
+    const bare = (): Design => JSON.parse(JSON.stringify(canvas, (k, v) => (k === 'source' ? undefined : v)));
+    const keep = (d: Design) => keepSources(canvas, d, diffDesigns(canvas, d));
+
+    it('the fixture has sources on nodes and edges, and the change list does not see them go', () => {
+      expect(canvas.nodes.filter((n) => n.source).length).toBeGreaterThan(1);
+      expect(canvas.edges.filter((e) => e.source).length).toBeGreaterThan(1);
+      expect(diffDesigns(canvas, bare())).toEqual([]);
+    });
+
+    it('a component or line that is otherwise the same gets its source back from the canvas', () => {
+      const k = keep(bare());
+      expect(k.restored).toBe(canvas.nodes.filter((n) => n.source).length + canvas.edges.filter((e) => e.source).length);
+      expect(k.dropped).toBe(0);
+      expect(k.design).toEqual(canvas);
+    });
+
+    it('one that changed is counted, not given an old source that may not fit', () => {
+      const d = bare();
+      const n = d.nodes.find((x) => x.kind !== 'client' && canvas.nodes.find((c) => c.id === x.id)?.source)!;
+      n.region = 'eu-west';
+      const e = d.edges.find((x) => canvas.edges.find((c) => c.from === x.from && c.to === x.to)?.source)!;
+      e.timeoutMs = 1234;
+      const k = keep(d);
+      expect(k.dropped).toBe(2);
+      expect(k.design.nodes.find((x) => x.id === n.id)!.source).toBeUndefined();
+      expect(k.design.edges.find((x) => x.from === e.from && x.to === e.to)!.source).toBeUndefined();
+      expect(k.restored).toBe(canvas.nodes.filter((x) => x.source).length + canvas.edges.filter((x) => x.source).length - 2);
+    });
+
+    it('a source the paste kept is left alone; a design with no sources is returned as it is', () => {
+      const k = keep(JSON.parse(JSON.stringify(canvas)));
+      expect(k).toMatchObject({ restored: 0, dropped: 0 });
+      const plain = JSON.parse(text) as Design;
+      const p = keepSources(plain, plain, []);
+      expect(p.design).toBe(plain);
+    });
   });
 });

@@ -5,12 +5,36 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GUIDE_EXAMPLE, aiGuide, aiPrompt } from '../src/schema/aiGuide.ts';
 import { EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
-import { parseDesign } from '../src/schema/design.ts';
+import { ApiSchema, DesignSchema, EdgeSchema, NodeSchema, NoteSchema, parseDesign } from '../src/schema/design.ts';
 
 const file = join(import.meta.dirname, '..', 'public', 'llms.txt');
 const blocks = (s: string) => [...s.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => m[1]);
 
+/** The text of a `## title` section, up to the next `## `. */
+const section = (g: string, title: string) => {
+  const at = g.indexOf(`\n## ${title}\n`);
+  if (at < 0) throw new Error(`no section ${title}`);
+  const end = g.indexOf('\n## ', at + 1);
+  return g.slice(at, end < 0 ? undefined : end);
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const keys = (s: any): string[] => Object.keys(s.shape);
+const nodeKeys = () => [...new Set(NodeSchema.options.flatMap((o) => keys(o)))];
+
 describe('ai guide', () => {
+  it('every field of the format is in the guide, where it belongs (M5 review P2: source was missing)', () => {
+    const g = aiGuide();
+    const missing = (title: string, list: string[]) => list.filter((k) => !section(g, title).includes(`\`${k}\``)).map((k) => `${title}: ${k}`);
+    expect([
+      ...missing('The design', [...keys(DesignSchema), ...keys(ApiSchema), ...keys(NoteSchema)]),
+      ...missing('A node (component)', nodeKeys()),
+      ...missing('An edge (call)', keys(EdgeSchema)),
+    ]).toEqual([]);
+    expect(nodeKeys()).toContain('source');
+    expect(section(g, 'How to answer')).toContain('Copy each `source` unchanged');
+  });
+
+
   it('public/llms.txt is the guide made from the catalog now (run npm run ai-guide when this fails)', () => {
     expect(readFileSync(file, 'utf8')).toBe(aiGuide());
   });

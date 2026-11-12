@@ -2,7 +2,8 @@
 // What is wrong is said in plain words, with where it is (which component, which line) and what was
 // expected, not as a schema path. Nothing here touches the canvas: the dialog shows the result.
 import type { z } from 'zod';
-import { DesignSchema, checkDesign, type Design, type Issue } from '../schema/design.ts';
+import { DesignSchema, checkDesign, edgeId, type Design, type DesignEdge, type Issue } from '../schema/design.ts';
+import type { Change } from './designDiff.ts';
 import { KINDS } from '../schema/kinds.ts';
 import { t, tx } from '../i18n/index.ts';
 
@@ -254,4 +255,51 @@ function schemaProblem(d: Obj, issue: z.core.$ZodIssue, prefix: PropertyKey[] = 
     default:
       return `${where}：${issue.message}`;
   }
+}
+
+/** What `keepSources` did: the design to load, and how many sources it put back or could not. */
+export interface KeptSources {
+  design: Design;
+  /** Components and lines that lost their `source` without any other change: put back from the canvas. */
+  restored: number;
+  /** Components and lines that lost their `source` and changed too: the old source would not fit. */
+  dropped: number;
+}
+
+/**
+ * A design from the Terraform import has `source` on its components and lines (M5 review P2). A model
+ * that rewrites the design can leave it out, and the change list does not compare it. A component or
+ * line that lost its source but is otherwise the same gets it back from the canvas; one that also
+ * changed is only counted, so the dialog can say so.
+ */
+export function keepSources(canvas: Design, pasted: Design, changes: Change[]): KeptSources {
+  let restored = 0;
+  let dropped = 0;
+  const changedNodes = new Set(changes.flatMap((c) => (c.type === 'node-changed' ? [c.node] : [])));
+  const changedEdges = new Set(changes.flatMap((c) => (c.type === 'edge-changed' ? [c.edge] : [])));
+  const cn = new Map(canvas.nodes.map((n) => [n.id, n]));
+  const nodes = pasted.nodes.map((n) => {
+    const was = cn.get(n.id);
+    if (n.source || !was?.source) return n;
+    if (changedNodes.has(n.id)) return dropped++, n;
+    restored++;
+    return { ...n, source: was.source };
+  });
+  // lines: by id, then by caller and callee, as the change list matches them
+  const ids = new Map(canvas.edges.map((e) => [edgeId(e), e]));
+  const used = new Set<DesignEdge>();
+  const match = (e: DesignEdge) => {
+    const byId = ids.get(edgeId(e));
+    const m = byId && !used.has(byId) ? byId : canvas.edges.find((x) => !used.has(x) && x.from === e.from && x.to === e.to && !pasted.edges.some((y) => edgeId(y) === edgeId(x)));
+    if (m) used.add(m);
+    return m;
+  };
+  const edges = pasted.edges.map((e) => {
+    const was = match(e);
+    if (e.source || !was?.source) return e;
+    if (changedEdges.has(edgeId(e))) return dropped++, e;
+    restored++;
+    return { ...e, source: was.source };
+  });
+  return { design: restored ? { ...pasted, nodes, edges } : pasted, restored, dropped };
 }
