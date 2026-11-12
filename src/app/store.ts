@@ -28,6 +28,7 @@ import { LESSONS } from '../learn/lessons.ts';
 import type { Finding } from '../import/terraform/index.ts';
 import { editedSources } from './sources.ts';
 import { markNew, planEntrance } from './motion.ts';
+import type { CompareItem } from './compare.ts';
 import { VERSIONS_KEY, addVersion, loadVersions, mergeVersions, pinVersion, removeVersion, renameVersion, summarize, updateVersions, type Version } from './versions.ts';
 
 /** localStorage, or undefined where it is blocked (private mode in some browsers). */
@@ -167,6 +168,8 @@ export interface AppState {
   imported: { file: string; loads: number; findings: Finding[] } | null;
   /** Every finished run leaves a version, newest first (versions.ts; kept in localStorage). */
   versions: Version[];
+  /** The runs in the compare view while it is open (compare.ts). */
+  compare: CompareItem[] | null;
 
   load: (d: Design, origin?: () => Design) => void;
   /** Load a design from `loadsketch import terraform` (in the browser) with its checks. */
@@ -218,6 +221,8 @@ export interface AppState {
   loadVersion: (id: string) => void;
   /** Adds versions from a file (runs already in the list are skipped). */
   importVersions: (add: Version[]) => void;
+  openCompare: (items: CompareItem[]) => void;
+  closeCompare: () => void;
 }
 
 /** The canvas at one point of the edit history. */
@@ -334,6 +339,7 @@ export const useApp = create<AppState>((set, get) => {
   future: [],
   imported: null,
   versions: loadVersions(storage()),
+  compare: null,
 
   load: (d, origin) => {
     get().stop();
@@ -636,6 +642,8 @@ export const useApp = create<AppState>((set, get) => {
     set({ scenario: structuredClone(v.scenario) });
   },
   importVersions: (add) => changeVersions((l) => mergeVersions(l, add)),
+  openCompare: (items) => set({ compare: items }),
+  closeCompare: () => set({ compare: null }),
   markPassed: (ids) => {
     const now = get().passed;
     const add = ids.filter((id) => !now.includes(id));

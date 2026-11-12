@@ -1,9 +1,10 @@
 // The version list (roadmap-next M1): every finished run, newest first. Rename, pin, delete, put
 // back on the canvas, export to a file and import from one.
-import { useRef } from 'react';
-import { Download, FileInput, Pin, PinOff, Trash2, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Download, FileInput, GitCompareArrows, Pin, PinOff, Trash2, Upload } from 'lucide-react';
 import { useApp } from '../store.ts';
 import { MAX_VERSIONS, parseVersionFile, versionFile, type Version } from '../versions.ts';
+import { MAX_COMPARE, type CompareItem } from '../compare.ts';
 import { fmtMs, pct } from '../ui.ts';
 import { fmtUsd } from '../../learn/cost.ts';
 import { getLang, t } from '../../i18n/index.ts';
@@ -25,6 +26,18 @@ export function scenarioLine(v: Version): string {
 export function Versions() {
   const versions = useApp((s) => s.versions);
   const file = useRef<HTMLInputElement>(null);
+  // the versions ticked for comparing (ids that are gone are dropped)
+  const [picked, setPicked] = useState<string[]>([]);
+  const chosen = picked.filter((id) => versions.some((v) => v.id === id));
+  const toggle = (id: string) => setPicked(chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id]);
+  const compare = () => {
+    // oldest first: the first one is the baseline
+    const items: CompareItem[] = versions
+      .filter((v) => chosen.includes(v.id))
+      .sort((a, b) => a.at - b.at)
+      .map((v) => ({ key: v.id, name: v.name, at: v.at, design: v.design, scenario: v.scenario, summary: v.summary }));
+    useApp.getState().openCompare(items);
+  };
 
   const exportAll = () => {
     const blob = new Blob([versionFile(versions)], { type: 'application/json' });
@@ -67,22 +80,31 @@ export function Versions() {
           }}
         />
       </div>
+      {versions.length > 1 && (
+        <div className="mt-2 flex items-center gap-2">
+          <button className="btn btn-primary" onClick={compare} disabled={chosen.length < 2} data-testid="versions-compare">
+            <GitCompareArrows size={14} /> {t('比較（{n}）', { n: chosen.length })}
+          </button>
+          <span className="faint text-[13px]">{chosen.length < 2 ? t('勾 2 到 {max} 個版本來比較。', { max: MAX_COMPARE }) : t('最舊的當基準。')}</span>
+        </div>
+      )}
       {!versions.length && <div className="faint mt-6 text-center text-[14px]" data-testid="versions-empty">{t('還沒有版本。按「執行」，跑完就會出現在這裡。')}</div>}
       <ul className="mt-2 space-y-2">
         {versions.map((v) => (
-          <VersionRow key={v.id} v={v} />
+          <VersionRow key={v.id} v={v} picked={chosen.includes(v.id)} canPick={chosen.includes(v.id) || chosen.length < MAX_COMPARE} onPick={() => toggle(v.id)} />
         ))}
       </ul>
     </div>
   );
 }
 
-function VersionRow({ v }: { v: Version }) {
+function VersionRow({ v, picked, canPick, onPick }: { v: Version; picked: boolean; canPick: boolean; onPick: () => void }) {
   const s = v.summary;
   const st = useApp.getState;
   return (
     <li className="card px-2.5 py-2" data-testid="version" data-version={v.id} data-pinned={v.pinned || undefined}>
       <div className="flex items-center gap-1.5">
+        <input type="checkbox" className="shrink-0" checked={picked} disabled={!canPick} onChange={onPick} aria-label={t('選來比較')} title={canPick ? t('選來比較') : t('最多比較 {n} 個', { n: MAX_COMPARE })} data-testid="version-pick" />
         <input className="field min-w-0 flex-1 py-0.5 font-medium" value={v.name} aria-label={t('版本名稱')} onChange={(e) => st().renameVersion(v.id, e.target.value)} data-testid="version-name" />
         <button className={`btn px-1.5 ${v.pinned ? 'btn-on' : ''}`} onClick={() => st().pinVersion(v.id, !v.pinned)} aria-pressed={v.pinned} aria-label={v.pinned ? t('取消釘選') : t('釘選')} title={v.pinned ? t('取消釘選') : t('釘選：不會被新的版本擠掉')} data-testid="version-pin">
           {v.pinned ? <PinOff size={14} /> : <Pin size={14} />}

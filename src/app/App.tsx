@@ -16,6 +16,7 @@ import { decodeShare, isShareHash } from './share.ts';
 import { t } from '../i18n/index.ts';
 import { PracticeOverlay } from './components/Practice.tsx';
 import { PhoneDrawer, PhoneTabs } from './components/Phone.tsx';
+import { CompareHost } from './components/Compare.tsx';
 import { isPhone, usePhone } from './phone.ts';
 
 /** Open the design and scenario of a share link (#s=…). False when the hash holds none. */
@@ -172,6 +173,7 @@ function Shell() {
           <OnCallJudge />
           <ConstraintJudge />
           <PhoneTabs />
+          <CompareHost />
         </div>
       </ReactFlowProvider>
     );
@@ -199,6 +201,7 @@ function Shell() {
         <Slide open={panels.bottom} axis="y">
           <Metrics />
         </Slide>
+        <CompareHost />
       </div>
     </ReactFlowProvider>
   );

@@ -1950,3 +1950,96 @@ test('versions: two tabs do not overwrite each other', async ({ context }) => {
   await expect(a.getByTestId('version')).toHaveCount(2);
   await expect(a.locator('[data-testid="version"][data-pinned]')).toHaveCount(1);
 });
+
+/** Three versions of three-tier: as it is, with 4 API servers, and under a spike. */
+async function threeVersions(page: Page) {
+  await page.goto('/app/?example=three-tier&scenario=steady');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  await runToEnd(page);
+  await page.evaluate(() => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().updateNode('api', { params: { instances: 4 } }));
+  await runToEnd(page);
+  await page.evaluate(() => {
+    const st = (window as unknown as { __loadsketch: { getState(): { scenario: { traffic: { rps: number } }; setScenario(s: unknown): void } } }).__loadsketch.getState();
+    st.setScenario({ ...st.scenario, name: 'spike-ish', traffic: { ...st.scenario.traffic, rps: 1600 } });
+  });
+  await runToEnd(page);
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`compare: versions side by side with a baseline (${theme})`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await threeVersions(page);
+    if (theme === 'dark') await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { setTheme(t: string): void } } }).__loadsketch.getState().setTheme('dark'));
+    await page.getByTestId('tab-versions').click();
+    await expect(page.getByTestId('version')).toHaveCount(3);
+    const compareBtn = page.getByTestId('versions-compare');
+    await expect(compareBtn).toBeDisabled();
+    const picks = page.getByTestId('version-pick');
+    for (let i = 0; i < 3; i++) await picks.nth(i).check();
+    await compareBtn.click();
+
+    const dlg = page.getByTestId('compare');
+    await expect(dlg.getByTestId('compare-col')).toHaveCount(3);
+    // the oldest is the baseline: the others show how much they differ
+    await expect(dlg.getByTestId('compare-col').first().getByTestId('compare-base')).toBeVisible();
+    await expect(dlg.getByTestId('compare-row-p99').locator('[data-tone]')).toHaveCount(2);
+    // more servers cost more
+    await expect(dlg.getByTestId('compare-row-costPerMonth').locator('[data-tone]').first()).toHaveAttribute('data-tone', 'worse');
+    // what changed in each, and the warning for the other scenario
+    await expect(dlg.getByTestId('compare-diff').first()).toContainText('「B · ');
+    await expect(dlg.getByTestId('compare-diff').first()).toContainText('「API 伺服器」的實例數：3 → 4');
+    await expect(dlg.getByTestId('compare-diff').nth(1)).toContainText('情境的每秒請求：800 → 1600');
+    await expect(dlg.getByTestId('compare-mixed')).toBeVisible();
+    // the charts come from running each version again
+    await expect(dlg.getByTestId('compare-running')).toHaveCount(0, { timeout: 60_000 });
+    await expect(dlg.getByTestId('compare-chart-p99')).toBeVisible();
+    await expect(dlg.getByTestId('compare-stale')).toHaveCount(0);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(SHOTS, `compare-${theme}.png`) });
+
+    // another baseline: the deltas follow it
+    await dlg.getByTestId('compare-set-base').first().click();
+    await expect(dlg.getByTestId('compare-col').nth(1).getByTestId('compare-base')).toBeVisible();
+    await expect(dlg.getByTestId('compare-diff').first()).toContainText('「API 伺服器」的實例數：4 → 3');
+    await page.keyboard.press('Escape');
+    await expect(dlg).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('compare: at most 4 versions; a version compared with the same scenario shows no warning', async ({ page }) => {
+  await page.goto('/app/?example=three-tier&scenario=steady');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  for (const n of [2, 3, 4, 5, 6]) {
+    await page.evaluate((k) => (window as unknown as { __loadsketch: Store }).__loadsketch.getState().updateNode('api', { params: { instances: k } }), n);
+    await runToEnd(page);
+  }
+  await page.getByTestId('tab-versions').click();
+  const picks = page.getByTestId('version-pick');
+  await expect(picks).toHaveCount(5);
+  for (let i = 0; i < 4; i++) await picks.nth(i).check();
+  await expect(picks.nth(4)).toBeDisabled();
+  await picks.nth(3).uncheck();
+  await page.getByTestId('versions-compare').click();
+  await expect(page.getByTestId('compare-col')).toHaveCount(3);
+  await expect(page.getByTestId('compare-mixed')).toHaveCount(0);
+});
+
+test.describe('compare on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  test('the table and the changes, no charts', async ({ page }) => {
+    await threeVersions(page);
+    await page.evaluate(() => {
+      const st = (window as unknown as { __loadsketch: { getState(): { versions: { id: string; name: string; at: number; design: unknown; scenario: unknown; summary: unknown }[]; openCompare(i: unknown[]): void } } }).__loadsketch.getState();
+      st.openCompare(st.versions.slice(0, 2).reverse().map((v) => ({ key: v.id, name: v.name, at: v.at, design: v.design, scenario: v.scenario, summary: v.summary })));
+    });
+    const dlg = page.getByTestId('compare');
+    await expect(dlg.getByTestId('compare-table')).toBeVisible();
+    await expect(dlg.getByTestId('compare-diff')).toHaveCount(1);
+    await expect(dlg.getByTestId('compare-charts')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    await page.waitForTimeout(400); // the dialog's entrance
+    await page.screenshot({ path: join(SHOTS, 'compare-phone.png') });
+  });
+});
