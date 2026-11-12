@@ -126,7 +126,7 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
                     </ul>
                   )}
                 </div>
-                {!!kept && (kept.restored > 0 || kept.edited > 0 || kept.dropped > 0) && (
+                {!!kept && (kept.restored > 0 || kept.edited > 0 || kept.dropped > 0 || kept.rewired > 0) && (
                   <div className="space-y-1" data-testid="paste-design-sources">
                     {kept.restored > 0 && (
                       <p className="flex gap-1.5">
@@ -138,6 +138,12 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
                       <p className="flex gap-1.5">
                         <Check size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--ok)' }} />
                         <span>{t('有 {n} 個匯入的值改過了：來源改標成「使用者填」，和在設定面板改值一樣。', { n: kept.edited })}</span>
+                      </p>
+                    )}
+                    {kept.rewired > 0 && (
+                      <p className="flex gap-1.5">
+                        <TriangleAlert size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--warn)' }} />
+                        <span>{t('有 {n} 條線接到別的元件了：Terraform 的證據說的是原來的線，所以這幾條改標成「使用者畫的」。', { n: kept.rewired })}</span>
                       </p>
                     )}
                     {kept.dropped > 0 && (

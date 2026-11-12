@@ -2,9 +2,9 @@
 // What is wrong is said in plain words, with where it is (which component, which line) and what was
 // expected, not as a schema path. Nothing here touches the canvas: the dialog shows the result.
 import type { z } from 'zod';
-import { DesignSchema, checkDesign, edgeId, type Design, type DesignEdge, type Issue, type ParamSource } from '../schema/design.ts';
+import { DesignSchema, checkDesign, edgeId, type Design, type EdgeSource, type Issue, type ParamSource } from '../schema/design.ts';
 import { editedSources } from './sources.ts';
-import type { Change } from './designDiff.ts';
+import { pairEdges, type Change } from './designDiff.ts';
 import { KINDS } from '../schema/kinds.ts';
 import { t, tx } from '../i18n/index.ts';
 
@@ -313,6 +313,8 @@ export interface KeptSources {
   edited: number;
   /** Components that lost their `source` and became another kind: the old source would not fit. */
   dropped: number;
+  /** Lines that kept their id but now join other components: their source says the user drew them. */
+  rewired: number;
 }
 
 type Patch = Record<string, unknown>;
@@ -329,6 +331,7 @@ export function keepSources(canvas: Design, pasted: Design, changes: Change[]): 
   let restored = 0;
   let edited = 0;
   let dropped = 0;
+  let rewired = 0;
   // what changed, from the change list: values by component and by line, and components of another kind
   const pn = new Map(pasted.nodes.map((n) => [n.id, n]));
   const pe = new Map(pasted.edges.map((e) => [edgeId(e), e]));
@@ -369,31 +372,20 @@ export function keepSources(canvas: Design, pasted: Design, changes: Change[]): 
     return next === n.source ? n : { ...n, source: next };
   });
 
-  // lines: by id, then by caller and callee, as the change list matches them
-  const byId = new Map(canvas.edges.map((e) => [edgeId(e), e]));
-  const pastedIds = new Set(pe.keys());
-  const byEnds = new Map<string, DesignEdge[]>();
-  for (const x of canvas.edges) {
-    if (pastedIds.has(edgeId(x))) continue;
-    const key = `${x.from}\u0000${x.to}`;
-    const list = byEnds.get(key);
-    if (list) list.push(x);
-    else byEnds.set(key, [x]);
-  }
-  const used = new Set<DesignEdge>();
-  const match = (e: DesignEdge) => {
-    let m = byId.get(edgeId(e));
-    if (m && used.has(m)) m = undefined;
-    if (!m) {
-      const list = byEnds.get(`${e.from}\u0000${e.to}`);
-      while (list?.length && used.has(list[list.length - 1])) list.pop();
-      m = list?.pop();
-    }
-    if (m) used.add(m);
-    return m;
-  };
+  // lines: the pairs of the change list (by id, then by caller and callee, in order)
+  const wasOf = new Map(pairEdges(canvas.edges, pasted.edges).pairs.map(([x, y]) => [y, x]));
   const edges = pasted.edges.map((e) => {
-    const was = match(e);
+    const was = wasOf.get(e);
+    // the same id, but the line now joins other components: the resources that showed the old line
+    // do not show this one. The user's answer drew it; its values are the user's too (M5 review round 3)
+    if (was && (was.from !== e.from || was.to !== e.to) && (e.source || was.source)) {
+      const old = e.source ?? was.source!;
+      rewired++;
+      const params = old.params ? editedSources(undefined, Object.fromEntries(Object.keys(old.params).map((k) => [k, (e as unknown as Patch)[k]]))) : undefined;
+      const patch = edgePatch.get(edgeId(e));
+      const source: EdgeSource = { line: 'answer', ...(params || patch ? { params: editedSources(params, patch ?? {}) } : {}) };
+      return { ...e, source };
+    }
     const lost = !e.source && !!was?.source;
     const source = e.source ?? (lost ? was!.source : undefined);
     if (!source) return e;
@@ -401,5 +393,5 @@ export function keepSources(canvas: Design, pasted: Design, changes: Change[]): 
     const next = classed(source, edgePatch.get(edgeId(e)));
     return next === e.source ? e : { ...e, source: next };
   });
-  return { design: restored || edited ? { ...pasted, nodes, edges } : pasted, restored, edited, dropped };
+  return { design: restored || edited || rewired ? { ...pasted, nodes, edges } : pasted, restored, edited, dropped, rewired };
 }

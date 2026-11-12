@@ -179,6 +179,41 @@ describe('paste design', () => {
       expect(keep(other).dropped).toBe(1);
     });
 
+    it('lines with the same caller and callee and new ids get their own sources back, in the change list\'s order (M5 review round 3)', () => {
+      const two = {
+        schema: 'loadsketch/design@1',
+        name: 'two',
+        nodes: [{ id: 'a', kind: 'service', pos: [0, 0] }, { id: 'b', kind: 'database', pos: [300, 0] }],
+        edges: [
+          { id: 'r', from: 'a', to: 'b', on: 'read', timeoutMs: 100, source: { line: 'definite', via: ['read.env'], params: { timeoutMs: { evidence: 'iac', role: 'setting', from: 'read.timeout' } } } },
+          { id: 'w', from: 'a', to: 'b', on: 'write', timeoutMs: 100, source: { line: 'presumed', via: ['write.env'], params: { timeoutMs: { evidence: 'iac', role: 'setting', from: 'write.timeout' } } } },
+        ],
+      } as unknown as Design;
+      const pasted = JSON.parse(JSON.stringify(two, (k, v) => (k === 'source' ? undefined : v))) as Design;
+      pasted.edges[0].id = 'r2';
+      pasted.edges[1].id = 'w2';
+      expect(diffDesigns(two, pasted)).toEqual([]);
+      const k = keepSources(two, pasted, diffDesigns(two, pasted));
+      expect(k.design.edges.map((e) => e.source)).toEqual(two.edges.map((e) => e.source));
+    });
+
+    it('a line that kept its id but goes to another component does not keep the old line\'s evidence (M5 review round 3)', () => {
+      for (const kept of [false, true]) {
+        const d = kept ? (JSON.parse(JSON.stringify(canvas)) as Design) : bare();
+        d.nodes.push({ id: 'cache', kind: 'cache', pos: [600, 400] } as Design['nodes'][number]);
+        const e = d.edges.find((x) => x.id === 'ecs_service_api-db_instance_main')!;
+        e.to = 'cache';
+        e.timeoutMs = 200;
+        const k = keepSources(canvas, d, diffDesigns(canvas, d));
+        const src = k.design.edges.find((x) => x.id === e.id)!.source!;
+        // the user's answer drew this line: no Terraform resources say it is there
+        expect(src.line).toBe('answer');
+        expect(src.via).toBeUndefined();
+        expect(src.params?.timeoutMs).toEqual({ evidence: 'answer', role: 'setting' });
+        expect(k.rewired).toBe(1);
+      }
+    });
+
     it('at the size limit of the format: 2000 lines, half of them with a new id, in well under a second', () => {
       const nodes = Array.from({ length: 300 }, (_, i) => ({ id: `n${i}`, kind: 'service', pos: [0, 0] }));
       const edges = Array.from({ length: 2000 }, (_, i) => ({ from: `n${i % 300}`, to: `n${(i * 7 + 1 + Math.floor(i / 300)) % 300}`, source: { line: 'definite' } }));

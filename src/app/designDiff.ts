@@ -58,6 +58,58 @@ function edgeValues(e: DesignEdge): Record<string, Value> {
   return out;
 }
 
+type Ref = { e: DesignEdge; id: string };
+
+/**
+ * Which call of `a` each call of `b` is: by id first, then an unmatched call with the same caller and
+ * callee (its filter or APIs changed), taken in order. Pairs are in the order of `b`; calls left over
+ * are in their design's order. Pasting a design uses the same pairs to give lines their sources back
+ * (M5 review round 3), so both agree. Linear in the number of calls.
+ */
+export function pairEdges(a: DesignEdge[], b: DesignEdge[]): { pairs: [DesignEdge, DesignEdge][]; left: Ref[]; right: Ref[] } {
+  const ae = a.map((e) => ({ e, id: edgeId(e) }));
+  const be = b.map((e) => ({ e, id: edgeId(e) }));
+  const match = new Map<Ref, Ref>();
+  const byId = new Map<string, Ref>();
+  for (const y of be) if (!byId.has(y.id)) byId.set(y.id, y);
+  const taken = new Set<Ref>();
+  for (const x of ae) {
+    const y = byId.get(x.id);
+    if (y && !taken.has(y)) {
+      match.set(y, x);
+      taken.add(y);
+    }
+  }
+  const free = new Map<string, Ref[]>();
+  for (const y of be) {
+    if (taken.has(y)) continue;
+    const key = `${y.e.from}\u0000${y.e.to}`;
+    const list = free.get(key);
+    if (list) list.push(y);
+    else free.set(key, [y]);
+  }
+  const head = new Map<string, number>();
+  const matched = new Set<Ref>(match.values());
+  for (const x of ae) {
+    if (matched.has(x)) continue;
+    const key = `${x.e.from}\u0000${x.e.to}`;
+    const list = free.get(key);
+    const i = head.get(key) ?? 0;
+    if (!list || i >= list.length) continue;
+    head.set(key, i + 1);
+    match.set(list[i], x);
+    matched.add(x);
+  }
+  const pairs: [DesignEdge, DesignEdge][] = [];
+  const right: Ref[] = [];
+  for (const y of be) {
+    const x = match.get(y);
+    if (x) pairs.push([x.e, y.e]);
+    else right.push(y);
+  }
+  return { pairs, left: ae.filter((x) => !matched.has(x)), right };
+}
+
 /**
  * The changes that turn design `a` into design `b`, in a fixed order: components, calls, APIs,
  * design settings. Components match by id; calls match by id, then by caller and callee.
@@ -85,28 +137,7 @@ export function diffDesigns(a: Design, b: Design): Change[] {
     }
   }
 
-  // calls: by id first, then an unmatched call with the same caller and callee (its filter or APIs changed)
-  const ae = a.edges.map((e) => ({ e, id: edgeId(e) }));
-  const be = b.edges.map((e) => ({ e, id: edgeId(e) }));
-  const pairs: [DesignEdge, DesignEdge][] = [];
-  const left = new Set(ae);
-  const right = new Set(be);
-  for (const x of ae) {
-    const y = [...right].find((r) => r.id === x.id);
-    if (y) {
-      pairs.push([x.e, y.e]);
-      left.delete(x);
-      right.delete(y);
-    }
-  }
-  for (const x of [...left]) {
-    const y = [...right].find((r) => r.e.from === x.e.from && r.e.to === x.e.to);
-    if (y) {
-      pairs.push([x.e, y.e]);
-      left.delete(x);
-      right.delete(y);
-    }
-  }
+  const { pairs, left, right } = pairEdges(a.edges, b.edges);
   const named = (id: string) => {
     const n = bn.get(id) ?? an.get(id);
     return n ? nodeName({ node: n.id, kind: n.kind, label: n.label }) : id;
@@ -114,7 +145,6 @@ export function diffDesigns(a: Design, b: Design): Change[] {
   const ref = (id: string, e: DesignEdge): EdgeRef => ({ edge: id, from: e.from, to: e.to, fromName: named(e.from), toName: named(e.to) });
   for (const x of left) out.push({ type: 'edge-removed', ...ref(x.id, x.e) });
   for (const y of right) out.push({ type: 'edge-added', ...ref(y.id, y.e) });
-  pairs.sort((x, y) => b.edges.indexOf(x[1]) - b.edges.indexOf(y[1]));
   for (const [ea, eb] of pairs) {
     const va = edgeValues(ea);
     const vb = edgeValues(eb);

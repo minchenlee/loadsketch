@@ -1212,6 +1212,7 @@ export const EN: Record<string, string> = {
   "有 {k} 個請求因為排隊滿了被拒絕。": "{k} requests were rejected because the queue was full.",
   "有 {n} 個元件換了種類，匯入時的來源不再適用：換掉後，它們就看不到值是從哪裡來的。": "{n} components became another kind, so their import source no longer fits: after the replace, they no longer show where their values came from.",
   "有 {n} 個匯入的值改過了：來源改標成「使用者填」，和在設定面板改值一樣。": "{n} imported values were changed: their source now says \"set by the user\", as when you change a value in the settings panel.",
+  "有 {n} 條線接到別的元件了：Terraform 的證據說的是原來的線，所以這幾條改標成「使用者畫的」。": "{n} lines now join other components: the Terraform evidence was about the old lines, so these are now marked as drawn by the user.",
   "有人按了「弄壞它」": "Someone pressed “Break it”",
   "有多個下游時，依序還是平行呼叫。": "With several downstreams, call them in sequence or in parallel.",
   "有多個使用者節點時，依權重分配情境的總流量。": "With several Users nodes, split the scenario total traffic by weight.",
