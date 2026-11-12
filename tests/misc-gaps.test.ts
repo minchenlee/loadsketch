@@ -220,6 +220,19 @@ describe('FIFO queue and head-of-line blocking (#38)', () => {
     );
   const sc = () => scenario({ seed: 4, durationS: 60, warmupS: 0, traffic: { rps: 200, readRatio: 0 }, keys: { count: 1000 } });
 
+  it('the bottleneck text: too few groups without failures is not blamed on failing messages', () => {
+    // 1 group, 100 ms per message, 200 messages per second: the queue grows, nothing fails
+    const few = simulate(d({ ordering: 'fifo', groups: 1 }, { serviceMs: { mean: 100, cv: 0 } }), sc());
+    expect(few.nodes.q.redelivered ?? 0).toBe(0);
+    expect(few.bottleneck?.node).toBe('q');
+    expect(few.bottleneck?.why).toContain('分組太少');
+    expect(few.bottleneck?.why).not.toContain('一直失敗');
+    // poison messages hold their groups: the text says so
+    const poison = simulate(d({ ordering: 'fifo', groups: 8, visibilityTimeoutMs: 10000 }, { poisonRate: 0.01 }), sc());
+    expect(poison.nodes.q.redelivered!).toBeGreaterThan(0);
+    if (poison.bottleneck?.node === 'q') expect(poison.bottleneck.why).toContain('head-of-line blocking');
+  });
+
   it('a standard queue does not count blocking; a FIFO queue keeps one message per group in work', () => {
     const std = simulate(d(), sc());
     expect(std.nodes.q.holBlocked).toBeUndefined();

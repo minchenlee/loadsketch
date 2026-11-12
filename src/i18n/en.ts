@@ -247,6 +247,7 @@ export const EN: Record<string, string> = {
   "{name}的 health check 把「{target}」移出": "{name} health check took {target} out",
   "{name}的主庫故障，但沒有可用的副本，無法 failover": "{name}: the primary is down and no replica is up, so no failover",
   "{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是一直失敗的訊息卡住自己的分組，同組後面的訊息都在等（head-of-line blocking）。": "{name} keeps growing ({k} messages at the end): the workers are not busy. A message that keeps failing holds its group, and the messages behind it in the group wait (head-of-line blocking).",
+  "{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是同一組一次只能處理一則，分組太少，訊息在等同組的前一則做完。": "{name} keeps filling up ({k} messages left at the end): the workers are not busy. A group handles one message at a time and there are too few groups, so messages wait for the one before them in the same group.",
   "{name}的訊息越積越多（結束時還有 {k} 則）：worker 處理得比寫入慢。": "Messages pile up in {name} ({k} left at the end): workers process slower than writes.",
   "{name}看不到監控（{what}要呼叫的元件失敗），先不動作": "{name} cannot see its metrics (a call for {what} failed): it does not act",
   "{name}變慢 {m} 倍": "{name} slowed down {m}×",

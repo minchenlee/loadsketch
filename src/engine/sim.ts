@@ -4949,6 +4949,10 @@ export class Simulation {
       // messages behind it wait (head-of-line blocking). More workers do not help.
       const worker = this.busiestDownstream(b.node);
       if (r.holBlocked && (!worker || worker.peak < 0.7)) {
+        // (no redelivery: nothing fails; the groups are too few for the traffic)
+        if (!r.redelivered) {
+          return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是同一組一次只能處理一則，分組太少，訊息在等同組的前一則做完。', { name: b.label, k: r.queueDepthEnd ?? 0 });
+        }
         return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是一直失敗的訊息卡住自己的分組，同組後面的訊息都在等（head-of-line blocking）。', { name: b.label, k: r.queueDepthEnd ?? 0 });
       }
       return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 處理得比寫入慢。', { name: b.label, k: r.queueDepthEnd ?? 0 });
