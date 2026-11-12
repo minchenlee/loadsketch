@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, TriangleAlert, CircleX, X } from 'lucide-react';
+import { BookmarkPlus, Check, Plus, Trash2, TriangleAlert, CircleX, X } from 'lucide-react';
 import { KINDS, type ParamSpec } from '../../schema/kinds.ts';
 import { EDGE, isPercent, layout, specsOf, toggleOn, unitLabel } from '../paramLayout.ts';
 import { apiTraffic, edgeLatencyMs, ID_RE, regionsOf, STORE_KINDS, type DesignApi, type DesignEdge, type ParamSource, type ParamValue } from '../../schema/design.ts';
@@ -17,6 +17,7 @@ import { t, tx } from '../../i18n/index.ts';
 import { EVIDENCE_LABEL, isGuess } from '../sources.ts';
 import { ImportChecks } from './ImportChecks.tsx';
 import { Versions } from './Versions.tsx';
+import { MAX_PRESET_NAME, usePresets } from '../presets.ts';
 
 const CV_PRESETS = [
   { value: 0, label: tx('固定（cv 0）') },
@@ -289,6 +290,14 @@ function NodeInspector({ id }: { id: string }) {
   const result = useApp((s) => s.result?.nodes[id]);
   const updateNode = useApp((s) => s.updateNode);
   const remove = useApp((s) => s.remove);
+  const savePreset = usePresets((s) => s.save);
+  // the name being typed for a new preset (null: closed), and the last one saved here
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  useEffect(() => {
+    setSaving(null);
+    setSaved(null);
+  }, [id]);
   if (!node) return null;
   const spec = KINDS[node.kind];
   const Icon = iconOf(node as { kind: string; params?: Record<string, unknown> });
@@ -304,10 +313,38 @@ function NodeInspector({ id }: { id: string }) {
             {spec.labelEn} · id <code>{node.id}</code>
           </div>
         </div>
+        <button className="btn" onClick={() => setSaving(saving === null ? (node.label?.trim() || t(spec.label)).slice(0, MAX_PRESET_NAME) : null)} title={t('存成樣板：之後可以從左邊「我的樣板」拖出一樣的元件')} aria-label={t('存成樣板')} aria-expanded={saving !== null} data-testid="preset-save">
+          <BookmarkPlus size={14} />
+        </button>
         <button className="btn" onClick={() => remove({ type: 'node', id })} title={t('刪除元件')}>
           <Trash2 size={14} />
         </button>
       </div>
+      {saving !== null && (
+        <form
+          className="mt-2 flex items-center gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!saving.trim()) return;
+            savePreset(node, saving);
+            setSaving(null);
+            setSaved(saving.trim());
+          }}
+        >
+          <input className="field min-w-0 flex-1" value={saving} maxLength={MAX_PRESET_NAME} autoFocus aria-label={t('樣板名稱')} onChange={(e) => setSaving(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setSaving(null)} data-testid="preset-name" />
+          <button className="btn btn-primary" type="submit" disabled={!saving.trim()} title={t('存成樣板')} aria-label={t('存成樣板')} data-testid="preset-save-confirm">
+            <Check size={14} />
+          </button>
+          <button className="btn" type="button" onClick={() => setSaving(null)} title={t('取消')} aria-label={t('取消')}>
+            <X size={14} />
+          </button>
+        </form>
+      )}
+      {saved !== null && saving === null && (
+        <p className="muted mt-2 text-[13px]" role="status" data-testid="preset-saved">
+          {t('存成樣板「{name}」了：在左邊「我的樣板」。', { name: saved })}
+        </p>
+      )}
       <p className="muted mt-2 text-[14px] leading-relaxed">{t(spec.summary)}</p>
       <div className="py-1.5">
         <label className="mb-1 block font-medium">{t('名稱')}</label>

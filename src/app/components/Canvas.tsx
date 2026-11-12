@@ -2,6 +2,7 @@ import { isPhone, usePhone } from '../phone.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CircleX, TriangleAlert, X } from 'lucide-react';
 import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useStoreApi, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
+import { usePresets } from '../presets.ts';
 import { useApp } from '../store.ts';
 import type { SdNode } from '../convert.ts';
 import { reducedMotion, springAt, useTilt } from '../motion.ts';
@@ -67,6 +68,8 @@ function firstView(nodes: SdNode[], w: number, h: number): Viewport {
 }
 
 export const DRAG_MIME = 'application/x-loadsketch-kind';
+/** A preset dragged from the palette: its id (M8). */
+export const PRESET_MIME = 'application/x-loadsketch-preset';
 
 // The last pan and zoom. The canvas is mounted again when the language changes; it keeps this view
 // instead of fitting the design again.
@@ -222,11 +225,12 @@ export function Canvas() {
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
-      const kind = e.dataTransfer.getData(DRAG_MIME);
+      const preset = usePresets.getState().presets.find((x) => x.id === e.dataTransfer.getData(PRESET_MIME));
+      const kind = preset?.kind ?? e.dataTransfer.getData(DRAG_MIME);
       if (!kind) return;
       e.preventDefault();
       const p = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      addNode(kind, p.x - NODE_W / 2, p.y - 24);
+      addNode(kind, p.x - NODE_W / 2, p.y - 24, preset && { label: preset.name, params: preset.params });
     },
     [addNode, screenToFlowPosition],
   );

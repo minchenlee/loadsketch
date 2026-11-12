@@ -2594,3 +2594,67 @@ test('custom service: in the palette, with the icon its user picks; not offered 
   await expect(page.locator('.sd-pal[data-kind="custom"]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('presets: save a component with its settings, add it from the palette by click or drag, kept after a reload, exported and imported (M8)', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app/?example=three-tier');
+  await page.evaluate(() => localStorage.removeItem('loadsketch-presets'));
+  await page.reload();
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  await expect(page.getByTestId('presets')).toContainText('存成樣板');
+  await expect(page.getByTestId('presets-export')).toBeDisabled();
+  type N = { id: string; data: { node: { kind: string; label?: string; params?: Record<string, unknown> } } };
+  type S = { nodes: N[]; updateNode(id: string, p: { params: Record<string, unknown> }): void };
+  const state = () => page.evaluate(() => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().nodes.map((n) => ({ id: n.id, ...n.data.node })));
+  await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): S } }).__loadsketch.getState().updateNode('api', { params: { instances: 7, serviceMs: { mean: 200, cv: 0.5 } } }));
+  // save from the inspector: the name starts as the component's name
+  await page.locator('[data-node="api"]').click();
+  await page.getByTestId('preset-save').click();
+  await expect(page.getByTestId('preset-name')).toHaveValue('API 伺服器');
+  await page.getByTestId('preset-name').fill('金流商 200 ms');
+  await page.getByTestId('preset-save-confirm').click();
+  await expect(page.getByTestId('preset-saved')).toContainText('金流商 200 ms');
+  const item = page.getByTestId('preset-item');
+  await expect(item).toHaveCount(1);
+  await expect(item).toContainText('金流商 200 ms');
+  // a click adds a component with the preset's name and settings
+  await item.click();
+  await expect(page.locator('[data-node]')).toHaveCount(6);
+  const added = (await state()).filter((n) => n.label === '金流商 200 ms');
+  expect(added).toHaveLength(1);
+  expect(added[0]).toMatchObject({ kind: 'service', params: { instances: 7, serviceMs: { mean: 200, cv: 0.5 } } });
+  expect(added[0].id).not.toBe('api');
+  // a drag onto the canvas does too, where it is dropped
+  const dt = await page.evaluateHandle(() => new DataTransfer());
+  await item.dispatchEvent('dragstart', { dataTransfer: dt });
+  const box = (await page.locator('.react-flow').boundingBox())!;
+  await page.locator('.react-flow__pane').dispatchEvent('drop', { dataTransfer: dt, clientX: box.x + 200, clientY: box.y + box.height - 150 });
+  await expect(page.locator('[data-node]')).toHaveCount(7);
+  expect((await state()).filter((n) => n.label === '金流商 200 ms')).toHaveLength(2);
+  await page.screenshot({ path: join(SHOTS, 'presets.png') });
+  // kept in this browser
+  await page.reload();
+  await expect(page.getByTestId('preset-item')).toContainText('金流商 200 ms');
+  // export, delete, import back
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('presets-export').click()]);
+  const path = join(SHOTS, 'presets.json');
+  await dl.saveAs(path);
+  const saved = JSON.parse(readFileSync(path, 'utf8'));
+  expect(saved.schema).toBe('loadsketch/presets@1');
+  expect(saved.presets).toEqual([expect.objectContaining({ name: '金流商 200 ms', kind: 'service' })]);
+  await page.getByTestId('preset-remove').click();
+  await expect(page.getByTestId('preset-item')).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('loadsketch-presets') ?? '{}').presets)).toEqual([]);
+  await page.getByTestId('presets-import-file').setInputFiles(path);
+  await expect(page.getByTestId('preset-item')).toContainText('金流商 200 ms');
+  // importing the same file again adds nothing
+  await page.getByTestId('presets-import-file').setInputFiles(path);
+  await expect(page.getByTestId('preset-item')).toHaveCount(1);
+  // a file that is not a preset file is refused
+  await page.getByTestId('presets-import-file').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"schema":"x"}') });
+  await expect(page.locator('.sd-run-error')).toContainText('不是 loadsketch 匯出的樣板檔');
+  await page.getByTestId('presets').screenshot({ path: join(SHOTS, 'presets-palette.png') });
+  expect(errors).toEqual([]);
+});

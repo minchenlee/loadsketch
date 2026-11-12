@@ -187,7 +187,8 @@ export interface AppState {
   onNodesChange: (c: NodeChange<SdNode>[]) => void;
   onEdgesChange: (c: EdgeChange<SdEdge>[]) => void;
   onConnect: (c: Connection) => void;
-  addNode: (kind: string, x: number, y: number) => void;
+  /** A new component; `init` gives it a name and settings (a preset, M8). */
+  addNode: (kind: string, x: number, y: number, init?: { label?: string; params?: DesignNode['params'] }) => void;
   select: (s: Selection) => void;
   /** Selects a part and shows it selected on the canvas (select alone follows the canvas). */
   focus: (s: Selection) => void;
@@ -417,13 +418,15 @@ export const useApp = create<AppState>((set, get) => {
     const through = kind(e.from) === 'cache' && STORE_KINDS.has(kind(e.to));
     set({ edges, dirty: true, selected: { type: 'edge', id }, ...(through ? { throughHint: id } : {}), ...withIssues(get().doc, get().nodes, edges) });
   },
-  addNode: (kind, x, y) => {
+  addNode: (kind, x, y, init) => {
     const spec = KINDS[kind];
     if (!spec) return;
     const id = freshId(kind, new Set(get().nodes.map((n) => n.id)));
     record();
     markNew('node', id);
     const node: DesignNode = { id, kind, pos: [Math.round(x), Math.round(y)] };
+    if (init?.label) node.label = init.label;
+    if (init?.params && Object.keys(init.params).length) node.params = structuredClone(init.params);
     const nodes = [...get().nodes.map((n) => ({ ...n, selected: false })), { id, type: 'component' as const, position: { x: node.pos[0], y: node.pos[1] }, data: { node }, selected: true }];
     set({ nodes, dirty: true, selected: { type: 'node', id }, ...withIssues(get().doc, nodes, get().edges) });
   },
