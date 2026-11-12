@@ -83,6 +83,17 @@ function lengths(pts: Pt[]): number[] {
 
 const STORE_KINDS = new Set(['database', 'sharded_db', 'object_storage']);
 
+/** A cache connected straight to a store: the engine runs the edge as read-through / write-through. */
+function useThrough(source: string, target: string): boolean {
+  return useApp((s) => {
+    const kind = (nid: string) => s.nodes.find((n) => n.id === nid)?.data.node.kind ?? '';
+    return kind(source) === 'cache' && STORE_KINDS.has(kind(target));
+  });
+}
+
+/** What a cache-to-store line means: the label's hover text, the inspector and the hint on connecting. */
+export const throughText = () => t('快取直接接資料庫：這條線是 read-through／write-through。讀取沒命中時，由快取自己去資料庫讀，再填進快取；寫入時，快取先寫進資料庫，再更新自己。呼叫快取的那一方不用另外連資料庫。');
+
 /**
  * Cache-aside order on a read: a node (not a cache) that calls both a cache and a store reads the
  * cache first and the store only on a miss (the engine's 'aside' step). Returns the label for
@@ -157,6 +168,7 @@ export const FlowEdge = memo(function FlowEdge({ id, source, target, sourceX, so
   const labDelay = enter !== null ? ({ '--in-delay': `${enter + EDGE_IN_MS * 0.5}ms` } as React.CSSProperties) : undefined;
   const edge = data?.edge;
   const order = useAsideOrder(id);
+  const through = useThrough(source, target);
 
   // the canvas that draws the traffic on the lines needs this line (d is the line as text)
   useEffect(() => setEdgeGeo(id, line), [id, d]);
@@ -209,14 +221,28 @@ export const FlowEdge = memo(function FlowEdge({ id, source, target, sourceX, so
         {!!edge?.apis?.length && (
           <div
             className={`nodrag nopan pointer-events-none absolute rounded px-1 text-[11px]${lab}`}
-            style={{ ...labDelay, transform: `translate(-50%, 0) translate(${mid[0]}px, ${mid[1] + (order ? 22 : 4)}px)`, color: 'var(--ink-2)', background: 'var(--bg)' }}
+            style={{ ...labDelay, transform: `translate(-50%, 0) translate(${mid[0]}px, ${mid[1] + (order || through ? 22 : 4)}px)`, color: 'var(--ink-2)', background: 'var(--bg)' }}
             data-testid="edge-apis-label"
           >
             {edge.apis.join(' · ')}
             {edge.on && edge.on !== 'all' ? ` · ${onLabel(edge.on)}` : ''}
           </div>
         )}
-        {!order && !edge?.apis?.length && edge?.on && edge.on !== 'all' && (
+        {/* a cache straight to a store: the engine reads and writes through the cache (always shown) */}
+        {through && (
+          <button
+            className={`nodrag nopan absolute cursor-help rounded px-1 text-[11px]${lab}`}
+            style={{ ...labDelay, transform: `translate(-50%, 0) translate(${mid[0]}px, ${mid[1] + 4}px)`, color: 'var(--ink-2)', background: 'var(--bg)', pointerEvents: 'all' }}
+            title={throughText()}
+            aria-label={throughText()}
+            onClick={() => useApp.getState().select({ type: 'edge', id })}
+            data-testid="edge-through-label"
+          >
+            read-through
+            {edge?.on && edge.on !== 'all' && !edge.apis?.length ? ` · ${onLabel(edge.on)}` : ''}
+          </button>
+        )}
+        {!order && !through && !edge?.apis?.length && edge?.on && edge.on !== 'all' && (
           <div
             className={`nodrag nopan pointer-events-none absolute rounded px-1 text-[11px]${lab}`}
             style={{ ...labDelay, transform: `translate(-50%, 0) translate(${mid[0]}px, ${mid[1] + 4}px)`, color: edge.on === 'read' ? 'var(--read)' : edge.on === 'write' ? 'var(--write)' : 'var(--ink-3)', background: 'var(--bg)' }}

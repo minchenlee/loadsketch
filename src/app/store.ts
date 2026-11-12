@@ -5,6 +5,7 @@ import { KINDS } from '../schema/kinds.ts';
 import {
   DESIGN_SCHEMA,
   SCENARIO_SCHEMA,
+  STORE_KINDS,
   checkDesign,
   edgeId,
   formatJson,
@@ -131,6 +132,8 @@ export interface AppState {
   timeline: TimelineEvent[];
   result: SimResult | null;
   error: string | null;
+  /** A cache was just connected straight to a store: that edge shows what read-through means, once. */
+  throughHint: string | null;
   theme: 'light' | 'dark';
   lang: Lang;
   /** The example the design was loaded from (null for a file or a new design). */
@@ -326,6 +329,7 @@ export const useApp = create<AppState>((set, get) => {
   timeline: [],
   result: null,
   error: null,
+  throughHint: null,
   theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
   lang: getLang(),
   example: null,
@@ -358,7 +362,7 @@ export const useApp = create<AppState>((set, get) => {
     // A loaded design ends the last error; a scenario made for the old design (an event on a node this
     // one does not have) would stop every run, so it goes back to the default.
     const fits = (() => { const v = parseDesign(d); return !v.ok || parseScenario(get().scenario, v.value).ok; })();
-    set({ past: [], future: [], doc: d, nodes, edges, selected: null, dirty: false, example: null, origin: origin ?? null, loads: get().loads + 1, result: null, windows: [], timeline: [], tView: 0, ran: null, guesses: {}, guessesLogged: false, error: null, ...(fits ? {} : { scenario: defaultScenario() }), ...withIssues(d, nodes, edges) });
+    set({ past: [], future: [], doc: d, nodes, edges, selected: null, throughHint: null, dirty: false, example: null, origin: origin ?? null, loads: get().loads + 1, result: null, windows: [], timeline: [], tView: 0, ran: null, guesses: {}, guessesLogged: false, error: null, ...(fits ? {} : { scenario: defaultScenario() }), ...withIssues(d, nodes, edges) });
   },
   loadImport: (file, d, findings) => {
     get().load(d);
@@ -409,7 +413,9 @@ export const useApp = create<AppState>((set, get) => {
     record();
     markNew('edge', id);
     const edges = [...get().edges, { id, type: 'flow' as const, source: e.from, target: e.to, data: { edge: e } }];
-    set({ edges, dirty: true, selected: { type: 'edge', id }, ...withIssues(get().doc, get().nodes, edges) });
+    const kind = (nid: string) => get().nodes.find((n) => n.id === nid)?.data.node.kind ?? '';
+    const through = kind(e.from) === 'cache' && STORE_KINDS.has(kind(e.to));
+    set({ edges, dirty: true, selected: { type: 'edge', id }, ...(through ? { throughHint: id } : {}), ...withIssues(get().doc, get().nodes, edges) });
   },
   addNode: (kind, x, y) => {
     const spec = KINDS[kind];

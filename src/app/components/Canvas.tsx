@@ -1,14 +1,15 @@
 import { isPhone } from '../phone.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CircleX, TriangleAlert } from 'lucide-react';
+import { CircleX, TriangleAlert, X } from 'lucide-react';
 import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useStoreApi, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
 import { useApp } from '../store.ts';
 import type { SdNode } from '../convert.ts';
 import { reducedMotion, springAt, useTilt } from '../motion.ts';
 import { ComponentNode, NODE_W } from './ComponentNode.tsx';
-import { FlowEdge } from './FlowEdge.tsx';
+import { FlowEdge, throughText } from './FlowEdge.tsx';
 import { startEdgeFlow } from '../edgeFlow.ts';
 import { t } from '../../i18n/index.ts';
+import { KINDS } from '../../schema/kinds.ts';
 
 const nodeTypes = { component: ComponentNode };
 const edgeTypes = { flow: FlowEdge };
@@ -275,6 +276,7 @@ export function Canvas() {
       {CONTROLS && <Controls showInteractive={false} position="bottom-left" />}
       <EdgeFlow />
       <Checks />
+      <ThroughHint />
     </ReactFlow>
   );
 }
@@ -291,6 +293,41 @@ function EdgeFlow() {
     return pane ? startEdgeFlow(pane, () => store.getState().transform) : undefined;
   }, [store]);
   return null;
+}
+
+/** How long the hint on a cache just connected to a store stays. */
+const THROUGH_HINT_MS = 12_000;
+
+/**
+ * A cache just connected straight to a store: once, at the bottom of the canvas (where the panels do
+ * not cover it), what that line does. The line keeps its "read-through" label.
+ */
+function ThroughHint() {
+  const id = useApp((s) => s.throughHint);
+  const names = useApp((s) => {
+    const e = s.edges.find((x) => x.id === s.throughHint);
+    const name = (nid: string) => { const n = s.nodes.find((x) => x.id === nid)?.data.node; return n ? n.label ?? t(KINDS[n.kind].label) : nid; };
+    return e ? `${name(e.source)} → ${name(e.target)}` : null;
+  });
+  useEffect(() => {
+    if (!id) return;
+    const h = setTimeout(() => useApp.getState().throughHint === id && useApp.setState({ throughHint: null }), THROUGH_HINT_MS);
+    return () => clearTimeout(h);
+  }, [id]);
+  if (!id || !names) return null;
+  return (
+    <Panel position="bottom-center" className="!mb-3 w-[min(440px,calc(100%-24px))]">
+      <div className="card sd-over flex gap-2 p-2.5 text-[13px] leading-snug" role="status" data-testid="edge-through-hint">
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 font-medium">{names}</div>
+          {throughText()}
+        </div>
+        <button className="faint shrink-0 self-start" onClick={() => useApp.setState({ throughHint: null })} aria-label={t('關閉')} data-testid="edge-through-hint-close">
+          <X size={14} />
+        </button>
+      </div>
+    </Panel>
+  );
 }
 
 function Checks() {

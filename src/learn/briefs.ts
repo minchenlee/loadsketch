@@ -90,8 +90,14 @@ const value = (n: DesignNode, key: string): ParamValue | undefined => n.params?.
 export function brokenGivens(b: Brief, d: Design): Broken[] {
   const out: Broken[] = [];
   const now = new Map(d.nodes.map((n) => [n.id, n]));
-  // APIs replace the scenario's read share, so they would change the load the brief gives
-  if (d.apis?.length) out.push({ text: tx('這題的讀寫比例是題目給的，不能用 API 改掉'), vars: {} });
+  // APIs replace the scenario's read share, so they would change the load the brief gives. A brief
+  // that gives its own APIs (the mix of the load) keeps them as given: none added, removed, renamed
+  // or reweighted. Which edges carry which API is the learner's. A design with no APIs at all (an
+  // answer saved before the brief gave them) falls back to the scenario's read share, the same mix.
+  const apiKey = (x: Design['apis']) => JSON.stringify((x ?? []).map((a) => [a.name, a.op, a.share ?? 1]).sort());
+  if (b.start.apis?.length) {
+    if (d.apis?.length && apiKey(d.apis) !== apiKey(b.start.apis)) out.push({ text: tx('這題的 API 和流量比例是題目給的，不能增加、刪除、改名或改比例'), vars: {} });
+  } else if (d.apis?.length) out.push({ text: tx('這題的讀寫比例是題目給的，不能用 API 改掉'), vars: {} });
   for (const id of b.fixed) {
     const was = b.start.nodes.find((n) => n.id === id)!;
     const n = now.get(id);
@@ -294,6 +300,11 @@ const SHOP_DB: N = ['db', 'database', tx('公司共用的資料庫'), [1080, 320
 /** At the start, a given node sits under the users: the brief's card covers the right of the canvas. */
 const under = (n: N): N => [n[0], n[1], n[2], [0, 380], n[4]];
 const CHECKOUT = tx('需求：結帳');
+/** The checkout brief gives the load as two APIs: 80% view a product (read), 20% check out (write). */
+const CHECKOUT_APIS: NonNullable<Design['apis']> = [
+  { name: 'browse', op: 'read', share: 0.8 },
+  { name: 'checkout', op: 'write', share: 0.2 },
+];
 const GEOCODE = tx('需求：查地址');
 const CATALOG = tx('需求：商品頁');
 const PAY: N = ['pay', 'service', tx('金流供應商（外部）'), [1080, 320], { instances: 2, concurrency: 64, serviceMs: { mean: 50, cv: 0.5 }, queueLimit: 200 }];
@@ -398,28 +409,34 @@ export const BRIEFS: Brief[] = [
   {
     id: 'brief-checkout',
     title: CHECKOUT,
-    text: tx('3 人團隊，一個月。做商店的後端：看商品和結帳。結帳要呼叫外部的金流供應商，它已經在畫布上。它每天總有一段時間很慢。這個模型的請求只分讀取和寫入：看商品是讀取，結帳是寫入。'),
+    text: tx('3 人團隊，一個月。做商店的後端：看商品和結帳，題目已經給了這兩支 API：看商品（browse）和結帳（checkout）。只有結帳這支 API 會呼叫外部的金流供應商，它已經在畫布上。它每天總有一段時間很慢。'),
     functional: [tx('使用者能看商品'), tx('使用者能結帳：呼叫金流供應商扣款')],
     load: [tx('每秒 1,500 個請求，80% 是看商品（讀取），20% 是結帳（寫入）'), tx('第 20 秒起金流供應商慢 40 倍，持續 20 秒'), tx('金流慢的時候，結帳可以失敗，但看商品不能受影響')],
     given: [tx('金流供應商平常扣一筆 50 ms，這個改不了'), tx('你的程式處理一個請求平均 5 ms'), tx('資料庫讀一筆 3 ms、寫一筆 10 ms')],
     outOfScope: [tx('重複扣款'), tx('退款'), tx('換另一家金流')],
     scenario: sc(CHECKOUT, { rps: 1500, readRatio: 0.8 }, [{ type: 'slow', atS: 20, forS: 20, node: 'pay', multiplier: 40 }], { durationS: 90 }),
     limits: { maxErrorRate: 0.06, maxP99Ms: 300, budgetPerMonth: 1450, maxPoints: 6 },
-    start: design(CHECKOUT, [USERS, under(PAY)]),
+    start: { ...design(CHECKOUT, [USERS, under(PAY)]), apis: CHECKOUT_APIS },
     fixed: ['pay'],
     // 0.65: the slow 20 s are 22% of the run, and a bulkhead or a breaker may send none of them to pay
     needs: [reachesNode('pay', tx('結帳有送到金流供應商'), 'write', 0.65), looked, notDegraded],
-    hint: tx('結帳＝寫入請求。模型只分讀取和寫入，所以先在「API → 金流」那條線的「走哪些請求」選「只走寫入」：只有結帳會送到金流，看商品（讀取）不會。金流慢 40 倍時，一筆扣款要 2 秒。每秒 300 筆結帳都在等，很快就把 API Server 的位子佔滿，看商品的請求也排不進去。慢的那 20 秒結帳本來就救不了，要做的是不要讓它拖垮別人：在同一條線上設逾時，等太久就放棄。逾時設得太長一樣會佔滿位子。'),
-    reference: design(
-      CHECKOUT,
-      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
-      [['users', 'lb'], ['lb', 'api'], ['api', 'db'], ['api', 'pay', { on: 'write', timeoutMs: 300 }]],
-    ),
-    naive: design(
-      CHECKOUT,
-      [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
-      [['users', 'lb'], ['lb', 'api'], ['api', 'db'], ['api', 'pay', { on: 'write' }]],
-    ),
+    hint: tx('只有結帳這支 API 會呼叫金流：先在「API → 金流」那條線的「走哪些 API」只選 checkout，看商品（browse）就不會送到金流。金流慢 40 倍時，一筆扣款要 2 秒。每秒 300 筆結帳都在等，很快就把 API Server 的位子佔滿，看商品的請求也排不進去。慢的那 20 秒結帳本來就救不了，要做的是不要讓它拖垮別人：在同一條線上設逾時，等太久就放棄。逾時設得太長一樣會佔滿位子。'),
+    reference: {
+      ...design(
+        CHECKOUT,
+        [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
+        [['users', 'lb'], ['lb', 'api'], ['api', 'db'], ['api', 'pay', { apis: ['checkout'], timeoutMs: 300 }]],
+      ),
+      apis: CHECKOUT_APIS,
+    },
+    naive: {
+      ...design(
+        CHECKOUT,
+        [USERS, ['lb', 'load_balancer', tx('負載平衡器'), [270, 200]], ['api', 'service', tx('商店 API'), [540, 200], { instances: 4 }], ['db', 'database', tx('商品資料庫'), [1080, 80]], PAY],
+        [['users', 'lb'], ['lb', 'api'], ['api', 'db'], ['api', 'pay', { apis: ['checkout'] }]],
+      ),
+      apis: CHECKOUT_APIS,
+    },
   },
   {
     id: 'brief-geocode',

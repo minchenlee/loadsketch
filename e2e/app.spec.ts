@@ -1106,17 +1106,17 @@ test('on-call: a hidden fault, paid metrics, an answer with a score, then a fix 
   // the incident runs on its own: the canvas did not run (its scenario has the fault, hidden)
   expect(await store((s) => s.status)).toBe('idle');
   // component metrics are closed until opened: the first 2 are free, then −10 each
-  await expect(page.getByTestId('oncall-open-rule')).toContainText('前 2 個元件的指標免費；第 3 個起，每打開一個扣 10 分。 已打開 0 個。');
+  await expect(page.getByTestId('oncall-score-rule')).toContainText('前 2 個元件的指標免費；第 3 個起，每打開一個扣 10 分。 已打開 0 個。');
   await expect(page.getByTestId('oncall-metrics-api')).toHaveCount(0);
   await expect(page.getByTestId('oncall-open-api')).toHaveText('打開指標（免費）');
   await page.getByTestId('oncall-open-api').click();
   await expect(page.getByTestId('oncall-metrics-api')).toBeVisible();
   await expect(page.getByTestId('oncall-open-api')).toHaveCount(0);
   await page.getByTestId('oncall-open-cache').click();
-  await expect(page.getByTestId('oncall-open-rule')).toContainText('已打開 2 個。');
+  await expect(page.getByTestId('oncall-score-rule')).toContainText('已打開 2 個。');
   await expect(page.getByTestId('oncall-open-lb')).toHaveText('打開指標（−10 分）');
   await page.getByTestId('oncall-open-lb').click();
-  await expect(page.getByTestId('oncall-open-rule')).toContainText('已打開 3 個。');
+  await expect(page.getByTestId('oncall-score-rule')).toContainText('已打開 3 個。');
   await expect(page.getByTestId('oncall-answer')).toBeDisabled();
   await page.screenshot({ path: join(SHOTS, 'oncall-watch.png') });
   await page.getByTestId('oncall-node-api').click();
@@ -2269,4 +2269,73 @@ test('a cache connected straight to a database: the edge says it is read-through
     st.setState({ selected: { type: 'edge', id: st.getState().edges.find((e) => e.source === 'api' && e.target === 'db')!.id } });
   });
   await expect(page.getByTestId('edge-through-note')).toHaveCount(0);
+});
+
+test('read-through: a cache wired to a database says so on the canvas line, with the full text on hover and a hint once', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app/?example=three-tier');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  // no cache-to-database line yet: no label, no hint
+  await expect(page.getByTestId('edge-through-label')).toHaveCount(0);
+  await expect(page.getByTestId('edge-through-hint')).toHaveCount(0);
+  type S = { onConnect(c: { source: string; target: string }): void; edges: { id: string; source: string; target: string }[]; selected: { type: string; id: string } | null };
+  const st = <T,>(fn: (s: S) => T) => page.evaluate(`(${fn.toString()})(window.__loadsketch.getState())`) as Promise<T>;
+  await st((s) => s.onConnect({ source: 'cache', target: 'db' }));
+  const label = page.getByTestId('edge-through-label');
+  await expect(label).toHaveCount(1);
+  await expect(label).toContainText('read-through');
+  await expect(label).toHaveAttribute('title', /讀取沒命中時，由快取自己去資料庫讀/);
+  // the hint shows when the line is connected, and closes
+  const hint = page.getByTestId('edge-through-hint');
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText('read-through');
+  await page.screenshot({ path: join(SHOTS, 'edge-read-through.png') });
+  await hint.getByTestId('edge-through-hint-close').click();
+  await expect(hint).toHaveCount(0);
+  // a click on the label opens the line in the inspector, where the paragraph stays
+  await label.click();
+  const id = await st((s) => s.edges.find((e) => e.source === 'cache' && e.target === 'db')!.id);
+  expect(await st((s) => s.selected)).toEqual({ type: 'edge', id });
+  await expect(page.getByTestId('edge-through-note')).toContainText('read-through／write-through');
+  // a design that already has the line shows the label, but not the hint
+  const design = await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { design(): unknown } } }).__loadsketch.getState().design());
+  await page.evaluate((d) => (window as unknown as { __loadsketch: { getState(): { load(d: unknown): void } } }).__loadsketch.getState().load(d), design);
+  await expect(page.getByTestId('edge-through-label')).toHaveCount(1);
+  await expect(page.getByTestId('edge-through-hint')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('checkout brief: the brief gives two APIs, and only checkout goes to the payment provider', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app/');
+  type S = { doc: { apis?: { name: string; op: string; share?: number }[] }; edges: { id: string; target: string; data: { edge: { apis?: string[] } } }[]; setState?: never };
+  const st = <T,>(fn: (s: S) => T) => page.evaluate(`(${fn.toString()})(window.__loadsketch.getState())`) as Promise<T>;
+  await page.getByTestId('open-practice').click();
+  await page.getByTestId('brief-start-brief-checkout').click();
+  const box = page.getByTestId('problem-brief-checkout');
+  await expect(box.getByTestId('brief-text')).toContainText('只有結帳這支 API 會呼叫外部的金流供應商');
+  await expect(box.getByTestId('brief-text')).not.toContainText('模型只分讀取和寫入');
+  expect(await st((s) => s.doc.apis)).toEqual([
+    { name: 'browse', op: 'read', share: 0.8 },
+    { name: 'checkout', op: 'write', share: 0.2 },
+  ]);
+  // the reference: the line to the provider carries checkout only
+  await box.getByTestId('brief-reference').click();
+  expect(await st((s) => s.edges.find((e) => e.target === 'pay')!.data.edge.apis)).toEqual(['checkout']);
+  const payEdge = await st((s) => s.edges.find((e) => e.target === 'pay')!.id);
+  await page.evaluate((id) => (window as unknown as { __loadsketch: { setState(s: unknown): void } }).__loadsketch.setState({ selected: { type: 'edge', id } }), payEdge);
+  const chips = page.getByTestId('edge-apis');
+  await expect(chips.getByRole('button', { name: 'checkout' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(chips.getByRole('button', { name: 'browse' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('edge-apis-label')).toContainText('checkout');
+  await page.getByRole('button', { name: /^(執行|再跑一次)$/ }).click();
+  await page.getByRole('button', { name: '跳到結尾' }).click();
+  await expect(page.getByTestId('run')).toBeVisible({ timeout: 90_000 });
+  await expect(box.getByTestId('problem-score')).toHaveText('參考設計過關（不計分）');
+  expect(errors).toEqual([]);
 });

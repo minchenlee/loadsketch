@@ -272,7 +272,7 @@ function Watch() {
       <Chart testId="oncall-p99" title={t('使用者看到的 p99')} height={120} unit="ms" data={[xs, sym.map((x) => x.p99)]} series={[{ label: 'p99', color: 'var(--warn)' }]} />
 
       <div className="mt-3 text-[14px] font-medium">{t('元件')}</div>
-      <div className="faint text-[13px]" data-testid="oncall-open-rule">
+      <div className="faint text-[13px]" data-testid="oncall-score-rule">
         {t('前 {free} 個元件的指標免費；第 {next} 個起，每打開一個扣 {n} 分。', { free: POINTS.free, next: POINTS.free + 1, n: -POINTS.open })}{' '}
         {t('已打開 {k} 個。', { k: st.opened.length })}
       </div>

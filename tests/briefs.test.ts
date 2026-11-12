@@ -225,3 +225,46 @@ describe('review findings', () => {
     expect(failed(verdict(b, d))).toEqual([]);
   });
 });
+
+describe('checkout gives its two APIs (roadmap-next M11)', () => {
+  const b = BRIEF_BY_ID['brief-checkout'];
+  const names = (d: Design) => (d.apis ?? []).map((a) => `${a.name}:${a.op}:${a.share}`);
+  // the answer saved before the brief gave APIs: the pay edge carries writes only
+  const old = (d: Design, keepApis: boolean): Design => {
+    const { apis, ...rest } = structuredClone(d);
+    const edges = rest.edges.map((e) => (e.to === 'pay' ? { ...(({ apis: _a, ...x }) => x)(e), on: 'write' as const } : e));
+    return keepApis ? { ...rest, apis, edges } : { ...rest, edges };
+  };
+
+  it('start, reference and naive carry the same two APIs; only checkout goes to the payment provider', () => {
+    for (const d of [b.start, b.reference, b.naive]) expect(names(d)).toEqual(['browse:read:0.8', 'checkout:write:0.2']);
+    for (const d of [b.reference, b.naive]) expect(d.edges.find((e) => e.to === 'pay')!.apis).toEqual(['checkout']);
+  });
+
+  it('the APIs cannot be added, removed, renamed or reweighted', () => {
+    const r = b.reference;
+    const apis = r.apis!;
+    for (const changed of [
+      [...apis, { name: 'refund', op: 'write' as const, share: 0.1 }],
+      [apis[1]],
+      [{ ...apis[0], name: 'list' }, apis[1]],
+      [{ ...apis[0], share: 0.7 }, { ...apis[1], share: 0.3 }],
+      [{ ...apis[0], op: 'write' as const }, apis[1]],
+    ]) expect(brokenGivens(b, { ...r, apis: changed }), JSON.stringify(changed)).toHaveLength(1);
+    // which edge carries which API is the learner's
+    const d = structuredClone(r);
+    d.edges.find((e) => e.to === 'pay')!.apis = ['browse', 'checkout'];
+    expect(brokenGivens(b, d)).toEqual([]);
+  });
+
+  it('other briefs still do not take APIs', () => {
+    const s = BRIEF_BY_ID['brief-shortener'];
+    expect(brokenGivens(s, { ...s.reference, apis: [{ name: 'go', op: 'read', share: 1 }] })).toHaveLength(1);
+  });
+
+  it('the old answer (pay edge on writes), with or without the APIs, still passes; its naive form still fails', () => {
+    expect(failed(verdict(b, old(b.reference, true)))).toEqual([]);
+    expect(failed(verdict(b, old(b.reference, false)))).toEqual([]);
+    expect(verdict(b, old(b.naive, false)).passed).toBe(false);
+  });
+});

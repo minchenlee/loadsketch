@@ -41,7 +41,7 @@ Token 定義在 `src/app/index.css` 的 `:root` 和 `:root.dark`。顏色值跟�
 | 畫布上的元件卡片 | `.sd-node` | 見第 5 節 |
 | 連線上的標籤 | `.sd-edge-label` | |
 | 浮在畫布上的卡片（題目、值班） | `.card.sd-float` | 從右上角彈出。標題和動作按鈕在同一行；內容在下面。上下左右的內距一致 |
-| 浮在畫布上的其他卡片和按鈕（設計檢查） | `.card.sd-over`、`.btn.sd-over` | 從左上角彈出 |
+| 浮在畫布上的其他卡片和按鈕（設計檢查；快取接資料庫時，畫布下方的 read-through 提示） | `.card.sd-over`、`.btn.sd-over` | 從左上角彈出 |
 | 畫布的縮放按鈕 | `.react-flow__controls` | |
 | 下拉選單和動作選單 | `.sd-menu` | |
 | 圖表的 hover 提示框 | `.sd-tip` | |
