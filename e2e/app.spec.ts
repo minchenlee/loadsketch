@@ -2043,3 +2043,30 @@ test.describe('compare on a phone', () => {
     await page.screenshot({ path: join(SHOTS, 'compare-phone.png') });
   });
 });
+
+test('versions: a browser that stores nothing says so on the versions tab, whatever else it shows', async ({ page }) => {
+  // every write of the versions throws, as in a browser that blocks site data
+  await page.addInitScript(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k: string, v: string) {
+      if (k === 'loadsketch-versions') throw new DOMException('blocked', 'SecurityError');
+      return set.call(this, k, v);
+    };
+  });
+  await page.goto('/app/?example=three-tier&scenario=steady');
+  await expect(page.locator('[data-node]')).toHaveCount(5);
+  await page.getByTestId('tab-versions').click();
+  await expect(page.getByTestId('versions-memory-only')).toHaveCount(0);
+  // the first change is an import with a damaged version: its message and the note both show
+  const good = await page.evaluate(() => ({ id: 'v1', at: 1, name: 'ok', pinned: false, design: { schema: 'loadsketch/design@1', name: 'd', nodes: [], edges: [] }, scenario: { schema: 'loadsketch/scenario@1', traffic: { rps: 1 } }, summary: { offered: 1, ok: 1, errorRate: 0, throughputRps: 1, p50: 1, p99: 1, fail: {}, costPerMonth: 0, complexity: 0, bottleneck: null } }));
+  const file = JSON.stringify({ schema: 'loadsketch/versions@1', versions: [good, { id: 'bad' }] });
+  await page.getByTestId('versions-import-file').setInputFiles({ name: 'v.json', mimeType: 'application/json', buffer: Buffer.from(file) });
+  await expect(page.getByTestId('version')).toHaveCount(1);
+  await expect(page.getByText('有 1 個版本格式不對')).toBeVisible();
+  await expect(page.getByTestId('versions-memory-only')).toBeVisible();
+  // and it stays after more changes
+  await runToEnd(page);
+  await page.getByTestId('tab-versions').click();
+  await expect(page.getByTestId('version')).toHaveCount(2);
+  await expect(page.getByTestId('versions-memory-only')).toBeVisible();
+});

@@ -25,6 +25,7 @@ export function scenarioLine(v: Version): string {
 
 export function Versions() {
   const versions = useApp((s) => s.versions);
+  const memoryOnly = useApp((s) => s.versionsMemoryOnly);
   const file = useRef<HTMLInputElement>(null);
   // the versions ticked for comparing (ids that are gone are dropped)
   const [picked, setPicked] = useState<string[]>([]);
@@ -80,6 +81,11 @@ export function Versions() {
           }}
         />
       </div>
+      {memoryOnly && (
+        <div className="card mt-2 px-2.5 py-1.5 text-[13px] leading-snug" style={{ borderColor: 'color-mix(in srgb, var(--warn) 55%, var(--line))' }} data-testid="versions-memory-only">
+          {t('這個瀏覽器不讓網頁存資料：版本只留到關閉分頁。要留下版本，先匯出成檔案。')}
+        </div>
+      )}
       {versions.length > 1 && (
         <div className="mt-2 flex items-center gap-2">
           <button className="btn btn-primary" onClick={compare} disabled={chosen.length < 2} data-testid="versions-compare">
