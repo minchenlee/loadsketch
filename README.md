@@ -120,6 +120,10 @@ The CLI prints Chinese by default; use `--lang en` or `LOADSKETCH_LANG=en` for E
 - Panels: `⌘B` left, `⌥⌘B` right, `⌘J` bottom (Ctrl on Windows and Linux).
 - URL options: `?example=three-tier&scenario=spike&speed=0.1&autorun=1&theme=dark&lang=en`.
 
+## Use it from an AI agent
+
+loadsketch has an [Agent Skill](https://loadsketch.mclee.dev/skills/loadsketch/SKILL.md) for agents such as Claude Code. Download it from **Paste design JSON** in the file menu (**Download SKILL.md**), or from the link, and put it in `~/.claude/skills/loadsketch/SKILL.md`. Then ask the agent to change a design: give it the design JSON (**Copy only the design JSON**), and paste its answer back with **Paste design JSON**. The skill holds the steps and the same format guide as `/llms.txt`; `npm run ai-guide` makes all three files from the component catalog.
+
 ## Tests
 
 ```sh

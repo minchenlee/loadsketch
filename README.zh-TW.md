@@ -105,6 +105,10 @@ node cli/loadsketch.ts fmt examples/designs/three-tier.json --check
 npm run schema                             # 改了元件目錄後重新產生 schema/*.json
 ```
 
+## 從 AI agent 使用
+
+給 Claude Code 等 AI agent 用的[技能檔 SKILL.md](https://loadsketch.mclee.dev/skills/loadsketch/SKILL.md)。在檔案選單的「貼上設計 JSON」按「下載 SKILL.md」（或直接用連結下載），放到 `~/.claude/skills/loadsketch/SKILL.md`。之後請 agent 改設計：把設計 JSON 給它（「只複製設計 JSON」），再用「貼上設計 JSON」把它的回答貼回來。技能檔裡有步驟，和 `/llms.txt` 同一份格式說明；`npm run ai-guide` 從元件目錄產生這三個檔案。
+
 ## 範例
 
 | 設計 | 適合的情境 | 看什麼 |

@@ -143,6 +143,37 @@ export function aiGuide(): string {
   return out.join('\n');
 }
 
+export const SKILL_NAME = 'loadsketch';
+export const SKILL_DESCRIPTION =
+  `Edit or create a system design for loadsketch (https://loadsketch.mclee.dev), a simulator for system designs. Use when the user wants to change, build or fix a loadsketch design (a JSON file whose schema is ${DESIGN_SCHEMA}), or asks for an architecture they will paste into loadsketch.`;
+
+/**
+ * An Agent Skill (roadmap-next M12): YAML frontmatter, the steps for the agent, then the whole
+ * format guide. One file, so the user downloads one thing; the guide is the same text as llms.txt.
+ */
+export function skillMd(): string {
+  return [
+    '---',
+    `name: ${SKILL_NAME}`,
+    `description: ${JSON.stringify(SKILL_DESCRIPTION)}`,
+    '---',
+    '',
+    '# loadsketch',
+    '',
+    'loadsketch simulates a system design: components, the calls between them, and the traffic sent through them. The user works on the canvas of the web app; you work on the design JSON.',
+    '',
+    '## Steps',
+    '',
+    '1. Get the design JSON. If the user has not given it, ask for it: in loadsketch, File → "Paste design JSON" → "Copy only the design JSON", or File → "Save as JSON". A path to a saved `.json` file works too. To start from nothing, write a new design.',
+    '2. Change the design as the user asks, following the format guide below. Change only what was asked. Keep the ids and the `source` fields of everything you keep.',
+    '3. Check your answer against the guide: every field is allowed, every edge points to existing node ids, and every parameter is inside the limits.',
+    '4. Give back the whole design as one ```json code block (or write it to the file the user named). Say in a few lines what you changed and why.',
+    '5. Tell the user to paste it back: in loadsketch, File → "Paste design JSON", paste, look at the list of changes, and click "Replace the canvas". If the app says something is wrong, fix what it names and give the whole design again.',
+    '',
+    aiGuide(),
+  ].join('\n');
+}
+
 /** The text the "copy a prompt for an AI" button puts on the clipboard: the guide, the design, the request. */
 export function aiPrompt(design: Design, guideUrl: string): string {
   return [

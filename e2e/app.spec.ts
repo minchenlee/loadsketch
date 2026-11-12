@@ -2508,6 +2508,34 @@ test.describe('paste design', () => {
     await dlg.screenshot({ path: join(SHOTS, 'paste-design-ai.png') });
   });
 
+  test('skill: SKILL.md downloads from a fixed address next to the prompt, with a line on where to put it', async ({ page }) => {
+    await page.goto('/app/?example=three-tier');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.getByTestId('file-menu').click();
+    await page.getByTestId('paste-design-open').click();
+    const dlg = page.getByTestId('paste-design');
+    const link = dlg.getByTestId('paste-design-skill');
+    await expect(link).toContainText('下載 SKILL.md');
+    await expect(dlg.getByTestId('paste-design-step1')).toContainText('複製給 AI 的提示');
+    await expect(dlg.getByTestId('paste-design-skill-hint')).toContainText('~/.claude/skills/loadsketch/');
+    const href = await link.getAttribute('href');
+    expect(new URL(href!).pathname).toBe('/skills/loadsketch/SKILL.md');
+    expect(await link.getAttribute('download')).toBe('SKILL.md');
+    const res = await page.request.get(href!);
+    expect(res.status()).toBe(200);
+    const served = await res.text();
+    expect(served.startsWith('---\nname: loadsketch\ndescription: ')).toBe(true);
+    expect(served).toContain('# loadsketch design format');
+    // the same text as the guide at /llms.txt
+    const guide = await (await page.request.get(new URL('/llms.txt', href!).href)).text();
+    expect(served).toContain(guide);
+    // a click saves the file
+    const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    expect(download.suggestedFilename()).toBe('SKILL.md');
+    expect(readFileSync((await download.path())!, 'utf8')).toBe(served);
+    await expect(dlg).toBeVisible();
+  });
+
   test('unsaved changes are named before replacing; a copy the clipboard refuses says so', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new Error('denied'); } } });

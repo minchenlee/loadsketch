@@ -4,7 +4,7 @@
 // and room for the request) and the design alone can be copied from here.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CircleX, ClipboardPaste, Copy, FileText, Sparkles, TriangleAlert, X } from 'lucide-react';
+import { Check, CircleX, ClipboardPaste, Copy, Download, FileText, Sparkles, TriangleAlert, X } from 'lucide-react';
 import { useApp } from '../store.ts';
 import { useExit, useModal } from '../modal.ts';
 import { keepSources, readPasted } from '../pasteDesign.ts';
@@ -14,6 +14,8 @@ import { t } from '../../i18n/index.ts';
 
 /** The guide is at the site's root (public/llms.txt); the app is at /app/. */
 export const guideUrl = () => new URL('../llms.txt', location.href).href;
+/** The Agent Skill (M12), made from the same guide: public/skills/loadsketch/SKILL.md. */
+export const skillUrl = () => new URL('../skills/loadsketch/SKILL.md', location.href).href;
 
 /** Reading waits this long after the last key, so a long paste is not read at every key. */
 const READ_MS = 200;
@@ -78,7 +80,13 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
               <a className="btn" href={guideUrl()} target="_blank" rel="noreferrer" title={t('給 AI 讀的格式說明（英文）。可以直接把這個網址給 AI。')} data-testid="paste-design-guide">
                 <FileText size={14} /> {t('格式說明')}
               </a>
+              <a className="btn" href={skillUrl()} download="SKILL.md" title={t('給 Claude Code 等 AI agent 用的技能檔：步驟和格式說明')} data-testid="paste-design-skill">
+                <Download size={14} /> {t('下載 SKILL.md')}
+              </a>
             </div>
+            <p className="faint text-[13px]" data-testid="paste-design-skill-hint">
+              {t('用 Claude Code 等 AI agent 的話：把 SKILL.md 放到 ~/.claude/skills/loadsketch/，之後直接請它改設計 JSON。')}
+            </p>
             {copied === 'no' && (
               <p className="text-[13px]" style={{ color: 'var(--bad-ink)' }} data-testid="paste-design-copy-failed">
                 {t('不能寫入剪貼簿。改用檔案選單的「存成 JSON」。')}
