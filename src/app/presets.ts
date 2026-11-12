@@ -125,25 +125,46 @@ export function savePresets(store: Store | undefined, list: Preset[]): boolean {
   }
 }
 
-/**
- * Changes the list as it is in storage now: another tab may have saved presets since this one read
- * them (M8 review P2), as `updateVersions()` does for versions. Without a readable list in storage,
- * the change applies to the list in memory. `memoryOnly`: the result could not be saved.
- *
- * `unsaved`: the last write failed, so memory holds changes storage does not have. The change then
- * applies to the list in memory; the older list in storage would undo them (M8 review round 2).
- */
-export function updatePresets(store: Store | undefined, memory: Preset[], change: (list: Preset[]) => Preset[], unsaved = false): { list: Preset[]; memoryOnly: boolean } {
-  let base = memory;
-  if (!unsaved) try {
+/** A change to the list: replayed on a newer list from storage, so it works by id, name and kind. */
+export type PresetChange = (list: Preset[]) => Preset[];
+/** At most this many changes wait for storage to take a write; more are refused. */
+export const MAX_PENDING = 50;
+
+/** The list in storage now, or null when storage has none or cannot be read. */
+function stored(store: Store | undefined): Preset[] | null {
+  try {
     const text = store?.getItem(PRESETS_KEY);
+    if (text === null) return [];
     const r = text ? parsePresetFile(text) : null;
-    if (r?.ok) base = r.presets.slice(0, MAX_PRESETS);
+    return r?.ok ? r.presets.slice(0, MAX_PRESETS) : null;
   } catch {
-    // unreadable storage: the list in memory
+    return null;
   }
-  const list = change(base);
-  return { list, memoryOnly: !savePresets(store, list) };
+}
+
+/**
+ * The list to show: the list in storage now, with this tab's changes not saved yet on top. Without a
+ * readable list in storage, the list in memory (it has those changes already).
+ */
+export function viewPresets(store: Store | undefined, memory: Preset[], pending: PresetChange[]): Preset[] {
+  const latest = store ? stored(store) : null;
+  return latest ? pending.reduce((l, c) => c(l), latest) : memory;
+}
+
+/**
+ * Changes the list as it is in storage now: another tab may have changed it since this one read it
+ * (M8 review P2). Changes that could not be saved (full or blocked storage) wait in `pending` and are
+ * replayed on the newest list each time, so neither this tab's unsaved changes nor another tab's
+ * saved ones are lost (M8 review rounds 2 and 3). A save that works empties `pending`.
+ * `refused`: too many changes wait already; this one is not made.
+ */
+export function updatePresets(store: Store | undefined, memory: Preset[], change: PresetChange, pending: PresetChange[] = []): { list: Preset[]; memoryOnly: boolean; pending: PresetChange[]; refused: boolean } {
+  const latest = store ? stored(store) : null;
+  const list = change(latest ? pending.reduce((l, c) => c(l), latest) : memory);
+  if (savePresets(store, list)) return { list, memoryOnly: false, pending: [], refused: false };
+  if (!store) return { list, memoryOnly: true, pending: [], refused: false };
+  if (pending.length >= MAX_PENDING) return { list: viewPresets(store, memory, pending), memoryOnly: true, pending, refused: true };
+  return { list, memoryOnly: true, pending: [...pending, change], refused: false };
 }
 
 const browserStore = (): Store | undefined => {
@@ -158,6 +179,8 @@ interface PresetState {
   presets: Preset[];
   /** The browser keeps nothing: the presets last until the tab closes. */
   memoryOnly: boolean;
+  /** The last change was not made: too many changes wait for storage already. */
+  refused: boolean;
   save: (node: Pick<DesignNode, 'kind' | 'params'>, name: string) => Preset;
   remove: (id: string) => void;
   /** Adds the presets of a file; returns how many were added and how many did not fit. */
@@ -165,14 +188,24 @@ interface PresetState {
 }
 
 export const usePresets = create<PresetState>((set, get) => {
-  const write = (change: (list: Preset[]) => Preset[]) => {
-    const r = updatePresets(browserStore(), get().presets, change, get().memoryOnly);
-    set({ presets: r.list, memoryOnly: r.memoryOnly });
+  /** Changes not saved yet (full or blocked storage), replayed on the newest list each time. */
+  let pending: PresetChange[] = [];
+  const write = (change: PresetChange) => {
+    const r = updatePresets(browserStore(), get().presets, change, pending);
+    pending = r.pending;
+    set({ presets: r.list, memoryOnly: r.memoryOnly, refused: r.refused });
     return r.list;
   };
+  // another tab changed the presets: its list, with this tab's unsaved changes on top
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key === PRESETS_KEY || e.key === null) set({ presets: viewPresets(browserStore(), get().presets, pending) });
+    });
+  }
   return {
     presets: loadPresets(browserStore()),
     memoryOnly: false,
+    refused: false,
     save: (node, name) => {
       let saved!: Preset;
       write((presets) => {
@@ -194,11 +227,3 @@ export const usePresets = create<PresetState>((set, get) => {
     },
   };
 });
-
-// another tab changed the presets: show its list
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
-    // not while this tab holds changes it could not save: the list in storage is older
-    if ((e.key === PRESETS_KEY || e.key === null) && !usePresets.getState().memoryOnly) usePresets.setState({ presets: loadPresets(browserStore()) });
-  });
-}

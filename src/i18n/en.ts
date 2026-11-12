@@ -1389,6 +1389,8 @@ export const EN: Record<string, string> = {
   "測試模式腳本": "Test-mode scripts",
   "漸增": "Ramp",
   "瀏覽": "Browse",
+  "瀏覽器存不了樣板，還沒存的改動太多：這次的改動沒有做。先匯出樣板。": "This browser cannot save presets, and too many changes are waiting: this change was not made. Export your presets first.",
+  "瀏覽器存不了版本，還沒存的改動已經有 {n} 個：這次的改動沒有做。先匯出成檔案。": "This browser cannot save versions, and {n} changes are already waiting: this change was not made. Export them to a file first.",
   "瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。": "The browser's storage is full, and the pinned versions fill it: this change was not saved. Unpin some versions, or export them and then delete them.",
   "瀏覽器的儲存空間滿了：最舊的 {n} 個版本已經移除。要留下版本，先匯出成檔案。": "The browser's storage is full: the {n} oldest versions were removed. To keep versions, export them to a file first.",
   "灌流量": "Send traffic.",

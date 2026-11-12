@@ -1,7 +1,7 @@
 // Component presets (roadmap-next M8, Q21): a component with its settings under a name, kept in the
 // browser and in a file. The data layer: what a preset keeps, the file format, merging an import.
 import { describe, expect, it } from 'vitest';
-import { MAX_PRESETS, PRESETS_KEY, PRESETS_SCHEMA, loadPresets, mergePresets, parsePresetFile, presetFile, presetFromNode, readPreset, savePresets, updatePresets, usePresets, type Preset, type Store } from '../src/app/presets.ts';
+import { MAX_PRESETS, PRESETS_KEY, PRESETS_SCHEMA, loadPresets, mergePresets, parsePresetFile, presetFile, presetFromNode, readPreset, savePresets, MAX_PENDING, updatePresets, usePresets, viewPresets, type Preset, type Store } from '../src/app/presets.ts';
 
 const mem = (): Store & { data: Map<string, string> } => {
   const data = new Map<string, string>();
@@ -96,20 +96,54 @@ describe('presets', () => {
     expect(r.memoryOnly).toBe(false);
     // no storage: the change applies to the list in memory
     const m = updatePresets(undefined, tab1, (l) => [...l, { id: 'p9', name: 'X', kind: 'cache' }]);
-    expect(m).toEqual({ list: [{ id: 'p9', name: 'X', kind: 'cache' }], memoryOnly: true });
+    expect(m).toEqual({ list: [{ id: 'p9', name: 'X', kind: 'cache' }], memoryOnly: true, pending: [], refused: false });
   });
 
-  it('storage that reads but takes no write: a change after a failed write keeps the unsaved one (M8 review round 2)', () => {
+  it('storage that reads but takes no write: changes not saved yet are kept and replayed (M8 review round 2)', () => {
     const data = new Map<string, string>();
     const s: Store = { getItem: (k) => data.get(k) ?? null, setItem: () => { throw new Error('quota'); } };
     data.set(PRESETS_KEY, presetFile([{ id: 'p1', name: 'API', kind: 'service' }]));
     let r = updatePresets(s, loadPresets(s), (l) => [...l, { id: 'p2', name: 'Redis', kind: 'cache' }]);
     expect(r.memoryOnly).toBe(true);
-    r = updatePresets(s, r.list, (l) => [...l, { id: 'p3', name: 'DB', kind: 'database' }], r.memoryOnly);
+    expect(r.pending).toHaveLength(1);
+    r = updatePresets(s, r.list, (l) => [...l, { id: 'p3', name: 'DB', kind: 'database' }], r.pending);
     expect(r.list.map((p) => p.name)).toEqual(['API', 'Redis', 'DB']);
     // a removed preset does not come back with the next change
-    r = updatePresets(s, r.list, (l) => l.filter((p) => p.name !== 'API'), r.memoryOnly);
-    r = updatePresets(s, r.list, (l) => l, r.memoryOnly);
+    r = updatePresets(s, r.list, (l) => l.filter((p) => p.name !== 'API'), r.pending);
+    r = updatePresets(s, r.list, (l) => l, r.pending);
     expect(r.list.map((p) => p.name)).toEqual(['Redis', 'DB']);
+  });
+
+  it('a tab that could not save, then another tab frees room: what the other tab removed stays removed, what it added stays (M8 review round 3)', () => {
+    const data = new Map<string, string>();
+    let full = false;
+    const s: Store = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => { if (full) throw new Error('quota'); data.set(k, v); } };
+    savePresets(s, [{ id: 'p1', name: 'API', kind: 'service' }, { id: 'p2', name: 'Redis', kind: 'cache' }]);
+    // tab A: storage is full, its new preset is not saved
+    full = true;
+    const a = updatePresets(s, loadPresets(s), (l) => [...l, { id: 'p3', name: 'DB', kind: 'database' }]);
+    expect(a.memoryOnly).toBe(true);
+    // tab B frees room: removes Redis, adds a cache preset
+    full = false;
+    let b = updatePresets(s, loadPresets(s), (l) => l.filter((p) => p.id !== 'p2'));
+    b = updatePresets(s, b.list, (l) => [...l, { id: 'p4', name: 'Memcached', kind: 'cache' }], b.pending);
+    // tab A sees B's change, with its own unsaved preset on top
+    expect(viewPresets(s, a.list, a.pending).map((p) => p.name)).toEqual(['API', 'Memcached', 'DB']);
+    // tab A removes API; the write works now
+    const a2 = updatePresets(s, a.list, (l) => l.filter((p) => p.id !== 'p1'), a.pending);
+    expect(a2).toMatchObject({ memoryOnly: false, pending: [] });
+    expect(loadPresets(s).map((p) => p.name)).toEqual(['Memcached', 'DB']);
+  });
+
+  it('too many changes waiting for storage: the next one is refused, and the list stays as it was', () => {
+    const s: Store = { getItem: () => null, setItem: () => { throw new Error('quota'); } };
+    let r = updatePresets(s, [], (l) => [...l, { id: 'p0', name: 'n0', kind: 'service' }]);
+    for (let i = 1; i < MAX_PENDING; i++) r = updatePresets(s, r.list, (l) => [...l, { id: `p${i}`, name: `n${i}`, kind: 'service' }].slice(-MAX_PRESETS), r.pending);
+    expect(r.pending).toHaveLength(MAX_PENDING);
+    const before = r.list;
+    r = updatePresets(s, r.list, () => [], r.pending);
+    expect(r).toMatchObject({ refused: true, memoryOnly: true });
+    expect(r.list).toEqual(before);
+    expect(r.pending).toHaveLength(MAX_PENDING);
   });
 });

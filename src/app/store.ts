@@ -30,7 +30,7 @@ import type { Finding } from '../import/terraform/index.ts';
 import { editedSources } from './sources.ts';
 import { markNew, planEntrance } from './motion.ts';
 import type { CompareItem } from './compare.ts';
-import { VERSIONS_KEY, addVersion, loadVersions, mergeVersions, pinVersion, removeVersion, renameVersion, summarize, updateVersions, type Version } from './versions.ts';
+import { VERSIONS_KEY, addVersion, loadVersions, mergeVersions, pinVersion, removeVersion, renameVersion, summarize, updateVersions, viewVersions, type Version, type VersionChange } from './versions.ts';
 
 /** localStorage, or undefined where it is blocked (private mode in some browsers). */
 function storage(): Storage | undefined {
@@ -689,11 +689,16 @@ export const useApp = create<AppState>((set, get) => {
  * Changes the version list as it is in storage now (another tab may have changed it), shows it and
  * saves it. Full storage says so once.
  */
-function changeVersions(change: (list: Version[]) => Version[]): void {
-  const r = updateVersions(storage(), useApp.getState().versions, change, useApp.getState().versionsMemoryOnly);
+/** Version changes not saved yet (full or blocked storage), replayed on the newest list each time. */
+let pendingVersions: VersionChange[] = [];
+
+function changeVersions(change: VersionChange): void {
+  const r = updateVersions(storage(), useApp.getState().versions, change, pendingVersions);
+  pendingVersions = r.pending;
   useApp.setState({ versions: r.list, versionsMemoryOnly: r.memoryOnly });
   if (r.dropped) useApp.setState({ error: t('瀏覽器的儲存空間滿了：最舊的 {n} 個版本已經移除。要留下版本，先匯出成檔案。', { n: r.dropped }) });
-  if (r.refused) useApp.setState({ error: t('瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。') });
+  if (r.refused && r.memoryOnly) useApp.setState({ error: t('瀏覽器存不了版本，還沒存的改動已經有 {n} 個：這次的改動沒有做。先匯出成檔案。', { n: r.pending.length }) });
+  else if (r.refused) useApp.setState({ error: t('瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。') });
 }
 
 /** A finished run leaves a version: the design and scenario that ran, and a summary of the result. */
@@ -707,8 +712,8 @@ function recordVersion(): void {
 
 // another tab changed the versions: show its list
 window.addEventListener('storage', (e) => {
-  // not while this tab holds versions it could not save: the list in storage is older
-  if ((e.key === VERSIONS_KEY || e.key === null) && !useApp.getState().versionsMemoryOnly) useApp.setState({ versions: loadVersions(storage()) });
+  // its list, with this tab's unsaved changes on top
+  if (e.key === VERSIONS_KEY || e.key === null) useApp.setState({ versions: viewVersions(storage(), useApp.getState().versions, pendingVersions) });
 });
 
 /** After the first run that follows the guesses of a lesson, add them to the guess log. */

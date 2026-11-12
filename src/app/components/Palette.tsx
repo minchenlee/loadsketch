@@ -74,6 +74,7 @@ export function Palette() {
 function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => void }) {
   const all = usePresets((s) => s.presets);
   const memoryOnly = usePresets((s) => s.memoryOnly);
+  const refused = usePresets((s) => s.refused);
   const remove = usePresets((s) => s.remove);
   const file = useRef<HTMLInputElement>(null);
   // a custom service is not allowed in a practice problem (Q20)
@@ -125,6 +126,7 @@ function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => 
         />
       </div>
       {!presets.length && <div className="faint px-1.5 pb-1 text-[13px] leading-snug">{t('選一個元件，在右邊按「存成樣板」：它和它的設定會出現在這裡，可以再拖到畫布上。')}</div>}
+      {refused && <div className="px-1.5 pb-1 text-[13px] leading-snug" style={{ color: 'var(--bad-ink)' }} role="status" data-testid="presets-refused">{t('瀏覽器存不了樣板，還沒存的改動太多：這次的改動沒有做。先匯出樣板。')}</div>}
       {memoryOnly && <div className="faint px-1.5 pb-1 text-[13px] leading-snug" data-testid="presets-memory-only">{t('這個瀏覽器不讓網頁存資料：樣板只留到關閉分頁。要留下樣板，先匯出成檔案。')}</div>}
       {presets.map((p) => {
         const spec = KINDS[p.kind];

@@ -19,6 +19,7 @@ import {
   summarize,
   versionFile,
   updateVersions,
+  viewVersions,
   type Store,
   type Version,
 } from '../src/app/versions.ts';
@@ -219,20 +220,37 @@ describe('two tabs', () => {
     expect(none.memoryOnly).toBe(true);
     const broken: Store = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     const r = updateVersions(broken, [fake(1)], (l) => removeVersion(l, 'v1'));
-    expect(r).toEqual({ list: [], dropped: 0, refused: false, memoryOnly: true });
+    expect(r).toEqual({ list: [], dropped: 0, refused: false, memoryOnly: true, pending: [expect.any(Function)] });
   });
 });
 
-describe('storage that reads but takes no write (M8 review round 2)', () => {
-  it('a change after a failed write starts from the list in memory, so the unsaved change stays', () => {
+describe('storage that reads but takes no write (M8 review rounds 2 and 3)', () => {
+  it('a change after a failed write keeps the unsaved one: changes not saved yet are replayed', () => {
     const mem = new Map<string, string>();
     const store: Store = { getItem: (k) => mem.get(k) ?? null, setItem: () => { throw new Error('quota'); } };
     mem.set(VERSIONS_KEY, versionFile([fake(1)]));
     let r = updateVersions(store, loadVersions(store), (l) => addVersion(l, fake(2)));
     expect(r.memoryOnly).toBe(true);
-    r = updateVersions(store, r.list, (l) => removeVersion(l, 'v1'), r.memoryOnly);
+    r = updateVersions(store, r.list, (l) => removeVersion(l, 'v1'), r.pending);
     expect(r.list.map((v) => v.id)).toEqual(['v2']);
     expect(r.memoryOnly).toBe(true);
+  });
+
+  it('a tab that could not save, then another tab frees room: what the other tab removed stays removed, what it added stays', () => {
+    const mem = new Map<string, string>();
+    let full = false;
+    const store: Store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => { if (full) throw new Error('quota'); mem.set(k, v); } };
+    saveVersions(store, [fake(2), fake(1)]);
+    full = true;
+    const a = updateVersions(store, loadVersions(store), (l) => addVersion(l, fake(3)));
+    expect(a.memoryOnly).toBe(true);
+    full = false;
+    let b = updateVersions(store, loadVersions(store), (l) => removeVersion(l, 'v2'));
+    b = updateVersions(store, b.list, (l) => addVersion(l, fake(4)), b.pending);
+    expect(viewVersions(store, a.list, a.pending).map((v) => v.id)).toEqual(['v3', 'v4', 'v1']);
+    const a2 = updateVersions(store, a.list, (l) => renameVersion(l, 'v1', 'base'), a.pending);
+    expect(a2).toMatchObject({ memoryOnly: false, pending: [] });
+    expect(loadVersions(store).map((v) => [v.id, v.name])).toEqual([['v3', 'run 3'], ['v4', 'run 4'], ['v1', 'base']]);
   });
 });
 

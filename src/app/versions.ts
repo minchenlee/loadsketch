@@ -220,37 +220,57 @@ export function saveVersions(store: Store | undefined, list: Version[]): { saved
   }
 }
 
+/** A change to the list: replayed on a newer list from storage, so it works by id. */
+export type VersionChange = (list: Version[]) => Version[];
+/** At most this many changes wait for storage to take a write; more are refused. */
+export const MAX_PENDING_VERSIONS = 40;
+
+/** The list in storage now, or null when storage has none or cannot be read. */
+function storedVersions(store: Store | undefined): Version[] | null {
+  try {
+    const text = store?.getItem(VERSIONS_KEY);
+    const r = text ? parseVersionFile(text) : null;
+    return r?.ok ? r.versions : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The list to show: the list in storage now, with this tab's changes not saved yet on top. Without a
+ * list in storage, the list in memory (it has those changes already).
+ */
+export function viewVersions(store: Store | undefined, memory: Version[], pending: VersionChange[]): Version[] {
+  const latest = storedVersions(store);
+  return latest ? pending.reduce((l, c) => c(l), latest) : memory;
+}
+
 /**
  * Changes the list the way another tab may have left it: reads the newest list from storage, applies
  * `change` to it and saves the result. Two tabs then do not overwrite each other's versions. Without
  * a list in storage (blocked storage, nothing saved yet), `change` applies to the list in memory.
  *
- * The list returned is always the list saved, so memory and storage never differ: versions full
- * storage leaves out are gone (`dropped`), and a change that does not fit at all is not made
- * (`refused`; the list stays as it was). Without storage, or with a storage that takes no write at
- * all (blocked), the list lives in memory only (`memoryOnly`): it is gone when the page closes.
+ * Saved, the list returned is the list saved: versions full storage leaves out are gone (`dropped`),
+ * and a change that does not fit at all is not made (`refused`; the list stays as it was). Without
+ * storage, or with a storage that takes no write at all (blocked), the list lives in memory only
+ * (`memoryOnly`): it is gone when the page closes.
  *
- * `unsaved`: the last change lived in memory only, so memory holds changes storage does not have.
- * The change then applies to the list in memory; the older list in storage would undo them
- * (M8 review round 2).
+ * Changes that could not be saved wait in `pending` and are replayed on the newest list each time, so
+ * neither this tab's unsaved changes nor another tab's saved ones are lost (M8 review rounds 2 and
+ * 3). A save that works empties `pending`. With too many changes waiting, this one is refused too.
  */
-export function updateVersions(store: Store | undefined, memory: Version[], change: (list: Version[]) => Version[], unsaved = false): { list: Version[]; dropped: number; refused: boolean; memoryOnly: boolean } {
-  let base = memory;
-  if (!unsaved) try {
-    const text = store?.getItem(VERSIONS_KEY);
-    const r = text ? parseVersionFile(text) : null;
-    if (r?.ok) base = r.versions;
-  } catch {
-    // unreadable storage: the list in memory
-  }
+export function updateVersions(store: Store | undefined, memory: Version[], change: VersionChange, pending: VersionChange[] = []): { list: Version[]; dropped: number; refused: boolean; memoryOnly: boolean; pending: VersionChange[] } {
+  const base = viewVersions(store, memory, pending);
   const next = change(base);
   const r = saveVersions(store, next);
-  if (r.saved) return { list: r.saved, dropped: r.dropped, refused: false, memoryOnly: !store };
-  // the list as it was does not save either: the storage takes nothing (blocked), so the list lives in memory
+  if (r.saved) return { list: r.saved, dropped: r.dropped, refused: false, memoryOnly: !store, pending: [] };
+  // the list as it was (with the changes waiting) does not save either: the storage takes nothing
+  // (blocked), so the change waits in memory
   try {
     store!.setItem(VERSIONS_KEY, versionFile(base));
   } catch {
-    return { list: next, dropped: 0, refused: false, memoryOnly: true };
+    if (pending.length >= MAX_PENDING_VERSIONS) return { list: base, dropped: 0, refused: true, memoryOnly: true, pending };
+    return { list: next, dropped: 0, refused: false, memoryOnly: true, pending: [...pending, change] };
   }
-  return { list: base, dropped: 0, refused: true, memoryOnly: false };
+  return { list: base, dropped: 0, refused: true, memoryOnly: false, pending: [] };
 }
