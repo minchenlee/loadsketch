@@ -80,7 +80,7 @@ The examples are simplified models. Some refer to public information about well-
 It is a model for learning, not a capacity planning tool.
 
 - **What you can trust:** the direction and the mechanism. Which part saturates first, how a slow dependency fills its callers, how retries multiply load, why a system stays down after the spike ends. A comparison of two designs under the same scenario is worth more than one number.
-- **What is checked:** single stations are tested against queueing theory. For M/M/1 the mean latency is within 5% and the p99 within 10%; M/M/4 and M/D/1 waits are within 10% (`tests/queueing.test.ts`). Every run is deterministic for a seed, and two designs see the same traffic.
+- **What is checked:** single stations are tested against queueing theory. For M/M/1 the mean latency is within 5% and the p99 within 10%; M/M/4 and M/D/1 waits are within 10% (`tests/queueing.test.ts`). The broader accuracy suite ([docs/accuracy.md](docs/accuracy.md), `tests/accuracy.test.ts`) covers 25 checks across queueing, bounded rejection, two-stage series, retries, load balancing, scaling and timeouts: 23 pass within tolerance and 2 are documented as known deviations. Every run is deterministic for a seed, and two designs see the same traffic.
 - **What it leaves out:** packets and bandwidth, memory and CPU cores, the contents of the data (it counts stale reads and lost writes, but cannot tell you if your data is correct), and the specific behaviour of real products. A "database" here is a generic database, not PostgreSQL.
 - **Do not** size a production system from an absolute number in a run. Measure the real system.
 
