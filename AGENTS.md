@@ -7,7 +7,7 @@
 ## 結構
 
 - `src/schema/`：設計檔和情境檔的格式（zod）、元件種類（`kinds.ts`）、設計檢查。不依賴瀏覽器。
-- `src/engine/`：離散事件模擬。`sim.ts` 的 `Simulation` 是全部元件的行為；`scale.ts` 把大流量縮成 1/k 來跑；`theory.ts` 是排隊理論的對照。不依賴瀏覽器。
+- `src/engine/`：離散事件模擬。`sim.ts` 的 `Simulation` 是全部元件的行為；`scale.ts` 把大流量縮成 1/k 來跑；`theory.ts` 是排隊理論的對照；`limit.ts` 是找上限（任何設計＋情境＋達標條件：`simulatePeak()` 跑一步、`findLimitOf()` 搜尋、`assumptionsOf()` 從設計的 `source` 讀估計值；CLI 的 `import terraform --find-limit` 也用它）。不依賴瀏覽器。
 - `src/core/index.ts`：給瀏覽器以外的程式（CLI、之後的 IaC 匯入）用的入口，轉出 schema、engine 和 `costOf`。不能碰到 `src/app/`、React、DOM，learn 只能用 `cost.ts`（`tests/boundary.test.ts` 沿 import 往下查）。
 - `src/schema/aiGuide.ts`：給 AI 讀的格式說明（英文），從 `KINDS`、`EDGE_PARAMS` 和英文翻譯產生。`npm run ai-guide`（`scripts/ai-guide.ts` 的 `aiGuideFiles()`）寫：完整說明 `aiGuide()` 到 `public/llms-full.txt`，短索引 `llmsIndex()` 到 `public/llms.txt`，Agent Skill 的 `skillMd()` 和 `referenceMd()` 到 `skills/loadsketch/`、`public/skills/loadsketch/`，以及 `public/skills/loadsketch.zip`（`scripts/zip.ts`，不壓縮、固定時間）；貼上設計的對話框（`src/app/components/PasteDesign.tsx`）用 `aiPrompt()` 複製給 AI 的提示。
 - `src/learn/`：課程、值班題、限制題、需求題、成本、診斷。讀模擬結果，不改引擎。

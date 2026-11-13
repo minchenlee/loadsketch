@@ -8,3 +8,4 @@ export * from '../engine/theory.ts';
 export * from '../engine/scale.ts';
 export { costOf } from '../learn/cost.ts';
 export type { Cost, CostItem } from '../learn/cost.ts';
+export * from '../engine/limit.ts';
