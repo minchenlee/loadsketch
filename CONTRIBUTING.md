@@ -9,6 +9,7 @@ Thanks for your interest in contributing to loadsketch! This document provides g
 - [Development Setup](#development-setup)
 - [Contribution Workflow](#contribution-workflow)
 - [Coding Standards](#coding-standards)
+- [Adding a Terraform Resource Mapping](#adding-a-terraform-resource-mapping)
 - [Commit Messages](#commit-messages)
 - [Pull Request Process](#pull-request-process)
 
@@ -166,6 +167,91 @@ Read [docs/design-system.md](docs/design-system.md) before a UI change. In short
 
 - Two spaces for indentation (project convention)
 - Follow the style of the code around your change
+
+## Adding a Terraform Resource Mapping
+
+`src/import/terraform/index.ts` turns `terraform show -json` output into a loadsketch design (`importTerraform()`). It parses the plan, builds a resource graph, groups identical instances, runs one rule per resource type, fills missing performance assumptions from an instance table, runs static checks, and attaches `source` metadata to every node and edge.
+
+### 1. Decide: Design Node or Folded Resource?
+
+- **Folded resource** (plumbing or configuration that only shapes another node, such as `aws_lb_target_group`, `aws_route53_health_check`, or `aws_sqs_queue_redrive_policy`): add its Terraform resource type to `FOLDED` in `src/import/terraform/rules.ts`, `PLATFORM_FOLDED` in `src/import/terraform/rules-platform.ts`, or `SERVERLESS_FOLDED` in `src/import/terraform/rules-serverless.ts`, pointing to an `'import.folded.*'` message id in `src/i18n/importMessages.ts`.
+- **Design node** (a component that handles, queues, caches, routes, or stores traffic, mapped to a `kind` in `src/schema/kinds.ts`): write a `Rule` and register it in `RULES` (`src/import/terraform/rules.ts`), `PLATFORM_RULES` (`src/import/terraform/rules-platform.ts`), or `SERVERLESS_RULES` (`src/import/terraform/rules-serverless.ts`).
+
+### 2. Write the Rule (Example from the Repo)
+
+Each rule has type `Rule` in `src/import/terraform/rule-kit.ts`: `(rs: PlanResource[], g: ResourceGraph) => RuleOut | Fold`. `rs` holds one or more grouped instances of the same resource block (from `groupInstances()` in `src/import/terraform/graph.ts`).
+
+Here is `cacheCluster` from `src/import/terraform/rules-platform.ts`:
+
+```ts
+const cacheCluster: Rule = ([c], g) => {
+  // A member of a replication group: that group is the node.
+  if (refsTo(g.plan, c.expressions.replication_group_id, /^aws_elasticache_replication_group$/).length) return { fold: 'import.folded.cacheMember' };
+  const out = empty('cache');
+  const n = num(c.values.num_cache_nodes) ?? 1;
+  set(out, 'instances', n, setOr(c, 'num_cache_nodes', DEFAULTS.elastiCache.numCacheClusters.source));
+  out.facts.numCacheClusters = { value: n, origin: out.origins.instances };
+  out.facts.automaticFailover = { value: false, origin: awsDefault(c, 'automatic_failover_enabled', DEFAULTS.elastiCache.automaticFailover.source) };
+  if (typeof c.values.node_type === 'string') out.facts.nodeType = { value: c.values.node_type, origin: iac(c, 'node_type') };
+  if (typeof c.values.engine === 'string') out.facts.engine = { value: c.values.engine, origin: iac(c, 'engine') };
+  out.notes.push({ id: 'import.approx.hitRatio' });
+  return out;
+};
+```
+
+Key fields on `RuleOut` (`src/import/terraform/rule-kit.ts`):
+
+- `kind`: component kind from `KINDS` in `src/schema/kinds.ts`.
+- `params` and `origins`: loadsketch parameters and where each value came from.
+- `facts`: metadata that static checks or `fillFromTable()` (`src/import/terraform/fill.ts`) need even if there is no design param (e.g., `nodeType`, `instanceClass`, `multiAz`, `zones`, `environment`).
+- `uses` and `members`: addresses of folded resources read by this rule (`uses` populates `folded[].into`, and `members` redirects incoming/outgoing graph lines to this node—see `rdsCluster` and `proxyFor` in `src/import/terraform/rules-platform.ts`).
+- `entry: true`: marks an internet-facing entry point (`loadBalancer`, `cloudfront`, `route53Record`, `gateway`).
+- `front`: places a `rate_limiter` node in front of the node (`gateway` and `dynamoTable` in `src/import/terraform/rules-serverless.ts`).
+- `edgeParams` / `lineWeights` / `sourceCap`: overrides on outgoing edges or inbound event-source caps (`gateway`, `route53Record`, `lambdaFunction`).
+- `notes`: approximation and warning message ids (`import.approx.*`, `import.unknownValue`), defined in `src/i18n/importMessages.ts` (`MESSAGES`).
+
+Helpers in `src/import/terraform/rule-kit.ts` handle nested blocks (`block()`), safe numeric reads (`num()`), reverse references (`referrers()`), subnet AZs (`zonesOf()`), and attributes written in HCL whose values are unknown until apply or marked sensitive (`configured()`, `unknownSet()`).
+
+### 3. Update Grouping and Graph Lines if Needed (`src/import/terraform/graph.ts`)
+
+- **Traffic lines**: Check whether `definiteLines()`, `presumedLines()`, or security-group `candidate` lines in `src/import/terraform/graph.ts` already connect the new resource. Add a branch in `definiteLines()` if Terraform wires callers to the resource through an explicit attribute (like `aws_lambda_event_source_mapping` or `aws_lb_listener`).
+- **Instance grouping**: `groupInstances()` merges identical `count`/`for_each` instances into one node. Add differentiating attributes to `ROLE_KEYS` (or forbid merging in `NO_MERGE`), and register folded child links in `MEMBER_OF`.
+- **Instance table assumptions**: If the resource has an instance type or size that maps to `serviceMs`, `concurrency`, `readMs`, `writeMs`, `opMs`, or `max_connections`, wire its fact into `fillFromTable()` in `src/import/terraform/fill.ts` and `ASSUME` / `sizeOf()` in `src/import/terraform/instances.ts`.
+
+### 4. Tag Every Origin and Source (`defaults.ts`, `rule-kit.ts`, `checks.ts`)
+
+Every value in `params`, `facts`, and `edgeParams` must carry an `Origin`. `tests/import/rules.test.ts` and `tests/import/rules-ecs.test.ts` enforce that every param has an origin and every default/estimate names its source; `certaintyOf()` in `src/import/terraform/checks.ts` uses those origins to decide whether `--strict` should block:
+
+- **IaC (`iac(r, attr)`)**: explicit value in the plan (`evidence: 'iac'`). Counts as `definite`.
+- **Provider / AWS default (`awsDefault(r, attr, source)`)**: documented provider or AWS default (`evidence: 'aws-default'`). Store the value and pinned `https://` documentation URL in `DEFAULTS` in `src/import/terraform/defaults.ts` (using `PROVIDER_DOCS` when quoting the Terraform AWS provider docs). Counts as `definite`.
+- **Configured vs. default vs. unknown (`setOr(r, attr, source)`)**: picks `'estimate'` with `unknown: 'apply' | 'sensitive'` when written in config but absent from the plan, `'iac'` when known, and `'aws-default'` when omitted. For safety-critical booleans or timeouts where assuming a default would hide a problem (such as `multi_az` in `dbInstance` or `timeout` in `lambdaFunction`), check `unknownSet()` first and emit a note instead of filling a default.
+- **Our estimate (`estimate(from, source)`)**: modeling approximations or soft quotas that can be raised (such as `ASSUME` in `src/import/terraform/instances.ts`, `accountConcurrency` in `lambdaFunction`, or `readFrom` in `dbInstance`). Every `estimate` must set a non-empty `source` string (pointing to the file/constant or explanation) and downgrades any check using it from `definite` to `assumption` so `--strict` does not fail on guesses.
+
+### 5. Add Static Checks (`src/import/terraform/checks.ts`)
+
+If the resource introduces capacity or reliability failure modes (such as single-AZ deployment, connection limits, or timeout ordering), add a check in `runChecks()` in `src/import/terraform/checks.ts` using `param()`, `fact()`, and `add()`. Call `incomplete()` whenever a required input is missing instead of assuming a safe value. Add any new `check.*` message ids to `src/i18n/importMessages.ts`.
+
+### 6. Add Tests and Fixtures (`tests/import/`)
+
+1. **Synthetic unit tests**: Use `plan()` and `refs()` from `tests/import/plan-helper.ts` to add targeted cases in `tests/import/rules.test.ts` (or `tests/import/rules-ecs.test.ts`) and `tests/import/checks.test.ts`. Assert node kinds, `params`, `origins`, `facts`, `notes`, `folded`, `unmapped`, `parseDesign(r.design).ok`, and `runChecks()`.
+2. **Real plan fixtures**: Saved plans live in `tests/import/fixtures/` (for example `tests/import/fixtures/ecs-rds.plan.json`, `tests/import/fixtures/lambda-sqs-rds.plan.json`, and `tests/import/fixtures/aurora-cache-multiaz.plan.json`, each paired with `<name>/main.tf` and `<name>.expected.json`). If you add a new fixture directory, add it to `SETS` in `scripts/gen-fixtures.sh` and `tests/import/fixtures.test.ts`, and add its assertions to `tests/import/rules.test.ts`.
+   - Never run `terraform apply`. `scripts/gen-fixtures.sh` runs `terraform plan` and `terraform show -json` offline inside `sandbox-exec` and strips fake secrets with `scripts/scrub-plan.ts`:
+
+```sh
+scripts/gen-fixtures.sh --init   # once, with network: downloads the provider into .terraform
+scripts/gen-fixtures.sh          # offline: plans inside sandbox-exec and scrubs secrets
+```
+
+### 7. Commands to Run
+
+```sh
+npm run test:quick
+npx vitest run tests/import/rules.test.ts tests/import/checks.test.ts tests/import/fixtures.test.ts
+npm run typecheck
+node scripts/i18n-extract.ts      # extract new Traditional Chinese message ids into src/i18n/en.ts
+npm run i18n:check                # verify 0 missing English translations
+npm run loadsketch -- import terraform tests/import/fixtures/ecs-rds.plan.json --out /tmp/design.json --report /tmp/report.md
+```
 
 ## Commit Messages
 
