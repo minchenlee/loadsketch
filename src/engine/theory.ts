@@ -148,3 +148,19 @@ export function ekm1Wait(k: number, lambdaPerMs: number, muPerMs: number): { pWa
   const sigma = 1 - u;
   return { pWait: sigma, waitMs: sigma / (muPerMs * u) };
 }
+
+/**
+ * E_k/M/1 queue theory (Erlang-k arrivals with exponential service time), returning the same
+ * QueueTheory shape as mgc(). Reuses ekm1Wait() for stable (rho < 1) queues.
+ */
+export function ekm1(lambdaPerMs: number, meanServiceMs: number, k: number): QueueTheory {
+  const rho = lambdaPerMs * meanServiceMs;
+  if (!(rho < 1)) {
+    return { rho, pWait: 1, waitMsMMc: Infinity, waitMs: Infinity, sojournMs: Infinity, stable: false };
+  }
+  if (meanServiceMs <= 0 || lambdaPerMs <= 0) {
+    return { rho: 0, pWait: 0, waitMsMMc: 0, waitMs: 0, sojournMs: meanServiceMs, stable: true };
+  }
+  const { pWait, waitMs } = ekm1Wait(k, lambdaPerMs, 1 / meanServiceMs);
+  return { rho, pWait, waitMsMMc: waitMs, waitMs, sojournMs: waitMs + meanServiceMs, stable: true };
+}

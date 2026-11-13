@@ -418,7 +418,7 @@ export const ACCURACY_CASES: AccuracyCase[] = [
     id: 'lb-round-robin-node-theory',
     name: 'LB round-robin (4x1) vs reported node.theory',
     category: 'Load balancing',
-    metric: 'Mean wait vs Poisson theory row',
+    metric: 'Mean wait vs node.theory',
     unit: 'ms',
     tolerance: 0.1,
     measure: () => {
@@ -434,11 +434,6 @@ export const ACCURACY_CASES: AccuracyCase[] = [
         return simulate(d, scenario({ seed: 7, durationS: 1000, warmupS: 50, traffic: { rps: 200, clientTimeoutMs: 600000 } }));
       });
       return { expected: r.nodes.s.theory!.waitMs!, actual: r.nodes.s.waitMs! };
-    },
-    knownDeviation: {
-      expectedActual: 4.283,
-      actualTolerance: 0.05,
-      reason: 'Station theory() assumes Poisson arrivals (ca2 = 1), whereas round-robin feeds each of the 4 instances an Erlang-4 stream (ca2 = 0.25) with far less queueing.',
     },
   },
 

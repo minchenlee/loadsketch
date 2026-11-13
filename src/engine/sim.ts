@@ -13,7 +13,7 @@
 import { EventQueue } from './heap.ts';
 import { Histogram, type LatencySummary } from './histogram.ts';
 import { KeySampler, keyBucket, makeRng, sampleDuration, sampleExp, type Rng } from './rng.ts';
-import { mgc } from './theory.ts';
+import { ekm1, mgc } from './theory.ts';
 import { ROLLOUT_KINDS, planScale, scaleDesign, scaleLive, scaleResult, scaleWindow, type ScalePlan } from './scale.ts';
 import { getLang, t, tx } from '../i18n/index.ts';
 import { KINDS, fanoutApplies, resolveParams, type Dist, type ResolvedParams } from '../schema/kinds.ts';
@@ -795,6 +795,10 @@ class NodeRT {
   /** Periodic stop-the-world pauses: from t0 to t1 (ms), a pause of ms every `every` ms. */
   pauses: { t0: number; t1: number; every: number; ms: number }[] = [];
   rr = 0;
+  /** Set if round-robin target membership or service rate changed during the measurement period. */
+  rrDirty = false;
+  /** Constant active target count observed by a round-robin load balancer during measurement. */
+  rrKSeen: number | undefined = undefined;
   /** Steps for a read and for a write, per API ('' when the design names no APIs). Built on first use. */
   plans = new Map<string, Step[][]>();
   queue: QueueNodeState | null = null;
@@ -1544,15 +1548,17 @@ export class Simulation {
         if (!inst) continue;
         this.at(start, () => {
           inst.slowEv = ev.multiplier;
+          if (this.inMeasureEdit()) n.rrDirty = true;
           this.log({ node: n.id, type: 'slow', text: t('{name}變慢 {m} 倍', { name: `${n.label} ${inst.role || `#${inst.idx}`}`, m: ev.multiplier }) });
         });
-        if (end !== null) this.at(end, () => { inst.slowEv = 1; this.log({ node: n.id, type: 'slow_end', text: t('{name}恢復速度', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
+        if (end !== null) this.at(end, () => { inst.slowEv = 1; if (this.inMeasureEdit()) n.rrDirty = true; this.log({ node: n.id, type: 'slow_end', text: t('{name}恢復速度', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
       } else if (ev.type === 'slow') {
         this.at(start, () => {
           n.slow = ev.multiplier;
+          if (this.inMeasureEdit()) n.rrDirty = true;
           this.log({ node: n.id, type: 'slow', text: t('{name}變慢 {m} 倍', { name: n.label, m: ev.multiplier }) });
         });
-        if (end !== null) this.at(end, () => { n.slow = 1; this.log({ node: n.id, type: 'slow_end', text: t('{name}恢復速度', { name: n.label }) }); });
+        if (end !== null) this.at(end, () => { n.slow = 1; if (this.inMeasureEdit()) n.rrDirty = true; this.log({ node: n.id, type: 'slow_end', text: t('{name}恢復速度', { name: n.label }) }); });
       } else if (ev.type === 'reshard') {
         if (n.kind !== 'sharded_db') continue;
         const copyS = ev.forS ?? 60;
@@ -1613,6 +1619,7 @@ export class Simulation {
     let w0: number[] = [];
     const apply = (f: number) => {
       edges.forEach((e, i) => (e.weight = w0[i] + (ev.weight - w0[i]) * f));
+      if (this.inMeasureEdit()) from.rrDirty = true;
       // a client's API mix counts only APIs its edges with a positive weight carry
       if (from.kind === 'client') this.buildApiMix();
     };
@@ -1663,6 +1670,7 @@ export class Simulation {
       }
     };
     const rollback = (): void => {
+      if (this.inMeasureEdit()) for (const n of targets) n.rrDirty = true;
       for (const inst of updated) {
         inst.touch(this.now);
         const was = prev.get(inst)!;
@@ -1674,6 +1682,7 @@ export class Simulation {
     };
     const wave = (w: number): void => {
       if (stopped) return;
+      if (this.inMeasureEdit()) for (const n of targets) n.rrDirty = true;
       roll.ok = 0;
       roll.fail = 0;
       let k = 0;
@@ -1690,6 +1699,7 @@ export class Simulation {
         text: waves > 1 ? t('部署新版本到{where}：第 {w}／{n} 波，更新 {k} 台（共 {total} 台）', { where, w, n: waves, k, total: updated.length }) : t('部署新版本到{where}：一次更新全部 {k} 台', { where, k }),
       });
       const done = (): void => {
+        if (this.inMeasureEdit()) for (const n of targets) n.rrDirty = true;
         // the new version stays; the rollout is over, so a later one can update these instances again
         for (const inst of updated) if (inst.rollout === roll) inst.rollout = null;
         this.log({ ...(ev.node !== undefined ? { node: ev.node } : {}), type: 'rollout_done', text: t('部署完成：{where}共 {k} 台是新版本', { where, k: updated.length }) });
@@ -1830,6 +1840,7 @@ export class Simulation {
         if (n.str('failover') === 'auto' && n.num('replicaApplyRatio') > 0 && this.isPrimary(n, inst)) this.scheduleFailover(n, inst);
       }
       inst.down = down;
+      if (this.inMeasureEdit()) n.rrDirty = true;
       if (down) {
         // crash: queued and in-flight requests fail now; their later completions are ignored
         this.purgeExpired(inst);
@@ -3189,6 +3200,7 @@ export class Simulation {
       s.passes++;
       if (!s.up && s.passes >= thr) {
         s.up = true;
+        if (this.inMeasureEdit()) n.rrDirty = true;
         this.log({ node: n.id, type: 'hc_in', text: t('{name}的 health check 把「{target}」放回', name) });
       }
     } else {
@@ -3196,6 +3208,7 @@ export class Simulation {
       s.fails++;
       if (s.up && s.fails >= thr) {
         s.up = false;
+        if (this.inMeasureEdit()) n.rrDirty = true;
         n.w.hcOut++;
         this.log({ node: n.id, type: 'hc_out', text: t('{name}的 health check 把「{target}」移出', name) });
       }
@@ -3231,6 +3244,7 @@ export class Simulation {
     if (ejected + 1 > Math.max(1, Math.floor(serving.length / 2))) return;
     s.streak = 0;
     s.ejectUntil = this.now + n.num('ejectS') * 1000;
+    if (this.now < this.measureToMs && s.ejectUntil > this.measureFromMs) n.rrDirty = true;
     n.w.ejections++;
     this.log({ node: n.id, type: 'eject', text: t('{name}暫時剔除「{target}」（連續 {k} 次失敗）', { name: n.label, target: `${inst.node.label} ${inst.role || `#${inst.idx}`}`, k: n.num('outlierErrors') }) });
   }
@@ -3243,11 +3257,17 @@ export class Simulation {
       let pred = (t: { edge: EdgeRT; inst: Instance | null }) => this.healthy(n, t);
       let ok = cands.filter(pred);
       // fail open: when its checks have taken out every instance, a load balancer sends to all registered ones
-      if (!ok.length && !instant) {
+      const failOpen = !ok.length && !instant;
+      if (failOpen) {
         pred = (t) => (t.inst ? t.inst.state === 'on' : !t.edge.to.down);
         ok = cands.filter(pred);
       }
       if (!ok.length) return null;
+      if (policy === 'round_robin' && !n.rrDirty && this.now >= this.measureFromMs && this.now < this.measureToMs) {
+        if (failOpen) n.rrDirty = true;
+        else if (n.rrKSeen === undefined) n.rrKSeen = ok.length;
+        else if (n.rrKSeen !== ok.length) n.rrDirty = true;
+      }
       const load = (t: { edge: EdgeRT; inst: Instance | null }) => (t.inst ? t.inst.active : 0);
       switch (policy) {
         case 'random':
@@ -4642,6 +4662,7 @@ export class Simulation {
         let capA = 0;
         const instRows: NonNullable<NodeResult['instances']> = [];
         const balanced = n.insts.length > 1 && n.inc.some((e) => e.from.kind === 'load_balancer' && e.from.str('policy') !== 'random');
+        const rrK = this.roundRobinK(n);
         for (const i of n.insts) {
           const s = i.tot;
           const u = n.elastic ? (s.up > 0 ? s.busyArea / (s.up * i.slots) : 0) : s.busyArea / (measuredMs * i.slots);
@@ -4673,7 +4694,7 @@ export class Simulation {
             started: s.started,
             waitMs: s.started ? round(s.waitSum / s.started, 3) : 0,
             // queueing theory needs a fixed number of servers
-            theory: n.elastic ? undefined : this.theory(i.slots, s, measuredMs, s.rejected > 0, balanced),
+            theory: n.elastic ? undefined : this.theory(i.slots, s, measuredMs, s.rejected > 0, balanced, rrK),
           });
         }
         r.utilization = n.elastic ? round(capA ? busy / capA : 0, 4) : round(busy / (measuredMs * slots), 4);
@@ -4882,15 +4903,50 @@ export class Simulation {
     return k;
   }
 
-  private theory(c: number, s: InstStats, measuredMs: number, drops: boolean, balanced = false): TheoryRow | undefined {
+  /** Whether a state/membership change at this.now falls inside the measurement window (allowing t = 0 setup when warmupS = 0). */
+  private inMeasureEdit(): boolean {
+    return this.now < this.measureToMs && (this.now > this.measureFromMs || (this.measureFromMs > 0 && this.now === this.measureFromMs));
+  }
+
+  /**
+   * Active equal-weight round-robin target count k behind a single upstream load balancer when
+   * hold times are exponential and membership stayed constant across the measurement period.
+   * Returns 0 when Poisson (M/G/c) applies instead.
+   */
+  private roundRobinK(n: NodeRT): number {
+    if (n.elastic) return 0;
+    if (n.kind === 'database' || n.kind === 'sharded_db' || n.kind === 'cache' || n.kind === 'function') return 0;
+    // E_k/M/1 assumes exponential hold time: require cv ≈ 1, no pauses, and no downstream calls
+    const d = n.p.serviceMs as Dist | undefined;
+    if (!d || Math.abs(d.cv - 1) > 0.01) return 0;
+    if (n.out.some((e) => !e.side)) return 0;
+    if (n.pauses.some((p) => p.t0 < this.measureToMs && p.t1 > this.measureFromMs)) return 0;
+    const inc = n.inc.filter((e) => !e.side);
+    if (inc.length !== 1) return 0;
+    const edge = inc[0];
+    const lb = edge.from;
+    if (lb.kind !== 'load_balancer' || lb.str('policy') !== 'round_robin') return 0;
+    if (!(edge.weight > 0)) return 0;
+    if (lb.rrDirty || lb.tot.hcOut > 0 || lb.tot.ejections > 0) return 0;
+    const lbOut = lb.out.filter((e) => !e.side);
+    const sameFilter = (a: EdgeRT, b: EdgeRT): boolean =>
+      a.on === b.on && (a.apis === b.apis || (a.apis !== null && b.apis !== null && a.apis.size === b.apis.size && [...a.apis].every((x) => b.apis!.has(x))));
+    if (lbOut.some((e) => e.weight !== edge.weight || !sameFilter(e, edge))) return 0;
+    if (lbOut.some((e) => e.to.elastic || e.to.rrDirty || e.to.insts.some((i) => i.rollout !== null))) return 0;
+    const k = lb.rrKSeen ?? 0;
+    return k > 1 ? k : 0;
+  }
+
+  private theory(c: number, s: InstStats, measuredMs: number, drops: boolean, balanced = false, rrK = 0): TheoryRow | undefined {
     if (!s.holds || !s.started) return undefined;
     const lam = s.started / measuredMs;
     const mean = s.holdSum / s.holds;
     const varH = Math.max(0, s.holdSq / s.holds - mean * mean);
     const cs2 = mean > 0 ? varH / (mean * mean) : 0;
-    const th = mgc(lam, mean, c, cs2, 1);
+    const useEkm1 = c === 1 && rrK > 1;
+    const th = useEkm1 ? ekm1(lam, mean, rrK) : mgc(lam, mean, c, cs2, 1);
     return {
-      model: c === 1 ? 'M/G/1' : 'M/G/c',
+      model: useEkm1 ? `E_${rrK}/M/1` : c === 1 ? 'M/G/1' : 'M/G/c',
       servers: c,
       lambdaPerSec: round(lam * 1000, 3),
       meanHoldMs: round(mean, 3),
@@ -4902,7 +4958,7 @@ export class Simulation {
       note:
         [
           drops ? t('有請求因排隊滿被拒，理論值假設排隊無上限，僅供參考。') : '',
-          balanced ? t('理論值假設請求隨機到達；負載平衡器分配得比隨機平均，實際排隊通常比理論少。') : '',
+          balanced && !useEkm1 ? t('理論值假設請求隨機到達；負載平衡器分配得比隨機平均，實際排隊通常比理論少。') : '',
         ].join('') || undefined,
     };
   }
