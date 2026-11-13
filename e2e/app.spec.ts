@@ -2987,3 +2987,84 @@ test.describe('phone layout: presets', () => {
     await expect(drawer).toHaveAttribute('data-open');
   });
 });
+
+test.describe('live panel', () => {
+  test('shows live component stats during a run, switches by component kind, freezes on pause, and hands back to results when done', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/app/?example=three-tier&scenario=spike&speed=2&autorun=1&theme=light&select=api');
+    await waitForClock(page, 2.5);
+
+    const live = page.getByTestId('live-stats');
+    await expect(live).toBeVisible();
+    await expect(live).toContainText('現在');
+    for (const id of ['live-busy', 'live-queued', 'live-arrivals', 'live-ok', 'live-err', 'live-util', 'live-wait', 'live-total']) {
+      await expect(live.getByTestId(id)).toBeVisible();
+    }
+    await expect(live.getByTestId('live-arrivals')).not.toContainText('–');
+    await expect(live.getByTestId('live-busy')).toContainText('／');
+
+    await page.getByTestId('pause').click();
+    await page.waitForTimeout(300);
+    const pausedClock = await page.getByTestId('clock').textContent();
+    const pausedStats = await live.textContent();
+    await page.waitForTimeout(600);
+    expect(await page.getByTestId('clock').textContent()).toBe(pausedClock);
+    expect(await live.textContent()).toBe(pausedStats);
+
+    await page.locator('[data-node="lb"]').click();
+    await expect(live.getByTestId('live-arrivals')).toBeVisible();
+    await expect(live.getByTestId('live-arrivals')).not.toContainText('–');
+    await expect(live.getByTestId('live-busy')).toHaveCount(0);
+    await expect(live.getByTestId('live-queued')).toHaveCount(0);
+    await expect(live.getByTestId('live-util')).toHaveCount(0);
+    await expect(live.getByTestId('live-wait')).toHaveCount(0);
+
+    await page.locator('[data-node="api"]').click();
+    await page.getByRole('button', { name: '跳到結尾' }).click();
+    await expect(page.getByTestId('run')).toContainText('再跑一次', { timeout: 60_000 });
+    await expect(page.getByTestId('live-stats')).toHaveCount(0);
+    await expect(page.getByText('上次執行的結果')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('shows queue depth without station capacity on a queue component (en)', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/app/?example=async-queue&speed=2&autorun=1&lang=en&select=jobs');
+    await waitForClock(page, 2.0);
+
+    const live = page.getByTestId('live-stats');
+    await expect(live).toBeVisible();
+    await expect(live).toContainText('Now');
+    await expect(live.getByTestId('live-queued')).toBeVisible();
+    await expect(live.getByTestId('live-arrivals')).not.toContainText('–');
+    await expect(live.getByTestId('live-busy')).toHaveCount(0);
+    await expect(live.getByTestId('live-util')).toHaveCount(0);
+    await expect(live.getByTestId('live-wait')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test.describe('phone layout', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+    test('tapping a component during a run opens the drawer with live stats', async ({ page }) => {
+      const errors: string[] = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto('/app/?example=three-tier&scenario=spike&speed=2&autorun=1&lang=en');
+      await waitForClock(page, 2.0);
+
+      const drawer = page.getByTestId('phone-drawer');
+      await expect(drawer).not.toHaveAttribute('data-open');
+      await page.locator('[data-node="users"]').tap();
+      await expect(drawer).toHaveAttribute('data-open');
+
+      const live = drawer.getByTestId('live-stats');
+      await expect(live).toBeVisible();
+      await expect(live).toContainText('Now');
+      await expect(live.getByTestId('live-arrivals')).not.toContainText('–');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+      expect(errors).toEqual([]);
+    });
+  });
+});

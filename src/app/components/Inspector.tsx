@@ -6,6 +6,8 @@ import { apiTraffic, edgeLatencyMs, ID_RE, regionsOf, STORE_KINDS, type DesignAp
 import type { NodeResult } from '../../engine/index.ts';
 import { FAIL_LABEL, FAIL_REASONS } from '../../engine/index.ts';
 import { useApp } from '../store.ts';
+import { live, liveAt, viewTime, windowAt } from '../runtime.ts';
+import { useTick } from '../useTick.ts';
 import { Select } from './Select.tsx';
 import { Help, NumberInput, Switch } from './fields.tsx';
 import { Learn } from './Learn.tsx';
@@ -154,11 +156,97 @@ function ParamGroups({ kind, values, onChange, placeholder, hide, sources }: { k
   );
 }
 
-function Stat({ k, v, hint }: { k: string; v: React.ReactNode; hint?: string }) {
+function Stat({ k, v, hint, testId }: { k: string; v: React.ReactNode; hint?: string; testId?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 py-0.5" title={hint}>
+    <div className="flex items-baseline justify-between gap-2 py-0.5" title={hint} data-testid={testId}>
       <span className="muted">{k}</span>
       <span className="num font-medium">{v}</span>
+    </div>
+  );
+}
+
+/** Live per-component numbers during a run, synchronized to tView (frozen when paused). */
+function LiveNodeStats({ id, kind }: { id: string; kind: string }) {
+  useTick();
+  const now = viewTime();
+  const s = liveAt(now)?.[id];
+  const w = windowAt(now);
+  const nw = w?.nodes[id];
+  const spec = KINDS[kind];
+  const hasCapacity = !!spec?.station;
+  const hasQueue = kind === 'queue' || (!!spec?.station && 'queueLimit' in spec.params);
+  const hasWait = !!spec?.station && 'queueLimit' in spec.params;
+
+  let totalOk = 0;
+  let totalFail = 0;
+  for (const win of live.windows) {
+    if (win.t * 1000 > now + 1e-6) continue;
+    const wn = win.nodes[id];
+    if (wn) {
+      totalOk += wn.ok;
+      totalFail += wn.fail;
+    }
+  }
+
+  const dt = Math.max(0.001, w?.dt ?? 1);
+  const done = nw ? nw.ok + nw.fail : 0;
+  const errRate = done > 0 ? nw!.fail / done : 0;
+  const util = nw?.util ?? (s?.slots ? s.busy / s.slots : 0);
+  const queued = kind === 'queue' ? s?.depth : s?.queued;
+  const allDown = !!s && s.down > 0 && (s.inst ? s.down === s.inst.length : true);
+
+  return (
+    <div className="card mt-3 p-2.5" data-testid="live-stats">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="font-semibold">{t('現在')}</span>
+        {allDown && (
+          <span className="sd-pill text-[12px]" style={{ '--pill': 'var(--bad)', color: 'var(--bad-ink)' } as React.CSSProperties} data-testid="live-down">
+            {t('故障')}
+          </span>
+        )}
+        {!allDown && s && s.down > 0 && (
+          <span className="sd-pill text-[12px]" style={{ '--pill': 'var(--warn)', color: 'var(--warn-ink)' } as React.CSSProperties} data-testid="live-down">
+            {t('{n} 台故障', { n: s.down })}
+          </span>
+        )}
+        {s?.cb && s.cb !== 'closed' && (
+          <span className="sd-pill text-[12px]" style={{ '--pill': s.cb === 'open' ? 'var(--bad)' : 'var(--warn)' } as React.CSSProperties}>
+            {s.cb === 'open' ? t('跳開') : t('試探中')}
+          </span>
+        )}
+      </div>
+      {hasCapacity && <Stat testId="live-busy" k={t('處理中／容量')} v={s ? `${fmtN(s.busy)}／${fmtN(s.slots)}` : '–'} />}
+      {hasQueue && (
+        <Stat
+          testId="live-queued"
+          k={t('排隊中')}
+          v={queued !== undefined ? <span style={queued > 0 ? { color: 'var(--warn-ink)' } : undefined}>{fmtN(queued)}</span> : '–'}
+          hint={nw?.queue !== undefined ? t('最近一秒平均排隊 {n}', { n: fmtN(nw.queue) }) : undefined}
+        />
+      )}
+      <Stat testId="live-arrivals" k={t('每秒進來')} v={nw ? fmtN(nw.arrivals / dt) : '–'} />
+      <Stat testId="live-ok" k={t('每秒完成')} v={nw ? fmtN(nw.ok / dt) : '–'} />
+      <Stat testId="live-err" k={t('錯誤率')} v={nw ? <span style={errRate > 0 ? { color: 'var(--bad-ink)' } : undefined}>{pct(errRate)}</span> : '–'} />
+      {hasCapacity && <Stat testId="live-util" k={t('忙碌比例')} v={nw || s ? pct(util) : '–'} />}
+      {hasWait && <Stat testId="live-wait" k={t('平均等待')} v={nw?.waitMs !== undefined ? fmtMs(nw.waitMs) : '–'} />}
+      <Stat
+        testId="live-total"
+        k={t('累計完成／失敗')}
+        v={
+          w ? (
+            <>
+              <span>{fmtN(totalOk)}</span>／<span style={totalFail > 0 ? { color: 'var(--bad-ink)' } : undefined}>{fmtN(totalFail)}</span>
+            </>
+          ) : (
+            '–'
+          )
+        }
+      />
+      {live.scale > 1 && (
+        <div className="faint mt-1 text-[12px]" data-testid="live-scale-note">
+          {t('模擬 1/{k}，數字已換算', { k: live.scale })}
+        </div>
+      )}
     </div>
   );
 }
@@ -288,6 +376,8 @@ function RegionField({ id, region, field = 'region' }: { id: string; region: str
 function NodeInspector({ id }: { id: string }) {
   const node = useApp((s) => s.nodes.find((n) => n.id === id)?.data.node);
   const result = useApp((s) => s.result?.nodes[id]);
+  const status = useApp((s) => s.status);
+  const active = status === 'running' || status === 'paused';
   const updateNode = useApp((s) => s.updateNode);
   const remove = useApp((s) => s.remove);
   const savePreset = usePresets((s) => s.save);
@@ -355,6 +445,7 @@ function NodeInspector({ id }: { id: string }) {
         </p>
       )}
       <p className="muted mt-2 text-[14px] leading-relaxed">{t(spec.summary)}</p>
+      {active && <LiveNodeStats id={id} kind={node.kind} />}
       <div className="py-1.5">
         <label className="mb-1 block font-medium">{t('名稱')}</label>
         <input className="field w-full" value={node.label ?? ''} placeholder={t(spec.label)} onChange={(e) => updateNode(id, { label: e.target.value })} />
@@ -369,7 +460,7 @@ function NodeInspector({ id }: { id: string }) {
         sources={node.source?.params}
         onChange={(k, v) => updateNode(id, { params: { [k]: v } })}
       />
-      {result && <NodeStats r={result} />}
+      {!active && result && <NodeStats r={result} />}
     </div>
   );
 }
