@@ -1,16 +1,16 @@
-// Find the limit of the canvas design (roadmap-next M18): steady traffic, raised step by step until the
-// design stops meeting the limits (src/engine/limit.ts, in src/worker/limit.worker.ts). Each step shows
-// as it ends; cancel ends the worker. The answer is "under these assumptions it holds up to about X",
-// with the limits and the assumptions it rests on, said the way the CLI says it (limitConclusion()).
-// The result is not kept as a version.
+// Find the limit of the canvas design (roadmap-next M18, M24): steady traffic, raised step by step until
+// the design stops meeting the limits (src/engine/limit.ts, in src/worker/limit.worker.ts). A panel
+// beside the canvas, not over it: each step, as it ends, colours the components by how busy they were
+// (the store's `limit`, shown on the cards for at least STEP_SHOW_MS), and the search's end marks the
+// component that went first. Cancel ends the worker. The answer is "under these assumptions it holds up
+// to about X", with the limits and the assumptions it rests on, said as the CLI says it, with
+// rates written as the steps write them (limitLines()). An edit of the design or a run while it searches cancels it. The result is not
+// kept as a version.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CircleCheck, CircleX, Hourglass, TrendingUp, TriangleAlert, X } from 'lucide-react';
 import { useApp } from '../store.ts';
-import { useExit, useModal } from '../modal.ts';
 import { assumptionsOf, sloOf, type Design, type Scenario } from '../../core/index.ts';
-import { limitConclusion } from '../../i18n/importReport.ts';
-import { limitProblems, limitReply, NO_WORK, type LimitState } from '../findLimit.ts';
+import { finalMark, limitLines, limitProblems, limitReply, NO_WORK, STEP_SHOW_MS, type LimitState } from '../findLimit.ts';
 import { importMessage } from '../../i18n/importMessages.ts';
 import { getLang, t, tx } from '../../i18n/index.ts';
 import type { LimitReply, LimitRequest } from '../../worker/limit.worker.ts';
@@ -18,17 +18,19 @@ import type { LimitReply, LimitRequest } from '../../worker/limit.worker.ts';
 const VERDICT = { pass: tx('撐得住'), fail: tx('撐不住'), insufficient: tx('結果不足') } as const;
 
 type State = LimitState;
+/** Why a search was cancelled by something else than its Cancel button. */
+type Why = 'edit' | 'run';
 
-export function FindLimit({ onClose }: { onClose: () => void }) {
-  const [closing, exit] = useExit(onClose);
-  // closing ends the search at once, not after the exit animation
-  const close = () => {
-    if (worker.current) stop(worker.current);
-    exit();
-  };
-  const box = useRef<HTMLDivElement>(null);
-  useModal(box, close);
-  // the canvas as it was when the dialog opened
+/** The panel beside the canvas (desktop; App.tsx, in a Slide that removes it once closed): one search
+ *  per `limitKey`. */
+export function FindLimitPanel() {
+  const key = useApp((st) => st.limitKey);
+  return key ? <FindLimit key={key} /> : null;
+}
+
+export function FindLimit() {
+  const worker = useRef<Worker | null>(null);
+  // the canvas as it was when the search started
   const [{ design, scenario }] = useState<{ design: Design; scenario: Scenario }>(() => {
     const st = useApp.getState();
     return { design: st.design(), scenario: structuredClone(st.scenario) };
@@ -37,7 +39,33 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
   // step failed and nothing did work says so at the end (searchCanvas())
   const [problems] = useState(() => limitProblems(design, scenario));
   const [s, setS] = useState<State>(() => (problems.length ? { phase: 'invalid', steps: [], problems } : { phase: 'running', steps: [] }));
-  const worker = useRef<Worker | null>(null);
+  const [why, setWhy] = useState<Why | null>(null);
+  const stateRef = useRef<State>(s);
+  stateRef.current = s;
+  const [stopped, setStopped] = useState(false);
+  const stoppedRef = useRef(false);
+  const finishedRef = useRef(false);
+  const closedRef = useRef(false);
+
+  // closing ends the search at once: a completed search whose playback did not catch up yet puts its
+  // final mark on the canvas (with Clear); a search that did not end leaves no marks
+  const close = () => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    const wasStopped = stoppedRef.current;
+    stoppedRef.current = true;
+    setStopped(true);
+    if (worker.current) stop(worker.current);
+    const st = useApp.getState();
+    const cur = stateRef.current;
+    if (cur.phase === 'running') st.setLimit(null);
+    else if (cur.phase === 'done' && cur.result && !wasStopped && !finishedRef.current) {
+      finishedRef.current = true;
+      st.setLimit(finalMark(cur.result, cur.steps, !!cur.noWork));
+    }
+    st.closeLimit();
+    document.querySelector<HTMLElement>('[data-testid="find-limit-open"]')?.focus({ preventScroll: true });
+  };
 
   useEffect(() => {
     if (problems.length) return;
@@ -60,10 +88,63 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
     return () => stop(w);
   }, [design, scenario, problems]);
 
-  const cancel = () => {
+  const cancel = (reason?: Why) => {
+    if (stateRef.current.phase !== 'running') return;
     if (worker.current) stop(worker.current);
+    if (reason) setWhy(reason);
     setS((x) => (x.phase === 'running' ? { ...x, phase: 'cancelled' } : x));
   };
+
+  // the canvas can be edited and run while the panel is open: stop any playback (even after the
+  // worker finished) and cancel a running search
+  useEffect(
+    () =>
+      useApp.subscribe((st, prev) => {
+        if (closedRef.current) return;
+        const edit = st.issues !== prev.issues;
+        const run = st.status === 'running' && prev.status !== 'running';
+        if (!edit && !run) return;
+        stoppedRef.current = true;
+        setStopped(true);
+        cancel(edit ? 'edit' : 'run');
+      }),
+    [],
+  );
+
+  // the canvas follows the steps, each for at least STEP_SHOW_MS, then shows where the search ended
+  const [shown, setShown] = useState(0);
+  const shownAt = useRef(0);
+  useEffect(() => {
+    if (stopped) return;
+    const st = useApp.getState();
+    if (s.phase === 'cancelled' || s.phase === 'error' || s.phase === 'invalid') {
+      if (st.limit) st.setLimit(null);
+      return;
+    }
+    if (shown < s.steps.length) {
+      const h = setTimeout(() => {
+        if (stoppedRef.current) return;
+        const x = s.steps[shown];
+        shownAt.current = Date.now();
+        useApp.getState().setLimit({ rps: x.rps, util: x.util });
+        setShown(shown + 1);
+      }, Math.max(0, shownAt.current + STEP_SHOW_MS - Date.now()));
+      return () => clearTimeout(h);
+    }
+    if (s.phase === 'done' && s.result && !finishedRef.current) {
+      const h = setTimeout(() => {
+        if (stoppedRef.current) return;
+        finishedRef.current = true;
+        useApp.getState().setLimit(finalMark(s.result!, s.steps, !!s.noWork));
+      }, Math.max(0, shownAt.current + STEP_SHOW_MS - Date.now()));
+      return () => clearTimeout(h);
+    }
+  }, [s, shown, stopped]);
+
+  // focus the panel without scrolling: autoFocus scrolls every parent that hides overflow to show the
+  // button while the panel slides in, which cut off the panel's first line
+  const first = useRef<HTMLButtonElement>(null);
+  useEffect(() => first.current?.focus({ preventScroll: true }), []);
 
   const slo = sloOf();
   const background = design.nodes.some((n) => n.kind === 'queue');
@@ -77,17 +158,17 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
   // the steps that ran scaled down (src/engine/scale.ts): near full load they wait longer than full size
   const ks = s.noWork ? [] : [...new Set(s.steps.map((x) => x.k).filter((k) => k > 1))].sort((a, b) => a - b);
 
-  return createPortal(
-    <div className="sd-backdrop fixed inset-0 z-50 flex items-center justify-center p-6" data-closing={closing || undefined} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div ref={box} role="dialog" aria-modal="true" aria-label={t('找上限')} className="panel sd-dialog flex max-h-[92vh] w-[min(640px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="find-limit">
-        <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-          <TrendingUp size={18} className="muted" />
-          <div className="text-[16px] font-semibold">{t('找上限')}</div>
-          <button className="btn ml-auto" onClick={close} aria-label={t('關閉')} autoFocus>
-            <X size={16} />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 text-[14px] leading-relaxed">
+  return (
+    // not a dialog: the canvas stays in use; Escape inside the panel closes it, as it closed the dialog
+    <aside role="region" aria-label={t('找上限')} className="flex h-full w-[380px] flex-col border-l border-[var(--line)] bg-[var(--chrome)]" data-testid="find-limit" onKeyDown={(e) => e.key === 'Escape' && close()}>
+      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-3">
+        <TrendingUp size={18} className="muted" />
+        <div className="text-[16px] font-semibold">{t('找上限')}</div>
+        <button ref={first} className="btn ml-auto" onClick={close} aria-label={t('關閉')}>
+          <X size={16} />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 text-[14px] leading-relaxed">
           <p>{t('用穩定的流量，從每秒 1 個請求開始加倍，撐不住以後再往回找。每一步都先暖機，量測一段時間，再停掉流量看能不能做完。')}</p>
           <div data-testid="find-limit-conditions">
             <div className="mb-1 font-medium">{t('達標條件：')}</div>
@@ -110,7 +191,12 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
                 {t('第 {n} 步執行中…', { n: s.steps.length + 1 })}
               </div>
             )}
-            {s.phase === 'cancelled' && <p data-testid="find-limit-cancelled">{t('已取消：跑完 {n} 步，沒有結論。', { n: s.steps.length })}</p>}
+            {s.phase === 'cancelled' && (
+              <p data-testid="find-limit-cancelled">
+                {why === 'edit' ? t('設計改了，搜尋已取消。') + ' ' : why === 'run' ? t('開始執行模擬，搜尋已取消。') + ' ' : ''}
+                {t('已取消：跑完 {n} 步，沒有結論。', { n: s.steps.length })}
+              </p>
+            )}
             {s.phase === 'invalid' && (
               <div data-testid="find-limit-problems">
                 <div className="mb-1 font-medium">{t('不能找上限，要先改：')}</div>
@@ -136,12 +222,12 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
             )}
             {s.result && !s.noWork && (
               <div className="space-y-1 font-medium" data-testid="find-limit-result">
-                {limitConclusion(s.result, name).map((x, i) => (
+                {limitLines(s.result, name).map((x, i) => (
                   <p key={i}>{x}</p>
                 ))}
                 {s.result.firstFailRps === undefined && !s.result.stopped && (
                   <p className="font-normal" data-testid="find-limit-no-fail">
-                    {t('搜尋到每秒 {rps} 個請求就停了，這不是上限：設計可能撐得更多，也可能是有會壞的地方沒有被模擬到。', { rps: Math.max(...s.result.steps.map((x) => x.rps)) })}
+                    {t('搜尋到 {rps}/秒就停了，這不是上限：設計可能撐得更多，也可能是有會壞的地方沒有被模擬到。', { rps: Math.max(...s.result.steps.map((x) => x.rps)) })}
                   </p>
                 )}
               </div>
@@ -149,16 +235,19 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
             {!!sorted.length && !s.noWork && s.phase !== 'invalid' && (
               <ul className="mt-2 space-y-0.5 text-[13px]" data-testid="find-limit-steps">
                 {sorted.map((x) => (
-                  <li key={x.rps} className="flex gap-1.5" data-verdict={x.verdict}>
-                    {x.verdict === 'pass' ? <CircleCheck size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--ok)' }} /> : x.verdict === 'fail' ? <CircleX size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--bad)' }} /> : <TriangleAlert size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--warn)' }} />}
-                    <span className="num">{t('{rps}/秒', { rps: x.rps })}</span>
-                    <span>{t(VERDICT[x.verdict])}</span>
-                    {x.k > 1 && <span className="faint num" title={t('這一步用 1/{k} 的流量和容量模擬，再把數字乘回來', { k: x.k })}>1/{x.k}</span>}
+                  <li key={x.rps} data-verdict={x.verdict}>
+                    {/* the rate and the verdict never wrap; the reason goes on its own line and wraps */}
+                    <div className="flex items-center gap-1.5 whitespace-nowrap" data-testid="find-limit-step-head">
+                      {x.verdict === 'pass' ? <CircleCheck size={14} className="shrink-0" style={{ color: 'var(--ok)' }} /> : x.verdict === 'fail' ? <CircleX size={14} className="shrink-0" style={{ color: 'var(--bad)' }} /> : <TriangleAlert size={14} className="shrink-0" style={{ color: 'var(--warn)' }} />}
+                      <span className="num" data-testid="find-limit-step-rps">{t('{rps}/秒', { rps: x.rps })}</span>
+                      <span data-testid="find-limit-step-verdict">{t(VERDICT[x.verdict])}</span>
+                      {x.k > 1 && <span className="faint num" title={t('這一步用 1/{k} 的流量和容量模擬，再把數字乘回來', { k: x.k })}>1/{x.k}</span>}
+                    </div>
                     {x.verdict === 'fail' && (
-                      <span className="faint min-w-0 truncate">
-                        {x.failed.map(criterionName).join('、')}
+                      <div className="faint pl-5 [overflow-wrap:anywhere]" data-testid="find-limit-step-why">
+                        {x.failed.map(criterionName).join(t('、'))}
                         {x.bottleneck ? ` · ${t('最忙的是 {node}', { node: name(x.bottleneck) })}` : ''}
-                      </span>
+                      </div>
                     )}
                   </li>
                 ))}
@@ -169,7 +258,7 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
           <div className="space-y-2 border-t border-[var(--line)] pt-3" data-testid="find-limit-assumptions">
             {ks.length > 0 && (
               <p data-testid="find-limit-scale">
-                {t('這次用縮小比例模擬（{ks}）：流量和容量都縮成 1/k 再把數字乘回來。接近滿載時，縮小後的等待時間比原尺寸長，所以上限可能偏保守。', { ks: ks.map((k) => `1/${k}`).join('、') })}
+                {t('這次用縮小比例模擬（{ks}）：流量和容量都縮成 1/k 再把數字乘回來。接近滿載時，縮小後的等待時間比原尺寸長，所以上限可能偏保守。', { ks: ks.map((k) => `1/${k}`).join(t('、')) })}
               </p>
             )}
             {assumptions.length ? (
@@ -192,20 +281,18 @@ export function FindLimit({ onClose }: { onClose: () => void }) {
             )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--line)] px-4 py-3">
-          {s.phase === 'running' ? (
-            <button className="btn" onClick={cancel} data-testid="find-limit-cancel">
-              {t('取消')}
-            </button>
-          ) : (
-            <button className="btn btn-primary" onClick={close} data-testid="find-limit-close">
-              {t('關閉')}
-            </button>
-          )}
-        </div>
+      <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--line)] px-4 py-3">
+        {s.phase === 'running' ? (
+          <button className="btn" onClick={() => cancel()} data-testid="find-limit-cancel">
+            {t('取消')}
+          </button>
+        ) : (
+          <button className="btn btn-primary" onClick={close} data-testid="find-limit-close">
+            {t('關閉')}
+          </button>
+        )}
       </div>
-    </div>,
-    document.body,
+    </aside>
   );
 }
 

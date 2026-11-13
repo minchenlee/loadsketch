@@ -3135,8 +3135,8 @@ test.describe('find limit (M18)', () => {
     await expect(dlg.getByTestId('find-limit-result')).toBeVisible({ timeout: 150_000 });
     await expect(dlg.getByTestId('find-limit-running')).toHaveCount(0);
     const result = await dlg.getByTestId('find-limit-result').innerText();
-    expect(result).toMatch(/在這些假設下，大約撐到 \d+ rps；\d+ rps 撐不住，最先壞的是 API（api）/);
-    const holds = Number(result.match(/撐到 (\d+) rps/)![1]);
+    expect(result).toMatch(/在這些假設下，大約撐到 \d+\/秒；\d+\/秒撐不住，最先壞的是 API（api）/);
+    const holds = Number(result.match(/撐到 (\d+)\/秒/)![1]);
     expect(holds).toBeGreaterThan(1000);
     expect(holds).toBeLessThanOrEqual(5120);
     // each step has a verdict; above about 1000 rps the steps run scaled down, and the assumptions say so
@@ -3245,6 +3245,269 @@ test.describe('find limit (M18)', () => {
     await expect(dlg.getByTestId('find-limit-running')).toHaveCount(0);
     await expect(dlg.getByTestId('find-limit-close')).toBeVisible();
     expect(errors).toEqual([]);
+  });
+
+  type St = { getState(): { run(): void; finish(): void; stop(): void; status: string; updateNode(id: string, p: { params: Record<string, unknown> }): void } };
+  const store = (page: Page) => ({
+    run: () => page.evaluate(() => (window as unknown as { __loadsketch: St }).__loadsketch.getState().run()),
+    finish: () => page.evaluate(() => (window as unknown as { __loadsketch: St }).__loadsketch.getState().finish()),
+    status: () => page.evaluate(() => (window as unknown as { __loadsketch: St }).__loadsketch.getState().status),
+    stop: () => page.evaluate(() => (window as unknown as { __loadsketch: St }).__loadsketch.getState().stop()),
+    edit: () => page.evaluate(() => (window as unknown as { __loadsketch: St }).__loadsketch.getState().updateNode('api', { params: { concurrency: 128 } })),
+  });
+  /** The colour a busy share gets (src/app/ui.ts utilColor). */
+  const colorOf = (u: number) => (u >= 0.95 ? 'var(--bad)' : u >= 0.7 ? 'var(--warn)' : 'var(--ok)');
+
+  test('find limit canvas: the panel is beside the canvas; each step colours the cards for at least 0.4 s; the end marks the first to go; Clear', async ({ page }) => {
+    test.setTimeout(180_000);
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await loadApi(page);
+    await expect(page.locator('[data-node]')).toHaveCount(2);
+    // the last run's figures on the cards
+    await store(page).run();
+    await store(page).finish();
+    await expect.poll(() => store(page).status(), { timeout: 60_000 }).toBe('done');
+    const api = page.locator('[data-node="api"]');
+    await expect(api.locator('[data-live]')).toBeVisible();
+    // note each step the canvas shows, and when
+    await page.evaluate(() => {
+      const log: { text: string; at: number }[] = [];
+      (window as unknown as { __steps: typeof log }).__steps = log;
+      new MutationObserver(() => {
+        const el = document.querySelector('[data-testid="limit-canvas-now"]');
+        const text = el?.textContent ?? '';
+        if (text && text !== log[log.length - 1]?.text) log.push({ text, at: performance.now() });
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    await page.getByTestId('find-limit-open').click();
+    const panel = page.getByTestId('find-limit');
+    await expect(panel).toBeVisible();
+    // not a dialog over the canvas: no backdrop, and the card is what is at its own centre
+    await expect(page.locator('.sd-backdrop')).toHaveCount(0);
+    const box = (await api.boundingBox())!;
+    const panelBox = (await panel.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(panelBox.x);
+    expect(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('[data-node="api"]'), [box.x + box.width / 2, box.y + box.height / 2])).toBe(true);
+    // a step on the canvas: the step's rate, the card's colour from that step, before the last run's figures
+    await expect(page.getByTestId('limit-canvas-now')).toContainText('現在這一步：', { timeout: 60_000 });
+    await expect(api.locator('[data-limit-util]')).toBeVisible();
+    await expect(api.locator('[data-live]')).toHaveCount(0);
+    const u = Number(await api.locator('[data-limit-util]').getAttribute('data-limit-util'));
+    expect(u).toBeGreaterThanOrEqual(0);
+    expect(u).toBeLessThanOrEqual(1);
+    // the end: the panel's result and the canvas agree
+    await expect(panel.getByTestId('find-limit-result')).toBeVisible({ timeout: 150_000 });
+    const result = await panel.getByTestId('find-limit-result').innerText();
+    const holds = result.match(/撐到 (\d+)\/秒/)![1];
+    await expect(page.getByTestId('limit-canvas-done')).toContainText(`撐到約 ${holds}/秒，最先倒的是 API`);
+    await expect(api.getByTestId('limit-first-down')).toHaveText(`撐到約 ${holds}/秒就先倒`);
+    await expect(page.locator('[data-node="users"] [data-testid="limit-first-down"]')).toHaveCount(0);
+    // the colours of the step it holds up to, in the card's colour
+    const end = Number(await api.locator('[data-limit-util]').getAttribute('data-limit-util'));
+    expect(await api.locator('[data-limit-util]').getAttribute('data-util-color')).toBe(colorOf(end));
+    expect(end).toBeCloseTo((Number(holds) * 0.05) / 256, 1);
+    // each step stayed at least about 0.4 s (timers: a little early is allowed)
+    const log = await page.evaluate(() => (window as unknown as { __steps: { text: string; at: number }[] }).__steps);
+    const steps = await panel.getByTestId('find-limit-steps').locator('li').count();
+    expect(log.length).toBe(steps);
+    const gaps = log.slice(1).map((x, i) => x.at - log[i].at);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(380);
+    // closing the panel keeps the marks; Clear removes them, and the last run's figures come back
+    await panel.getByTestId('find-limit-close').click();
+    await expect(panel).toHaveCount(0);
+    await expect(api.getByTestId('limit-first-down')).toBeVisible();
+    await page.getByTestId('limit-canvas-clear').click();
+    await expect(page.getByTestId('limit-canvas-done')).toHaveCount(0);
+    await expect(page.locator('[data-limit-row]')).toHaveCount(0);
+    await expect(api.locator('[data-live]')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('find limit canvas: an edit or a run while it searches cancels it and clears the marks; after a search, an edit, a run or a new search clears them', async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await loadApi(page);
+    const panel = page.getByTestId('find-limit');
+    const marks = page.locator('[data-limit-row]');
+    const now = page.getByTestId('limit-canvas-now');
+    // an edit while it searches
+    await page.getByTestId('find-limit-open').click();
+    await expect(now).toBeVisible({ timeout: 60_000 });
+    await store(page).edit();
+    await expect(panel.getByTestId('find-limit-cancelled')).toContainText('設計改了，搜尋已取消。');
+    await expect(marks).toHaveCount(0);
+    await expect(now).toHaveCount(0);
+    await expect.poll(() => alive(page)).toBe(0);
+    // moving a card is not an edit: no cancel
+    await page.getByTestId('find-limit-open').click();
+    await expect(now).toBeVisible({ timeout: 60_000 });
+    const card = (await page.locator('[data-node="users"]').boundingBox())!;
+    await page.mouse.move(card.x + 40, card.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 40, card.y + 120, { steps: 5 });
+    await page.mouse.up();
+    await expect(panel.getByTestId('find-limit-running')).toBeVisible();
+    // a run while it searches
+    await page.getByTestId('run').click();
+    await expect(panel.getByTestId('find-limit-cancelled')).toContainText('開始執行模擬，搜尋已取消。');
+    await expect(marks).toHaveCount(0);
+    await expect.poll(() => alive(page)).toBe(0);
+    await store(page).stop();
+    // after a whole search: the marks stay until an edit, a run or a new search
+    const search = async () => {
+      await page.getByTestId('find-limit-open').click();
+      await expect(page.getByTestId('limit-canvas-done')).toBeVisible({ timeout: 150_000 });
+      await expect(marks).toHaveCount(2);
+    };
+    await search();
+    await store(page).edit();
+    await expect(marks).toHaveCount(0);
+    await expect(page.getByTestId('limit-canvas-done')).toHaveCount(0);
+    await search();
+    await page.getByTestId('find-limit-close').click();
+    await store(page).run();
+    await expect(marks).toHaveCount(0);
+    await store(page).stop();
+    await search();
+    // a new search starts with no marks from the last one
+    await page.getByTestId('find-limit-open').click();
+    await expect(page.getByTestId('limit-canvas-done')).toHaveCount(0);
+    await expect(page.locator('[data-testid="limit-first-down"]')).toHaveCount(0);
+  });
+
+  test('find limit canvas: the layout at 1100 px in English: the canvas keeps its width, one line per rate and verdict, the label inside the card, no 「、」, the panel top whole', async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await page.goto('/app/?example=three-tier&scenario=steady&lang=en');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    // opening the panel beside the three-tier design re-centres the canvas so no card is cut by the panel edge
+    await page.getByTestId('find-limit-open').click();
+    const panel = page.getByTestId('find-limit');
+    await expect(panel).toBeVisible();
+    await page.waitForTimeout(450);
+    const flowBox = (await page.locator('.react-flow').boundingBox())!;
+    for (const card of await page.locator('[data-node]').all()) {
+      const b = (await card.boundingBox())!;
+      expect(b.x).toBeGreaterThanOrEqual(flowBox.x - 0.5);
+      expect(b.x + b.width).toBeLessThanOrEqual(flowBox.x + flowBox.width + 0.5);
+    }
+    await panel.getByRole('button', { name: 'Close' }).click();
+    await expect(panel).toHaveCount(0);
+    await loadApi(page);
+    await expect(page.locator('[data-node]')).toHaveCount(2);
+    await page.getByTestId('find-limit-open').click();
+    /** the panel's title row starts at the panel's top, and nothing above it is scrolled away */
+    const topWhole = async () => {
+      const [p, h] = [(await panel.boundingBox())!, (await panel.locator('> div').first().boundingBox())!];
+      expect(h.y).toBeGreaterThanOrEqual(p.y - 0.5);
+      expect(await page.evaluate(() => { let n = document.querySelector('[data-testid="find-limit"]')?.parentElement; let s = 0; while (n) { s += n.scrollTop + n.scrollLeft; n = n.parentElement; } return s; })).toBe(0);
+    };
+    await expect(panel).toBeVisible();
+    await page.waitForTimeout(400);
+    await topWhole();
+    // the right panel steps aside while the search panel is open: the canvas keeps most of the width
+    const canvas = (await page.locator('.react-flow').boundingBox())!;
+    expect(canvas.width).toBeGreaterThan(400);
+    await expect(page.getByTestId('limit-canvas-done')).toBeVisible({ timeout: 150_000 });
+    await topWhole();
+    // each rate and each verdict on one line, at least one reason under a step that does not hold
+    const line = async (l: import('@playwright/test').Locator) => {
+      for (const b of await l.all()) expect((await b.boundingBox())!.height).toBeLessThan(24);
+    };
+    await line(panel.getByTestId('find-limit-step-rps'));
+    await line(panel.getByTestId('find-limit-step-verdict'));
+    await expect(panel.getByTestId('find-limit-step-why').first()).toBeVisible();
+    for (const row of await panel.getByTestId('find-limit-step-head').all()) {
+      await row.scrollIntoViewIfNeeded();
+      expect(await row.evaluate((e) => ({ h: (e as HTMLElement).offsetHeight, over: e.scrollWidth - e.clientWidth }))).toEqual({ h: expect.any(Number), over: 0 });
+      expect((await row.boundingBox())!.height).toBeLessThan(24);
+    }
+    for (const why of await panel.getByTestId('find-limit-step-why').all()) {
+      await why.scrollIntoViewIfNeeded();
+      expect(await why.evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
+    }
+    // the red label stays inside its card and on one line
+    const api = page.locator('[data-node="api"]');
+    const [card, pill] = [(await api.boundingBox())!, (await api.getByTestId('limit-first-down').boundingBox())!];
+    expect(pill.x + pill.width).toBeLessThanOrEqual(card.x + card.width + 0.5);
+    // and its text stays inside the label: nothing runs out of it
+    expect(await api.getByTestId('limit-first-down').evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
+    expect(await api.getByTestId('limit-first-down').evaluate((e) => (e as HTMLElement).offsetHeight)).toBeLessThanOrEqual(28);
+    // English: rates in "/s", lists with commas
+    const text = (await panel.innerText()) + (await page.getByTestId('limit-canvas-done').innerText()) + (await api.innerText());
+    expect(text).not.toContain('、');
+    expect(text).not.toMatch(/\d rps/);
+    expect(text).toMatch(/Holds up to about \d+\/s/);
+  });
+
+  test('find limit canvas: edit/run/close during done playback, stopped at start, focus back and role=status (P2-1/P2-2/P2-3/P3)', async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await loadApi(page);
+    await expect(page.locator('[data-node]')).toHaveCount(2);
+    const panel = page.getByTestId('find-limit');
+    const marks = page.locator('[data-limit-row]');
+    const now = page.getByTestId('limit-canvas-now');
+    const done = page.getByTestId('limit-canvas-done');
+    // P2-1 (edit): worker already done while playback still steps through the steps
+    await page.getByTestId('find-limit-open').click();
+    await expect(panel.getByTestId('find-limit-result')).toBeVisible({ timeout: 60_000 });
+    await expect(now).toBeVisible();
+    // P3-c: live step banner is not a status live region
+    await expect(now).not.toHaveAttribute('role', 'status');
+    await store(page).edit();
+    await expect(now).toHaveCount(0);
+    await expect(done).toHaveCount(0);
+    await expect(marks).toHaveCount(0);
+    await page.waitForTimeout(1200);
+    await expect(now).toHaveCount(0);
+    await expect(done).toHaveCount(0);
+    await expect(marks).toHaveCount(0);
+    await panel.getByTestId('find-limit-close').click();
+    await expect(panel).toHaveCount(0);
+    // P3-b: focus returns to the run bar's Find limit button on close
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('find-limit-open');
+    // P2-1 (run): worker already done while playback still runs
+    await page.getByTestId('find-limit-open').click();
+    await expect(panel.getByTestId('find-limit-result')).toBeVisible({ timeout: 60_000 });
+    await expect(now).toBeVisible();
+    await page.getByTestId('run').click();
+    await expect(now).toHaveCount(0);
+    await expect(done).toHaveCount(0);
+    await expect(marks).toHaveCount(0);
+    await page.waitForTimeout(1200);
+    await expect(now).toHaveCount(0);
+    await expect(done).toHaveCount(0);
+    await expect(marks).toHaveCount(0);
+    await store(page).stop();
+    await panel.getByTestId('find-limit-close').click();
+    await expect(panel).toHaveCount(0);
+    // P2-2: close after worker done finishes playback at once with the final mark and Clear
+    await page.getByTestId('find-limit-open').click();
+    await expect(panel.getByTestId('find-limit-result')).toBeVisible({ timeout: 60_000 });
+    await expect(now).toBeVisible();
+    await panel.getByTestId('find-limit-close').click();
+    await expect(panel).toHaveCount(0);
+    await expect(done).toBeVisible();
+    await expect(done).toHaveAttribute('role', 'status');
+    await expect(page.getByTestId('limit-canvas-clear')).toBeVisible();
+    await expect(page.getByTestId('limit-first-down')).toBeVisible();
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('find-limit-open');
+    // P2-3: stopped on step 1 with no holdsRps does not say 撐得住 on the canvas
+    await page.evaluate(() =>
+      (window as unknown as { __loadsketch: { getState(): { updateNode(id: string, p: { params: Record<string, unknown> }): void } } }).__loadsketch
+        .getState()
+        .updateNode('api', { params: { autoscale: 'on', scaleEveryS: 1800 } }),
+    );
+    await page.getByTestId('find-limit-open').click();
+    await expect(done).toBeVisible({ timeout: 60_000 });
+    await expect(done).not.toContainText('撐得住');
+    await expect(done).toContainText('1/秒停下');
   });
 
   test('find limit: cancel ends the worker and gives no number; the button is off while a run plays', async ({ page }) => {

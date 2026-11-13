@@ -20,7 +20,7 @@
 // Text is message ids with arguments (src/i18n/importMessages.ts).
 import type { Design, Scenario } from '../schema/design.ts';
 import { SCENARIO_SCHEMA } from '../schema/design.ts';
-import { Simulation, type SimResult } from './sim.ts';
+import { Simulation, type SimResult, type WindowStat } from './sim.ts';
 
 /** The limits when none are given (Q18 A). */
 export const DEFAULT_SLO = { p99Ms: 1000, errorRate: 0.01, asyncFailRate: 0, drainS: 120 } as const;
@@ -52,6 +52,33 @@ export interface SimulateResult {
   slo: { p99Ms: number; errorRate: number; asyncP99Ms?: number; asyncFailRate: number; drainS: number };
   scenario: Scenario;
   sim: SimResult;
+  /** Each component's busy share while traffic ran (warm-up end to load end), 0..1: loadUtilization(). */
+  loadUtil: Record<string, number>;
+}
+
+/**
+ * Each component's average busy share over the windows inside [fromS, toS]: the traffic of a peak step,
+ * after warm-up and before the drain. Not `nodes[id].utilization`: that averages the whole measured
+ * interval, drain included, so a full component shows about half. Not `peakUtilization` (the busiest
+ * second). Weighted by window length; components with no `util` (no instances) are left out. A share
+ * does not change with the scale k: traffic and capacity are both 1/k.
+ */
+export function loadUtilization(windows: WindowStat[], fromS: number, toS: number): Record<string, number> {
+  // keyed by node id: Maps, and a result with no prototype, so an id such as `constructor` is a node
+  const sum = new Map<string, number>();
+  const time = new Map<string, number>();
+  const eps = 1e-6;
+  for (const w of windows) {
+    if (w.t - w.dt < fromS - eps || w.t > toS + eps) continue;
+    for (const [id, n] of Object.entries(w.nodes)) {
+      if (n.util === undefined) continue;
+      sum.set(id, (sum.get(id) ?? 0) + n.util * w.dt);
+      time.set(id, (time.get(id) ?? 0) + w.dt);
+    }
+  }
+  const out: Record<string, number> = Object.create(null);
+  for (const [id, x] of sum) out[id] = x / time.get(id)!;
+  return out;
 }
 
 /** Warm-up: every autoscaled node gets two checks, a boot and its warm-up; at least 30 s (cold starts). */
@@ -142,7 +169,8 @@ export function simulatePeak(d: Design, base: Scenario, rps: number, o: PeakOpti
 
   const bottleneck = sim.bottleneck ? { node: sim.bottleneck.node, utilization: sim.bottleneck.utilization } : undefined;
   const timing = { warmS, loadS, drainS, durationS: scenario.durationS! };
-  const res = { criteria, ...(bottleneck ? { bottleneck } : {}), timing, slo, scenario, sim };
+  const loadUtil = loadUtilization(run.allWindows(), warmS, loadS);
+  const res = { criteria, ...(bottleneck ? { bottleneck } : {}), timing, slo, scenario, sim, loadUtil };
   // Not enough: the engine stopped early, the scenario did not fit, or too few samples for a p99.
   if (sim.truncated) return { verdict: 'insufficient', insufficient: { id: 'simulate.short.truncated', args: { events: sim.events } }, ...res };
   if (loadS + drainS > MAX_DURATION_S) return { verdict: 'insufficient', insufficient: { id: 'simulate.short.tooLong', args: { need: loadS + drainS, max: MAX_DURATION_S } }, ...res };

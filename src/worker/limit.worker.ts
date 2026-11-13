@@ -15,7 +15,7 @@ self.onmessage = (ev: MessageEvent<LimitRequest>) => {
   const { lang, design, scenario } = ev.data;
   setLang(lang);
   try {
-    const r = searchCanvas(design, scenario, (step, k) => post({ type: 'step', step, k }));
+    const r = searchCanvas(design, scenario, (step, k, util) => post({ type: 'step', step, k, util }));
     post('problems' in r ? { type: 'invalid', problems: r.problems } : { type: 'done', result: r.result, noWork: r.noWork });
   } catch (e) {
     post({ type: 'error', error: (e as Error).message });

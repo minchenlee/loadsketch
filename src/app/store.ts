@@ -32,6 +32,7 @@ import { markNew, planEntrance } from './motion.ts';
 import { VERSIONS_KEY, loadVersions, newId, sameRun, summarize, updateVersions, versionChanges, viewVersions, type Version, type VersionChange } from './versions.ts';
 import { seriesOf, type CompareItem } from './compare.ts';
 import { curves } from './curves.ts';
+import type { LimitMark } from './findLimit.ts';
 
 /** localStorage, or undefined where it is blocked (private mode in some browsers). */
 function storage(): Storage | undefined {
@@ -179,6 +180,17 @@ export interface AppState {
   compare: CompareItem[] | null;
   /** Goes up with every comparison opened: the compare view starts afresh for each one. */
   compareKey: number;
+  /** The limit search panel is open (roadmap-next M18, M24). */
+  limitOpen: boolean;
+  /** Goes up with every search started: the panel starts afresh for each one. */
+  limitKey: number;
+  /** A limit search on the canvas: the colours of a step and, once over, where it ended. Before the
+   *  last run's figures on the cards; cleared by an edit of the design, a run, a new search or Clear. */
+  limit: LimitMark | null;
+  /** Start a new search (the panel opens on it). */
+  openLimit: () => void;
+  closeLimit: () => void;
+  setLimit: (m: LimitMark | null) => void;
 
   load: (d: Design, origin?: () => Design) => void;
   /** Load a design from `loadsketch import terraform` (in the browser) with its checks. */
@@ -362,6 +374,12 @@ export const useApp = create<AppState>((set, get) => {
   versionsMemoryOnly: storage() === undefined,
   compare: null,
   compareKey: 0,
+  limitOpen: false,
+  limitKey: 0,
+  limit: null,
+  openLimit: () => set({ limitOpen: true, limitKey: get().limitKey + 1, limit: null }),
+  closeLimit: () => set({ limitOpen: false }),
+  setLimit: (limit) => set({ limit }),
 
   load: (d, origin) => {
     get().stop();
@@ -520,7 +538,7 @@ export const useApp = create<AppState>((set, get) => {
       return;
     }
     resetLive();
-    set({ status: 'running', result: null, windows: [], timeline: [], tView: 0, error: null, ran: { design: d, scenario: get().scenario } });
+    set({ status: 'running', result: null, windows: [], timeline: [], tView: 0, error: null, limit: null, ran: { design: d, scenario: get().scenario } });
     send({ type: 'start', design: d, scenario: get().scenario, speed: get().speed, lang: get().lang });
   },
   pause: (p) => {
@@ -790,4 +808,10 @@ connect((m) => {
     windows: live.windows.filter((w) => w.t <= sec + 1e-9),
     timeline: live.timeline.filter((e) => e.t <= sec),
   });
+});
+
+// An edit of the design (every edit that changes what runs checks the design again: a new `issues`;
+// moving a card does not) clears the limit search's marks: they were found for the design before.
+useApp.subscribe((s, prev) => {
+  if (s.limit && s.issues !== prev.issues) useApp.setState({ limit: null });
 });

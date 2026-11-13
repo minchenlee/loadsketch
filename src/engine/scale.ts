@@ -96,7 +96,8 @@ export function planScale(design: Design, expectedRequests: number, requested: n
   maxK = Number.isFinite(maxK) ? Math.max(1, Math.floor(maxK + 1e-9)) : 1000;
   const want = requested === 'auto' ? Math.ceil(expectedRequests / SCALE_TARGET_REQUESTS - 1e-9) : Math.floor(requested);
   const k = Math.max(1, Math.min(want, maxK));
-  const nodes: Record<string, NodeScale> = {};
+  // keyed by node id: no prototype, so an id such as `constructor` finds nothing it should not
+  const nodes: Record<string, NodeScale> = Object.create(null);
   for (const n of design.nodes) {
     const p = resolveParams(n.kind, n.params);
     const slot = SLOTS.map((s) => num(p[s])).find((v) => v !== undefined);
@@ -190,6 +191,13 @@ function mulCounts(o: Record<string, unknown>, k: number, keys: Set<string>, ski
   }
 }
 
+/** Multiply the count fields of each entry of a map keyed by id (nodes, edges, APIs). The keys are
+ *  ids, never compared with the field names: a node named `write` is a node, not a write count. */
+function mulEach(map: unknown, k: number, keys: Set<string>, skip: Set<string>): void {
+  if (!map || typeof map !== 'object') return;
+  for (const v of Object.values(map as Record<string, unknown>)) if (v && typeof v === 'object' && !Array.isArray(v)) mulCounts(v as Record<string, unknown>, k, keys, skip);
+}
+
 const BOTH = new Set([...FLOW, ...NODE_QUEUE]);
 /** Fields whose numbers are not counts even though their names match (latency summaries keep their ms). */
 const KEEP = new Set(['latencyMs', 'asyncLatencyMs', 'theory', 'autoscale', 'function', 'scenario', 'scale']);
@@ -199,7 +207,11 @@ const FUNCTION_COUNTS = ['limit', 'provisioned', 'peakEnvs', 'endEnvs', 'coldSta
 /** A window's counts at full size (in place; returns it). */
 export function scaleWindow<W extends object>(w: W, k: number): W {
   if (k !== 1) {
-    mulCounts(w as Record<string, unknown>, k, BOTH, new Set(['latency']));
+    // the maps keyed by id, entry by entry; the rest by field name
+    mulCounts(w as Record<string, unknown>, k, BOTH, new Set(['latency', 'nodes', 'edges']));
+    const byId = w as { nodes?: unknown; edges?: unknown };
+    mulEach(byId.nodes, k, BOTH, new Set(['latency']));
+    mulEach(byId.edges, k, BOTH, new Set(['latency']));
     const lat = (w as { latency?: { count: number } }).latency;
     if (lat) lat.count *= k;
   }
@@ -222,9 +234,12 @@ export function scaleResult<R extends { nodes: Record<string, { instances?: Row[
   if (k === 1) return r;
   const obj = r as unknown as Record<string, unknown>;
   for (const [key, v] of Object.entries(obj)) {
-    if (KEEP.has(key) || key === 'nodes' || key === 'bottleneck' || !v || typeof v !== 'object') continue;
+    if (KEEP.has(key) || key === 'nodes' || key === 'bottleneck' || key === 'edges' || key === 'apis' || !v || typeof v !== 'object') continue;
     mulCounts(v as Record<string, unknown>, k, BOTH, KEEP);
   }
+  // keyed by edge id and API name, entry by entry (an API named `write` is an API)
+  mulEach(obj.edges, k, BOTH, KEEP);
+  mulEach(obj.apis, k, BOTH, KEEP);
   const b = r.bottleneck;
   if (b) {
     const ns = plan.nodes[b.node];

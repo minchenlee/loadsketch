@@ -7,6 +7,7 @@ import { guessedParams } from '../sources.ts';
 import { useApp } from '../store.ts';
 import { enterDelay } from '../motion.ts';
 import type { SdNode } from '../convert.ts';
+import type { LimitMark } from '../findLimit.ts';
 import { liveAt, viewTime, windowAt } from '../runtime.ts';
 import { CATEGORY_COLOR, fmtN, iconOf, pct, utilColor } from '../ui.ts';
 import { useTick } from '../useTick.ts';
@@ -172,6 +173,31 @@ function LiveRow({ id, station, expanded }: { id: string; station: boolean; expa
   );
 }
 
+/** A limit search on the canvas (M24): how busy this component was in the step on screen (while its
+ *  traffic ran), and, once the search is over, whether it went first. In place of the last run's row. */
+function LimitRow({ id, station, mark }: { id: string; station: boolean; mark: LimitMark }) {
+  const u = Object.hasOwn(mark.util, id) ? mark.util[id] : undefined;
+  const first = mark.done?.node === id ? mark.done : undefined;
+  return (
+    <div className="mt-2 space-y-1" data-limit-row={id}>
+      {station && u !== undefined && (
+        <div className="flex items-center gap-2" title={t('找上限：每秒 {rps} 個請求這一步，有流量那段時間的平均忙碌程度', { rps: fmtN(mark.rps) })} data-limit-util={u.toFixed(3)} data-util-color={utilColor(u)}>
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--panel-2)' }}>
+            <div className="h-full rounded-full" style={{ width: `${Math.min(100, u * 100)}%`, background: utilColor(u) }} />
+          </div>
+          <span className="num w-9 text-right text-[12px] font-medium">{pct(u)}</span>
+        </div>
+      )}
+      {first && (
+        // inside the card: a long label wraps instead of running over the card's edge and the call labels
+        <span className="sd-pill !h-auto max-w-full !whitespace-normal !rounded-[10px] py-0.5 !leading-snug [&::before]:shrink-0" style={{ '--pill': 'var(--bad)', color: 'var(--bad-ink)' } as React.CSSProperties} data-testid="limit-first-down">
+          {first.holdsRps !== undefined ? t('撐到約 {rps}/秒就先倒', { rps: first.holdsRps }) : t('{rps}/秒就撐不住', { rps: first.firstFailRps ?? 0 })}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export const ComponentNode = memo(function ComponentNode({ data }: NodeProps<SdNode>) {
   const n = data.node;
   const spec = KINDS[n.kind];
@@ -188,6 +214,8 @@ export const ComponentNode = memo(function ComponentNode({ data }: NodeProps<SdN
   // a card that is new on the canvas comes into focus (motion.ts plans when)
   const [enter] = useState(() => enterDelay('node', n.id));
   const remeasure = useUpdateNodeInternals();
+  // a limit search's colours come before the last run's figures
+  const limit = useApp((st) => st.limit);
   return (
     <div
       className={`sd-node px-2.5 py-2${enter !== null ? ' sd-in' : ''}`}
@@ -238,8 +266,8 @@ export const ComponentNode = memo(function ComponentNode({ data }: NodeProps<SdN
           </button>
         )}
       </div>
-      <LiveRow id={n.id} station={spec.station} expanded={expanded} />
-      {expanded && <InstanceList id={n.id} roles={instanceRoles(n)} />}
+      {limit ? <LimitRow id={n.id} station={spec.station} mark={limit} /> : <LiveRow id={n.id} station={spec.station} expanded={expanded} />}
+      {expanded && !limit && <InstanceList id={n.id} roles={instanceRoles(n)} />}
       <Handle type="source" position={Position.Right} />
     </div>
   );

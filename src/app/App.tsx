@@ -8,6 +8,7 @@ import { Inspector } from './components/Inspector.tsx';
 import { Metrics } from './components/Metrics.tsx';
 import { Palette } from './components/Palette.tsx';
 import { RunBar } from './components/RunBar.tsx';
+import { FindLimitPanel } from './components/FindLimit.tsx';
 import { Slide } from './components/Slide.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import { SCENARIOS, SPEEDS, useApp } from './store.ts';
@@ -159,6 +160,7 @@ function Shell() {
   const panels = EMBED ? { left: false, right: EMBED.right, bottom: EMBED.bottom } : saved;
   const phone = usePhone() && (!EMBED || EMBED.phone);
   const drawer = useApp((s) => s.drawer);
+  const limitOpen = useApp((s) => s.limitOpen);
   // a phone: the canvas alone, with the panels in drawers that come up from the bottom
   if (phone)
     return (
@@ -198,7 +200,12 @@ function Shell() {
           <LessonJudge />
           <OnCallJudge />
           <ConstraintJudge />
-          <Slide open={panels.right} axis="x">
+          {/* the limit search (M24): beside the canvas, so the canvas shows each step */}
+          <Slide open={limitOpen} axis="x">
+            <FindLimitPanel />
+          </Slide>
+          {/* the find-limit panel takes the right panel's place while it is open, so the canvas keeps its width (the saved panel choice does not change) */}
+          <Slide open={panels.right && !limitOpen} axis="x">
             <Inspector />
           </Slide>
         </div>

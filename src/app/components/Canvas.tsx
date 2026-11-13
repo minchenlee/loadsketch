@@ -1,6 +1,6 @@
 import { isPhone, usePhone } from '../phone.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CircleX, TriangleAlert, X } from 'lucide-react';
+import { CircleX, TrendingUp, TriangleAlert, X } from 'lucide-react';
 import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useStoreApi, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
 import { usePresets } from '../presets.ts';
 import { useApp } from '../store.ts';
@@ -11,6 +11,7 @@ import { FlowEdge, throughText } from './FlowEdge.tsx';
 import { startEdgeFlow } from '../edgeFlow.ts';
 import { t } from '../../i18n/index.ts';
 import { KINDS } from '../../schema/kinds.ts';
+import { limitBanner } from '../findLimit.ts';
 
 const nodeTypes = { component: ComponentNode };
 const edgeTypes = { flow: FlowEdge };
@@ -133,6 +134,38 @@ function useFlight(nodes: SdNode[]): Map<string, XY> | null {
 }
 
 /**
+ * Re-centres the canvas when the limit panel opens or closes so every card stays visible beside it.
+ * Tracks the pane as it slides (or resizes at once under reduced motion), then lets the user pan
+ * and zoom freely again.
+ */
+function useRefitOnLimit() {
+  const limitOpen = useApp((s) => s.limitOpen);
+  const { setViewport } = useReactFlow();
+  const store = useStoreApi();
+  const prev = useRef(limitOpen);
+  useEffect(() => {
+    if (prev.current === limitOpen) return;
+    prev.current = limitOpen;
+    if (isPhone()) return;
+    const pane = store.getState().domNode;
+    if (!pane) return;
+    const fit = () => {
+      const nodes = useApp.getState().nodes;
+      const r = pane.getBoundingClientRect();
+      if (nodes.length && r.width > 0 && r.height > 0) void setViewport(firstView(nodes, r.width, r.height), { duration: 0 });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(pane);
+    const stop = setTimeout(() => ro.disconnect(), reducedMotion() ? 50 : 400);
+    return () => {
+      ro.disconnect();
+      clearTimeout(stop);
+    };
+  }, [limitOpen, setViewport, store]);
+}
+
+/**
  * A dragged card swings from the point it is held by: it leans against the direction it moves in,
  * and springs back level when it is let go.
  */
@@ -224,6 +257,7 @@ export function Canvas() {
   const select = useApp((s) => s.select);
   const { screenToFlowPosition } = useReactFlow();
   const fly = useFlight(nodes);
+  useRefitOnLimit();
   const tilt = useDragTilt();
 
   const onDrop = useCallback(
@@ -285,6 +319,7 @@ export function Canvas() {
       <EdgeFlow />
       <Checks />
       <ThroughHint />
+      <LimitNote />
     </ReactFlow>
   );
 }
@@ -336,6 +371,37 @@ function ThroughHint() {
         <button className="faint shrink-0 self-start" onClick={() => useApp.setState({ throughHint: null })} aria-label={t('關閉')} data-testid="edge-through-hint-close">
           <X size={14} />
         </button>
+      </div>
+    </Panel>
+  );
+}
+
+/**
+ * A limit search on the canvas (M24): the step whose colours the cards show, and once it is over, where
+ * it ended, with Clear. At the top, where the run bar and the hint at the bottom do not cover it.
+ */
+function LimitNote() {
+  const mark = useApp((s) => s.limit);
+  const name = useApp((s) => {
+    const id = s.limit?.done?.node;
+    const n = id ? s.nodes.find((x) => x.id === id)?.data.node : undefined;
+    return n ? n.label ?? t(KINDS[n.kind].label) : id;
+  });
+  if (!mark) return null;
+  const d = mark.done;
+  const text = limitBanner(mark, () => name ?? '');
+  return (
+    <Panel position="top-center" className="!mt-3 w-max max-w-[min(640px,calc(100%-24px))]">
+      <div className="card sd-over flex items-center gap-2 px-3 py-2 text-[13px]" role={d ? 'status' : undefined} data-testid={d ? 'limit-canvas-done' : 'limit-canvas-now'}>
+        <TrendingUp size={14} className="muted shrink-0" />
+        <span className="shrink-0 whitespace-nowrap font-medium">{t('找上限')}</span>
+        {/* never cut: a long component name wraps to another line */}
+        <span className="num min-w-0 [overflow-wrap:anywhere]">{text}</span>
+        {d && (
+          <button className="btn shrink-0 text-[13px]" onClick={() => useApp.getState().setLimit(null)} data-testid="limit-canvas-clear">
+            {t('清除')}
+          </button>
+        )}
       </div>
     </Panel>
   );

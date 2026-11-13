@@ -8,6 +8,7 @@ import { findLimitOf, type LimitOptions, type LimitResult, type LimitStep, type 
 import { KINDS } from '../schema/kinds.ts';
 import { parseDesign, parseScenario, sideEdge, type Design, type Scenario } from '../schema/design.ts';
 import { t } from '../i18n/index.ts';
+import { importMessage } from '../i18n/importMessages.ts';
 
 /** Before a worker starts: the same check as a run (store.ts run()), and the scenario's settings
  *  without its events (the search leaves them out). Messages; empty: the search can start. */
@@ -52,22 +53,23 @@ export const noWork = (r: LimitResult, worked: boolean): boolean => !worked && r
 /** The search the worker runs: the checks of a run (the only thing that turns a design away before it
  *  runs), then the whole search, noting whether any step reached a component that does work. A sample
  *  that saw no work is not a reason to stop: a rare path (a CDN miss) can show up at higher traffic. */
-export function searchCanvas(d: Design, s: Scenario, onStep?: (step: LimitStep, k: number) => void, o: LimitOptions = {}): { result: LimitResult; noWork: boolean } | { problems: string[] } {
+export function searchCanvas(d: Design, s: Scenario, onStep?: (step: LimitStep, k: number, util: Record<string, number>) => void, o: LimitOptions = {}): { result: LimitResult; noWork: boolean } | { problems: string[] } {
   const problems = limitProblems(d, s);
   if (problems.length) return { problems };
   const work = workNodes(d);
   let worked = false;
   const result = findLimitOf(d, s, o, (step, run) => {
     worked ||= reachesWork(run, work);
-    onStep?.(step, run.sim.scale ?? 1);
+    onStep?.(step, run.sim.scale ?? 1, run.loadUtil);
   });
   return { result, noWork: noWork(result, worked) };
 }
 
-/** The dialog's state; `k` of a step: it ran at 1/k of the traffic and capacity. */
-export type LimitState = { phase: 'running' | 'done' | 'cancelled' | 'error' | 'invalid'; steps: (LimitStep & { k: number })[]; result?: LimitResult; noWork?: boolean; error?: string; problems?: string[] };
+/** The dialog's state; `k` of a step: it ran at 1/k of the traffic and capacity; `util`: each
+ *  component's busy share while the step's traffic ran (loadUtilization()). */
+export type LimitState = { phase: 'running' | 'done' | 'cancelled' | 'error' | 'invalid'; steps: (LimitStep & { k: number; util: Record<string, number> })[]; result?: LimitResult; noWork?: boolean; error?: string; problems?: string[] };
 /** What the worker sends (src/worker/limit.worker.ts). */
-export type LimitReply = { type: 'step'; step: LimitStep; k: number } | { type: 'done'; result: LimitResult; noWork: boolean } | { type: 'invalid'; problems: string[] } | { type: 'error'; error: string };
+export type LimitReply = { type: 'step'; step: LimitStep; k: number; util: Record<string, number> } | { type: 'done'; result: LimitResult; noWork: boolean } | { type: 'invalid'; problems: string[] } | { type: 'error'; error: string };
 
 /** The state after a reply: only a running search changes (a reply already queued when it was
  *  cancelled or closed changes nothing). */
@@ -75,7 +77,7 @@ export function limitReply(x: LimitState, r: LimitReply): LimitState {
   if (x.phase !== 'running') return x;
   switch (r.type) {
     case 'step':
-      return { ...x, steps: [...x.steps, { ...r.step, k: r.k }] };
+      return { ...x, steps: [...x.steps, { ...r.step, k: r.k, util: r.util }] };
     case 'done':
       return { ...x, phase: 'done', result: r.result, noWork: r.noWork };
     case 'invalid':
@@ -83,4 +85,64 @@ export function limitReply(x: LimitState, r: LimitReply): LimitState {
     case 'error':
       return { ...x, phase: 'error', error: r.error };
   }
+}
+
+/** What the canvas shows of a limit search (roadmap-next M24): the step on screen, each component's
+ *  busy share in it, and, once the search is over, where it ended. */
+export interface LimitMark {
+  rps: number;
+  util: Record<string, number>;
+  done?: { holdsRps?: number; firstFailRps?: number; node?: string; stopped?: LimitResult['stopped'] };
+}
+
+/** Each step stays on the canvas at least this long: a step usually takes 0.3–0.5 s, too fast to see. */
+export const STEP_SHOW_MS = 400;
+
+/** The canvas after a search: the colours of the step it holds up to (or the first that failed, or the
+ *  highest), and the component that went first. Nothing when no component did any work. */
+export function finalMark(r: LimitResult, steps: LimitState['steps'], noWork: boolean): LimitMark | null {
+  if (noWork || !steps.length) return null;
+  const at = (rps?: number) => (rps === undefined ? undefined : steps.find((x) => x.rps === rps));
+  const shown = at(r.holdsRps) ?? at(r.firstFailRps) ?? [...steps].sort((a, b) => b.rps - a.rps)[0];
+  const done: NonNullable<LimitMark['done']> = {};
+  if (r.holdsRps !== undefined) done.holdsRps = r.holdsRps;
+  if (r.firstFailRps !== undefined) done.firstFailRps = r.firstFailRps;
+  if (r.bottleneck) done.node = r.bottleneck;
+  if (r.stopped) done.stopped = r.stopped;
+  return { rps: shown.rps, util: shown.util, done };
+}
+
+/** The banner text on the canvas for a limit step or its final mark (roadmap-next M24). */
+export function limitBanner(mark: LimitMark, name: (id: string) => string): string {
+  const d = mark.done;
+  if (!d) return t('現在這一步：{rps}/秒', { rps: mark.rps });
+  if (d.firstFailRps !== undefined) {
+    const who = d.node ? name(d.node) : '';
+    return d.holdsRps !== undefined
+      ? t('撐到約 {rps}/秒，最先倒的是 {name}', { rps: d.holdsRps, name: who })
+      : t('{rps}/秒就撐不住，最先倒的是 {name}', { rps: d.firstFailRps, name: who });
+  }
+  if (d.stopped) {
+    return d.holdsRps !== undefined
+      ? t('到 {holds}/秒還撐得住，在 {stop}/秒停下', { holds: d.holdsRps, stop: d.stopped.rps })
+      : t('在 {rps}/秒停下（沒有結論）', { rps: d.stopped.rps });
+  }
+  return t('到 {rps}/秒都撐得住（這不是上限）', { rps: d.holdsRps ?? mark.rps });
+}
+
+/** The search's conclusion on the canvas page (roadmap-next M24): what limitConclusion() says for the
+ *  CLI, with rates written as the steps write them ("/s", 「/秒」) and lists joined in the page's
+ *  language. The CLI's report does not change. */
+export function limitLines(l: LimitResult, name: (id: string) => string): string[] {
+  const L: string[] = [];
+  const node = l.bottleneck ? name(l.bottleneck) : '?';
+  if (l.firstFailRps !== undefined && l.holdsRps !== undefined) L.push(t('在這些假設下，大約撐到 {holds}/秒；{fail}/秒撐不住，最先壞的是 {node}。', { holds: l.holdsRps, fail: l.firstFailRps, node }));
+  else if (l.firstFailRps !== undefined) L.push(t('在這些假設下，{fail}/秒就撐不住（最先壞的是 {node}）。', { fail: l.firstFailRps, node }));
+  else if (!l.stopped) L.push(t('在這些假設下，到 {rps}/秒都撐得住，沒有找到撐不住的點。', { rps: Math.max(...l.steps.map((s) => s.rps)) }));
+  if (l.nonMonotonic) {
+    const passes = l.steps.filter((s) => s.verdict === 'pass' && s.rps > l.firstFailRps!).map((s) => t('{rps}/秒', { rps: s.rps }));
+    L.push(t('結果不是單調的：比 {fail}/秒高的 {passes}又撐得住；報的是第一個撐不住的點。', { fail: l.firstFailRps!, passes: passes.join(t('、')) }));
+  }
+  if (l.stopped) L.push(t('在 {rps}/秒停下：{why}', { rps: l.stopped.rps, why: importMessage(l.stopped.id, {}) }));
+  return L;
 }
