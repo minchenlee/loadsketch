@@ -3068,3 +3068,212 @@ test.describe('live panel', () => {
     });
   });
 });
+
+test.describe('find limit (M18)', () => {
+  test.beforeEach(async ({ page }) => {
+    // count the limit workers that are alive (the dev build's StrictMode starts the effect twice)
+    await page.addInitScript(() => {
+      const w = window as unknown as { __lw: number; __lwEnd: number };
+      Object.assign(w, { __lw: 0, __lwEnd: 0 });
+      const Real = window.Worker;
+      window.Worker = class extends Real {
+        private ended = false;
+        private limit = false;
+        constructor(url: string | URL, opts?: WorkerOptions) {
+          super(url, opts);
+          this.limit = String(url).includes('limit.worker');
+          if (this.limit) w.__lw++;
+        }
+        terminate() {
+          if (this.limit && !this.ended) w.__lwEnd++;
+          this.ended = true;
+          super.terminate();
+        }
+      };
+    });
+  });
+  const alive = (page: Page) => page.evaluate(() => {
+    const w = window as unknown as { __lw: number; __lwEnd: number };
+    return w.__lw - w.__lwEnd;
+  });
+  /** users -> api: 1 instance × 256 slots, 50 ms each, about 5120 rps at most; from about 2000 rps a
+   *  step runs scaled down (256 slots allow k up to 8, src/engine/scale.ts). */
+  const loadApi = (page: Page) => page.evaluate(() => {
+    const st = (window as unknown as { __loadsketch: { getState(): { load(d: unknown): void; versions: unknown[] } } }).__loadsketch.getState();
+    st.load({
+      schema: 'loadsketch/design@1',
+      name: 'one api',
+      nodes: [
+        { id: 'users', kind: 'client', pos: [0, 0] },
+        { id: 'api', kind: 'service', label: 'API', pos: [240, 0], params: { instances: 1, concurrency: 256, queueLimit: 2000, serviceMs: { mean: 50, cv: 0 } } },
+      ],
+      edges: [{ from: 'users', to: 'api', latencyMs: 0 }],
+    });
+    return st.versions.length;
+  });
+
+  test('find limit: steps show as they end; the result says "under these assumptions", with the limits, the traffic, the scale and no version kept', async ({ page }) => {
+    test.setTimeout(180_000);
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/app/?example=three-tier&scenario=spike');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    const versions = await loadApi(page);
+    await expect(page.locator('[data-node]')).toHaveCount(2);
+    await page.getByTestId('find-limit-open').click();
+    const dlg = page.getByTestId('find-limit');
+    await expect(dlg).toBeVisible();
+    // the limits (CLI defaults) and the traffic: the scenario's settings without its events
+    await expect(dlg.getByTestId('find-limit-conditions')).toContainText('p99 ≤ 1000 ms');
+    await expect(dlg.getByTestId('find-limit-conditions')).toContainText('≤ 1%');
+    await expect(dlg.getByTestId('find-limit-conditions')).toContainText('120');
+    await expect(dlg.getByTestId('find-limit-traffic')).toContainText('不含情境裡的事件');
+    await expect(dlg.getByTestId('find-limit-traffic')).toContainText('個事件，找上限時都拿掉');
+    // progress: the running line, then steps one by one
+    await expect(dlg.getByTestId('find-limit-running')).toBeVisible();
+    await expect(dlg.getByTestId('find-limit-steps').locator('li').first()).toBeVisible({ timeout: 60_000 });
+    await expect(dlg.getByTestId('find-limit-result')).toBeVisible({ timeout: 150_000 });
+    await expect(dlg.getByTestId('find-limit-running')).toHaveCount(0);
+    const result = await dlg.getByTestId('find-limit-result').innerText();
+    expect(result).toMatch(/在這些假設下，大約撐到 \d+ rps；\d+ rps 撐不住，最先壞的是 API（api）/);
+    const holds = Number(result.match(/撐到 (\d+) rps/)![1]);
+    expect(holds).toBeGreaterThan(1000);
+    expect(holds).toBeLessThanOrEqual(5120);
+    // each step has a verdict; above about 1000 rps the steps run scaled down, and the assumptions say so
+    const steps = dlg.getByTestId('find-limit-steps').locator('li');
+    expect(await steps.count()).toBeGreaterThan(10);
+    await expect(steps.filter({ hasText: '撐不住' }).first()).toContainText('最忙的是 API（api）');
+    await expect(steps.filter({ hasText: /1\/\d/ }).first()).toBeVisible();
+    await expect(dlg.getByTestId('find-limit-scale')).toContainText('縮小比例');
+    await expect(dlg.getByTestId('find-limit-scale')).toContainText('偏保守');
+    await expect(dlg.getByTestId('find-limit-assumptions')).toContainText('畫布上填的值');
+    console.log('find limit steps (rps, verdict, 1/k):', (await steps.allInnerTexts()).map((x) => x.replace(/\s+/g, ' ')).join(' | '));
+    expect(await alive(page)).toBe(0);
+    await dlg.getByTestId('find-limit-close').click();
+    await expect(dlg).toHaveCount(0);
+    // not kept as a version
+    expect(await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): { versions: unknown[] } } }).__loadsketch.getState().versions.length)).toBe(versions);
+    expect(errors).toEqual([]);
+  });
+
+  test('find limit: a CDN with no origin runs the whole search, then says nothing does work, with no number and no steps', async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.evaluate(() => {
+      const st = (window as unknown as { __loadsketch: { getState(): { load(d: unknown): void } } }).__loadsketch.getState();
+      st.load({ schema: 'loadsketch/design@1', name: 'cdn only', nodes: [{ id: 'users', kind: 'client', pos: [0, 0] }, { id: 'cdn', kind: 'cdn', pos: [240, 0] }], edges: [{ from: 'users', to: 'cdn' }] });
+    });
+    const t0 = Date.now();
+    await page.getByTestId('find-limit-open').click();
+    const dlg = page.getByTestId('find-limit');
+    // the steps show while it runs (it is not turned away from a sample)
+    await expect(dlg.getByTestId('find-limit-steps').locator('li').first()).toBeVisible({ timeout: 60_000 });
+    await expect(dlg.getByTestId('find-limit-no-work')).toBeVisible({ timeout: 150_000 });
+    console.log(`find limit, no work (CDN with no origin): the whole search took ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+    await expect(dlg.getByTestId('find-limit-no-work')).toContainText('沒有元件在做事');
+    await expect(dlg.getByTestId('find-limit-result')).toHaveCount(0);
+    await expect(dlg.getByTestId('find-limit-steps')).toHaveCount(0);
+    await expect(dlg.getByTestId('find-limit-scale')).toHaveCount(0);
+    await expect(dlg).not.toContainText('524288');
+    expect(await alive(page)).toBe(0);
+  });
+
+  test('find limit: a design that does not run (a client with no edge) shows the problems and no number, with no search', async ({ page }) => {
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.evaluate(() => {
+      const st = (window as unknown as { __loadsketch: { getState(): { load(d: unknown): void } } }).__loadsketch.getState();
+      st.load({ schema: 'loadsketch/design@1', name: 'alone', nodes: [{ id: 'users', kind: 'client', pos: [0, 0] }, { id: 'api', kind: 'service', pos: [240, 0] }], edges: [] });
+    });
+    await page.getByTestId('find-limit-open').click();
+    const dlg = page.getByTestId('find-limit');
+    await expect(dlg.getByTestId('find-limit-problems')).toContainText('沒有連出去的線');
+    await expect(dlg.getByTestId('find-limit-result')).toHaveCount(0);
+    await expect(dlg.getByTestId('find-limit-running')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __lw: number }).__lw)).toBe(0);
+    await dlg.getByTestId('find-limit-close').click();
+    await expect(dlg).toHaveCount(0);
+  });
+
+  test('find limit (English): a design with estimated values lists them as the assumptions', async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/app/?example=three-tier&scenario=steady&lang=en');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.evaluate(() => {
+      const st = (window as unknown as { __loadsketch: { getState(): { load(d: unknown): void } } }).__loadsketch.getState();
+      st.load({
+        schema: 'loadsketch/design@1',
+        name: 'imported api',
+        nodes: [
+          { id: 'users', kind: 'client', pos: [0, 0] },
+          {
+            id: 'api', kind: 'service', label: 'API', pos: [240, 0],
+            params: { instances: 2, concurrency: 8, serviceMs: { mean: 20, cv: 0 } },
+            source: { from: ['aws_ecs_service.api'], params: { serviceMs: { evidence: 'estimate', role: 'assumption', from: 'aws_ecs_task_definition.api.cpu' }, instances: { evidence: 'iac', role: 'setting', from: 'aws_ecs_service.api.desired_count' } } },
+          },
+        ],
+        edges: [{ from: 'users', to: 'api', latencyMs: 0 }],
+      });
+    });
+    await page.getByTestId('find-limit-open').click();
+    const dlg = page.getByTestId('find-limit');
+    await expect(dlg.getByTestId('find-limit-traffic')).toContainText('events');
+    await expect(dlg.getByTestId('find-limit-result')).toContainText(/Under these assumptions/i, { timeout: 100_000 });
+    await expect(dlg.getByTestId('find-limit-result')).toContainText('API (api)');
+    // the estimate is listed with where it came from; the value from the IaC is not an assumption
+    const as = dlg.getByTestId('find-limit-assumptions');
+    await expect(as).toContainText('1 estimated value');
+    await expect(as).toContainText('api.serviceMs');
+    await expect(as).toContainText('aws_ecs_task_definition.api.cpu');
+    await expect(as).not.toContainText('api.instances');
+    expect(errors).toEqual([]);
+  });
+
+  test('find limit: a worker that cannot load says so in the dialog, not as a page error', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route(/limit\.worker/, (route) => route.fulfill({ status: 500, body: 'no' }));
+    await page.goto('/app/?example=three-tier&scenario=steady');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.getByTestId('find-limit-open').click();
+    const dlg = page.getByTestId('find-limit');
+    await expect(dlg.getByTestId('find-limit-error')).toContainText('找上限失敗');
+    await expect(dlg.getByTestId('find-limit-result')).toHaveCount(0);
+    await expect(dlg.getByTestId('find-limit-running')).toHaveCount(0);
+    await expect(dlg.getByTestId('find-limit-close')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('find limit: cancel ends the worker and gives no number; the button is off while a run plays', async ({ page }) => {
+    await page.goto('/app/?example=three-tier&scenario=spike');
+    await expect(page.locator('[data-node]')).toHaveCount(5);
+    await page.getByTestId('find-limit-open').click();
+    const dlg = page.getByTestId('find-limit');
+    await expect(dlg.getByTestId('find-limit-running')).toBeVisible();
+    await expect.poll(() => alive(page)).toBe(1);
+    // cancel after a step came back: the steps so far stay, no number, nothing more comes in
+    await expect(dlg.getByTestId('find-limit-steps').locator('li').first()).toBeVisible({ timeout: 60_000 });
+    await dlg.getByTestId('find-limit-cancel').click();
+    const n = await dlg.getByTestId('find-limit-steps').locator('li').count();
+    await expect(dlg.getByTestId('find-limit-cancelled')).toContainText(`跑完 ${n} 步，沒有結論`);
+    await expect(dlg.getByTestId('find-limit-result')).toHaveCount(0);
+    expect(await alive(page)).toBe(0);
+    await page.waitForTimeout(1500);
+    await expect(dlg.getByTestId('find-limit-steps').locator('li')).toHaveCount(n);
+    await expect(dlg.getByTestId('find-limit-cancelled')).toBeVisible();
+    await dlg.getByTestId('find-limit-close').click();
+    await expect(dlg).toHaveCount(0);
+    // closing while it runs ends the worker too
+    await page.getByTestId('find-limit-open').click();
+    await expect.poll(() => alive(page)).toBe(1);
+    await page.keyboard.press('Escape');
+    await expect(dlg).toHaveCount(0);
+    await expect.poll(() => alive(page)).toBe(0);
+    // while a run plays, the button is off
+    await page.getByTestId('run').click();
+    await expect(page.getByTestId('find-limit-open')).toBeDisabled();
+  });
+});

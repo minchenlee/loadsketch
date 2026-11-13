@@ -1,5 +1,5 @@
-import { FastForward, Gauge, Pause, Play, RotateCcw, Square, Zap } from 'lucide-react';
-import { useMemo } from 'react';
+import { FastForward, Gauge, Pause, Play, RotateCcw, Square, TrendingUp, Zap } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useApp, GENERAL_SCENARIOS, SCENARIOS, SPEEDS, exampleScenario } from '../store.ts';
 import { live, viewTime } from '../runtime.ts';
 import { useTick } from '../useTick.ts';
@@ -9,6 +9,7 @@ import { NumberField, Select, type Option } from './Select.tsx';
 import { t, tx } from '../../i18n/index.ts';
 import { LONG_RUN_S, fmtClock } from '../ui.ts';
 import { useCauseHidden } from './OnCall.tsx';
+import { FindLimit } from './FindLimit.tsx';
 
 function Clock() {
   useTick();
@@ -116,6 +117,8 @@ export function RunBar() {
   const events = scenario.events ?? [];
   // on call, before the answer: the events' tooltip would name the fault
   const causeHidden = useCauseHidden();
+  // M18: the limit search, next to the scenario it takes its settings from
+  const [limitOpen, setLimitOpen] = useState(false);
 
   return (
     <div className="sd-runbar panel flex h-11 shrink-0 items-center gap-2 overflow-hidden border-t px-3 whitespace-nowrap" role="toolbar" aria-label={t('執行')}>
@@ -212,6 +215,16 @@ export function RunBar() {
           <Zap size={12} /> {t('{n} 個事件', { n: events.length })}
         </span>
       )}
+      <button
+        className="btn sd-desk shrink-0"
+        onClick={() => setLimitOpen(true)}
+        disabled={active}
+        title={t('用穩定的流量一步步加大，找這個設計大約撐到每秒多少請求')}
+        data-testid="find-limit-open"
+      >
+        <TrendingUp size={14} /> {t('找上限')}
+      </button>
+      {limitOpen && <FindLimit onClose={() => setLimitOpen(false)} />}
       {error && (
         <span className="sd-run-error ml-auto min-w-0 truncate text-[14px]" style={{ color: 'var(--bad-ink)' }} title={error}>
           {error}

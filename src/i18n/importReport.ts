@@ -31,14 +31,18 @@ export function simulateSection(s: SimulateResult): string[] {
 
 /** The --find-limit conclusion, one line each: never "the limit is X". */
 export function limitSummary(l: LimitResult, nAssumptions: number): string[] {
+  return [...limitConclusion(l), importMessage('limit.assumptions', { n: nAssumptions })];
+}
+
+/** What the search found, without the estimates line (the app lists them itself); `name` shows a node. */
+export function limitConclusion(l: LimitResult, name: (id: string) => string = (id) => id): string[] {
   const L: string[] = [];
-  const node = l.bottleneck ?? '?';
+  const node = l.bottleneck ? name(l.bottleneck) : '?';
   if (l.firstFailRps !== undefined && l.holdsRps !== undefined) L.push(importMessage('limit.holds', { holds: l.holdsRps, fail: l.firstFailRps, node }));
   else if (l.firstFailRps !== undefined) L.push(importMessage('limit.failsAtStart', { fail: l.firstFailRps, node }));
   else if (!l.stopped) L.push(importMessage('limit.noFail', { rps: Math.max(...l.steps.map((s) => s.rps)) }));
   if (l.nonMonotonic) L.push(importMessage('limit.nonMonotonic', { fail: l.firstFailRps!, passes: l.steps.filter((s) => s.verdict === 'pass' && s.rps > l.firstFailRps!).map((s) => s.rps).join(', ') }));
   if (l.stopped) L.push(importMessage('limit.stopped', { rps: l.stopped.rps, why: importMessage(l.stopped.id, {}) }));
-  L.push(importMessage('limit.assumptions', { n: nAssumptions }));
   return L;
 }
 

@@ -157,6 +157,8 @@ const pct = (x: number) => Math.round(x * 10000) / 100;
 
 export const START_RPS = 1;
 export const MAX_RPS = 1_000_000;
+/** The options of each step, and where the search stops raising the traffic (default MAX_RPS). */
+export interface LimitOptions extends PeakOptions { maxRps?: number }
 export const BISECT = 4;
 
 export interface LimitStep { rps: number; verdict: Verdict; bottleneck?: string; failed: string[]; insufficient?: string }
@@ -178,7 +180,8 @@ export interface LimitResult {
 const tidy = (x: number) => (x >= 10 ? Math.round(x) : Math.round(x * 100) / 100);
 
 /** The search, with the step run given (tests pass a fake one). */
-export function searchLimit(evaluate: (rps: number) => LimitStep): LimitResult {
+/** `maxRps`: where the doubling stops (MAX_RPS; a test passes a smaller one to keep a full search short). */
+export function searchLimit(evaluate: (rps: number) => LimitStep, maxRps = MAX_RPS): LimitResult {
   const steps: LimitStep[] = [];
   const run = (rps: number) => {
     const s = evaluate(rps);
@@ -199,14 +202,14 @@ export function searchLimit(evaluate: (rps: number) => LimitStep): LimitResult {
 
   let lo: number | undefined;
   let hi: number | undefined;
-  for (let rps = START_RPS; rps <= MAX_RPS; rps *= 2) {
+  for (let rps = START_RPS; rps <= maxRps; rps *= 2) {
     const s = run(rps);
     if (stop(s)) return result({ rps, id: s.insufficient! });
     if (s.verdict === 'pass') lo = rps;
     if (s.verdict === 'fail') {
       hi = rps;
       // One step past the first fail: a pass there shows the results are not monotonic.
-      if (rps * 2 <= MAX_RPS) {
+      if (rps * 2 <= maxRps) {
         const after = run(rps * 2);
         if (stop(after)) return result({ rps: rps * 2, id: after.insufficient! });
       }
@@ -234,13 +237,16 @@ export const stepOf = (rps: number, s: SimulateResult): LimitStep => ({
   ...(s.insufficient ? { insufficient: s.insufficient.id } : {}),
 });
 
-/** Find the limit of `d` under steady traffic shaped like `base`; `onStep` sees each step as it ends. */
-export function findLimitOf(d: Design, base: Scenario, o: PeakOptions = {}, onStep?: (s: LimitStep) => void): LimitResult {
+/** Find the limit of `d` under steady traffic shaped like `base`; `onStep` sees each step as it ends,
+ *  with its full run (the app reads the scale it ran at). */
+export function findLimitOf(d: Design, base: Scenario, o: LimitOptions = {}, onStep?: (s: LimitStep, run: SimulateResult) => void): LimitResult {
+  const { maxRps: _m, ...peak } = o;
   return searchLimit((rps) => {
-    const s = stepOf(rps, simulatePeak(d, base, rps, o));
-    onStep?.(s);
+    const run = simulatePeak(d, base, rps, peak);
+    const s = stepOf(rps, run);
+    onStep?.(s, run);
     return s;
-  });
+  }, o.maxRps);
 }
 
 export interface Assumption { node: string; param: string; value: string; from?: string }
