@@ -36,6 +36,7 @@ Summary: **25 checks** (24 pass within tolerance, 1 known deviation).
 ## Known deviations
 
 - **Scale k = 8 vs k = 1 near saturation (rho ~ 0.93) (API mean wait):** scale.ts cuts slots per instance (256 -> 32) at constant utilization rho; near saturation, Erlang C wait grows steeply as server count c shrinks.
+- **Cache `ttlS` under scaling (`scale > 1`):** In `lru` mode with `ttlS > 0`, `scaleDesign()` reduces request arrivals by `k` while leaving `ttlS`, clock timestamps, `capacityKeys`, and the client key space unscaled. Each key therefore receives `1/k` as many requests per TTL window, increasing TTL expirations and under-predicting hit rate at `k > 1`: for `capacityKeys = 200`, `keys = { count: 500, zipf: 0.8 }`, and `5000 rps`, `ttlS = 1` with `readRatio = 1.0` drops hit rate from `0.680` (`k = 1`) to `0.623` (`k = 8`, `-0.058`), `ttlS = 1` with `readRatio = 0.9` differs by `-0.022`, and `ttlS = 10` differs by only `-0.003`. `ttlS` is not multiplied by `k` because engine time does not scale, so scaling `ttlS` would delay TTL expiry instants (such as synchronized stampedes) by `k`x; furthermore, a separate effect causes `ttlS = 0` with `readRatio = 0.9` to show a `+0.032` higher hit rate at `k = 8` (fewer concurrent reads arrive during refill after write invalidation), which scaling `ttlS` cannot fix. When TTL is short (~1 s) and hit rate accuracy matters, run at `scale = 1`.
 
 ## Bottleneck attribution
 
