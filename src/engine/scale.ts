@@ -13,13 +13,24 @@ export const SCALE_TARGET_REQUESTS = 300_000;
 export const MIN_SLOTS = 32;
 /** After the slots, instances are cut down to this, not lower. */
 export const MIN_INSTANCES = 10;
+/** Token bucket bursts keep at least this many tokens (or the original burst when smaller) so Poisson jitter stays faithful. */
+export const MIN_BURST = 32;
+/** Max refill time (burst / ratePerSec) in seconds for the burst floor: slower or zero refill makes burst a total budget that must scale by 1/k. */
+export const BURST_REFILL_MAX_S = 1;
+
+/**
+ * Events that directly change arrival rate (`spike`, `ramp`, `wave`, `cron`). Other events
+ * (`down`, `region_down`, `slow`, `errors`, `shift`, `rollout`, `reshard`, `partition`, `pause`)
+ * do not, so only the former disable the burst floor to prevent scaled runs from absorbing k× bursts.
+ */
+const SPIKE_EVENTS = new Set<ScenarioEvent['type']>(['spike', 'ramp', 'wave', 'cron']);
 
 /** Slots per instance (threads, connections). */
 const SLOTS = ['concurrency', 'connections'];
 /** Per instance limits that follow the traffic each instance gets (÷ the node's slot factor). */
 const PER_INSTANCE = ['queueLimit'];
 /** Limits on totals across the node (÷ k). 0 keeps its meaning (off). */
-const TOTALS = ['ratePerSec', 'burst', 'maxConcurrent', 'minCalls', 'maxDepth', 'maxConcurrency', 'provisioned', 'scalePer10s'];
+const TOTALS = ['ratePerSec', 'maxConcurrent', 'minCalls', 'maxDepth', 'maxConcurrency', 'provisioned', 'scalePer10s'];
 /** Integer totals; ratePerSec stays a real number. */
 const REAL = new Set(['ratePerSec']);
 
@@ -43,6 +54,8 @@ export interface ScalePlan {
   requested: number | 'auto';
   /** Largest k the design allows (slots ≥ 32, then instances ≥ 10). */
   maxK: number;
+  /** Whether the scenario includes arrival-rate events (`SPIKE_EVENTS`). */
+  hasSpikes: boolean;
   nodes: Record<string, NodeScale>;
 }
 
@@ -77,6 +90,120 @@ function nodeMaxK(n: DesignNode, keepInstances: boolean): number {
 export const ROLLOUT_KINDS = new Set(['api_gateway', 'service', 'worker']);
 
 /**
+ * Kinds that route by `keyBucket(req.key, ...)` (`cache` across instances; `database` / `sharded_db`
+ * across shards). A hot key hits one instance/shard, so scaling must cut per-instance slots by `k`
+ * first (down to `MIN_SLOTS`) before shrinking instances; trading fewer instances for more slots per
+ * instance would give each hot bucket extra capacity and mask hot-key overload.
+ */
+const HASH_ROUTED_KINDS = new Set(['cache', 'database', 'sharded_db']);
+
+/** Mirrors `EdgeRT.carries(op, api)` in sim.ts for LB traffic ops (`read` / `write`). */
+function edgeCarries(e: Design['edges'][number], op: 'read' | 'write', api: string | undefined): boolean {
+  const on = e.on ?? 'all';
+  if (on === 'boot' || on === 'control') return false;
+  if (api !== undefined && e.apis?.length && !e.apis.includes(api)) return false;
+  return on === 'all' || on === op;
+}
+
+/**
+ * Nodes that share an upstream instance selection pool (`load_balancer` via `lbBuild()`/`lbWeighted()`,
+ * or `queue` via `consumers` when feeding 2+ distinct consumer nodes). Optimizing each target
+ * independently would alter their relative instance counts or traffic share against single-entry
+ * targets (`function`, `cache`, `database`, `sharded_db`, `queue`, etc.) in the same LB pool.
+ */
+function sharedPoolNodes(design: Design, kindOf: Map<string, string>): Set<string> {
+  const shared = new Set<string>();
+  const outByNode = new Map<string, Design['edges']>();
+  for (const e of design.edges) {
+    let list = outByNode.get(e.from);
+    if (!list) outByNode.set(e.from, (list = []));
+    list.push(e);
+  }
+  const lbContexts = design.apis?.length
+    ? design.apis.map((a) => ({ op: a.op, api: a.name as string | undefined }))
+    : [{ op: 'read' as const, api: undefined }, { op: 'write' as const, api: undefined }];
+
+  for (const n of design.nodes) {
+    const out = outByNode.get(n.id);
+    if (!out?.length) continue;
+    if (n.kind === 'load_balancer') {
+      // Any (op, api) pool where 2+ distinct carrying targets share an upstream LB uses slots-first,
+      // ignoring static edge weights (including 0 or unequal weights). A `shift` event can equalize
+      // weights mid-run (`sim.ts:1642`), causing `lbWeighted()` to fall back to the shared-pool draw,
+      // so initial weights cannot predict independence.
+      for (const { op, api } of lbContexts) {
+        const targets = new Set(out.filter((e) => edgeCarries(e, op, api)).map((e) => e.to));
+        if (targets.size >= 2) for (const id of targets) shared.add(id);
+      }
+    } else if (n.kind === 'queue') {
+      // setup() puts every non-function station's instances into qs.consumers (non-station targets have
+      // no insts). Functions go to qs.fns and dispatch() only overflows to fns when ALL consumer slots
+      // are busy, so a sole consumer worker + overflow function does not distort worker vs fn share.
+      const consumers = new Set<string>();
+      for (const e of out) {
+        if (e.on === 'boot' || e.on === 'control') continue;
+        const toKind = kindOf.get(e.to) ?? '';
+        if (KINDS[toKind]?.station && toKind !== 'function') consumers.add(e.to);
+      }
+      if (consumers.size >= 2) for (const id of consumers) shared.add(id);
+    }
+  }
+  return shared;
+}
+
+/**
+ * Pick (instances, slots) factors for one node.
+ * - For hash-routed kinds and nodes sharing a multi-node upstream pool (`slotsFirst`), keep the
+ *   original slots-first rule: cut per-instance slots down to `MIN_SLOTS` before reducing
+ *   instances. Known limitation (inherited from the original rule): when nodes sharing a pool have
+ *   different slot counts that cross `MIN_SLOTS` differently (e.g. 20x40 and 20x64 at k = 2 ->
+ *   13x32 and 20x32), slots-first scaling itself can still shift their instance ratio; also, designs
+ *   with unequal LB weights and no `shift` event take the pre-fix slots-first path too, retaining
+ *   the pre-fix capacity rounding error on those nodes.
+ * - For nodes with their own selection pool, jointly pick integer (instances, slots) factors whose
+ *   product stays as close to 1/k of total slots as possible. Known limitation: when instances do not
+ *   divide evenly by k and slots hit the `MIN_SLOTS` or original-`slot` clamp (e.g. 33 instances at
+ *   k = 2 -> 17), total capacity error can reach ~4-5% (bounded by 1 / (2 * MIN_INSTANCES)).
+ */
+function fitSlotScale(
+  inst: number | undefined,
+  slot: number | undefined,
+  k: number,
+  keepInst: boolean,
+  slotsFirst = false,
+): { slots: number; instances: number } {
+  if (k <= 1 || slot === undefined) return { slots: 1, instances: k };
+  if (slotsFirst) {
+    const slots = Math.min(k, Math.max(1, slot / MIN_SLOTS));
+    return { slots, instances: k / slots };
+  }
+  const minSlots = Math.min(slot, MIN_SLOTS);
+  if (inst === undefined) {
+    const s2 = Math.max(minSlots, Math.min(slot, Math.round(slot / k)));
+    return { slots: slot / s2, instances: 1 };
+  }
+  const minInst = keepInst ? inst : Math.min(inst, MIN_INSTANCES);
+  const orig = inst * slot;
+  let bestInst = inst;
+  let bestSlot = slot;
+  let bestErr = Infinity;
+  // Walk down from inst so exact or equal-error ties preserve more instances (cutting slots first).
+  for (let i = inst; i >= minInst; i--) {
+    const exact = orig / (k * i);
+    for (const cand of [Math.floor(exact), Math.ceil(exact)]) {
+      const s = Math.max(minSlots, Math.min(slot, cand));
+      const err = Math.abs(i * s * k - orig);
+      if (err < bestErr) {
+        bestErr = err;
+        bestInst = i;
+        bestSlot = s;
+      }
+    }
+  }
+  return { slots: slot / bestSlot, instances: inst / bestInst };
+}
+
+/**
  * Pick k. `requested`: a number (capped by what the design allows) or 'auto' (the smallest whole k
  * that brings `expectedRequests` to SCALE_TARGET_REQUESTS, capped the same way).
  */
@@ -96,14 +223,14 @@ export function planScale(design: Design, expectedRequests: number, requested: n
   maxK = Number.isFinite(maxK) ? Math.max(1, Math.floor(maxK + 1e-9)) : 1000;
   const want = requested === 'auto' ? Math.ceil(expectedRequests / SCALE_TARGET_REQUESTS - 1e-9) : Math.floor(requested);
   const k = Math.max(1, Math.min(want, maxK));
+  const sharedPool = sharedPoolNodes(design, kindOf);
   // keyed by node id: no prototype, so an id such as `constructor` finds nothing it should not
   const nodes: Record<string, NodeScale> = Object.create(null);
   for (const n of design.nodes) {
     const p = resolveParams(n.kind, n.params);
     const slot = SLOTS.map((s) => num(p[s])).find((v) => v !== undefined);
-    const slots = slot === undefined ? 1 : Math.min(k, Math.max(1, slot / MIN_SLOTS));
-    const ns: NodeScale = { slots, instances: k / slots };
     const inst = num(p.instances);
+    const ns: NodeScale = fitSlotScale(inst, slot, k, pinned.has(n.id), HASH_ROUTED_KINDS.has(n.kind) || sharedPool.has(n.id));
     if (ns.instances > 1 + 1e-9 && inst !== undefined) {
       // the same rounding as scaleDesign
       const to = Math.max(1, Math.round(inst / ns.instances));
@@ -118,7 +245,8 @@ export function planScale(design: Design, expectedRequests: number, requested: n
     }
     nodes[n.id] = ns;
   }
-  return { k, requested, maxK, nodes };
+  const hasSpikes = events.some((ev) => SPIKE_EVENTS.has(ev.type));
+  return { k, requested, maxK, hasSpikes, nodes };
 }
 
 /** The design with its capacity cut by k (a copy; the input is not changed). */
@@ -140,6 +268,15 @@ export function scaleDesign(design: Design, plan: ScalePlan): Design {
     for (const s of TOTALS) {
       const v = num(p[s]);
       if (v) out[s] = REAL.has(s) ? v / k : Math.max(1, Math.round(v / k));
+    }
+    const burst = num(p.burst);
+    if (burst) {
+      const rate = num(p.ratePerSec) ?? 0;
+      // Only floor burst when arrivals have no spike-like events and the bucket refills within
+      // BURST_REFILL_MAX_S; under spikes or slow/zero refill, burst is a total budget and scales by 1/k.
+      const keepFloor = !plan.hasSpikes && rate > 0 && burst / rate <= BURST_REFILL_MAX_S;
+      const divK = Math.max(1, Math.round(burst / k));
+      out.burst = keepFloor ? Math.max(Math.min(burst, MIN_BURST), divK) : divK;
     }
     if (ns.instances > 1 + 1e-9) {
       const inst = num(p.instances);
