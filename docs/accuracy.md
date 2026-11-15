@@ -37,6 +37,13 @@ Summary: **25 checks** (24 pass within tolerance, 1 known deviation).
 
 - **Scale k = 8 vs k = 1 near saturation (rho ~ 0.93) (API mean wait):** scale.ts cuts slots per instance (256 -> 32) at constant utilization rho; near saturation, Erlang C wait grows steeply as server count c shrinks.
 
+## Bottleneck attribution
+
+- **Blocking downstream transfer:** When the highest-scoring node rejected requests with `queue_full`, spent at least 2/3 of its slot busy time waiting on downstream calls within those rejection windows, and its longest-waiting downstream branch reached >= 0.95 utilization in the same windows, the reported bottleneck shifts to that downstream node (following routers or waiting intermediate tiers).
+- **Shared routers and intermediate tiers:** Outgoing edge wait is aggregated across all callers rather than per origin, so traversal can follow a saturated branch that the rejected upstream never calls if another caller saturates it in the same windows.
+- **Edge latency:** When upstream waiting comes mostly from edge network latency while another client saturates the downstream in the same windows, blame still transfers to that downstream.
+- **Parallel calls:** Only the single outgoing branch with the most cumulative wait in the rejection windows is followed; when parallel branches have nearly equal wait times, blame conservatively stays on the upstream.
+
 ## What this table does not prove
 
 - **Real product internals:** Components represent generic abstractions (a generic database, cache, or queue), not PostgreSQL, Redis, or Kafka, and omit engine-specific details such as MVCC/VACUUM, lock managers, or protocol serialization.

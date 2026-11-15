@@ -141,6 +141,8 @@ interface Job {
   dead: boolean;
   /** Slot already given back (cache read-through frees the slot before it answers). */
   released?: boolean;
+  /** Number of synchronous downstream calls this job is currently waiting on. */
+  waitCalls?: number;
   hop?: TraceHop;
   /** A database write sent to every copy (fan-out): this copy is the write, it is not replicated. */
   direct?: boolean;
@@ -291,6 +293,10 @@ class Instance {
   /** Jobs that gave their slot back early (cache read/write-through) and have not answered yet. */
   detached = new Set<Job>();
   lastT = 0;
+  /** Busy slots of this instance that are currently waiting on at least one downstream call. */
+  waitSlots = 0;
+  /** Slot-ms spent waiting on downstream calls in the current window (internal only). */
+  wWaitArea = 0;
   w: InstStats = zeroInst();
   tot: InstStats = zeroInst();
   lru: Map<number, number> | null = null;
@@ -379,6 +385,7 @@ class Instance {
     const dt = now - this.lastT;
     if (dt > 0) {
       this.w.busyArea += this.busy * dt;
+      this.wWaitArea += this.waitSlots * dt;
       this.w.qArea += this.q.length * dt;
       if (this.state === 'on' || this.state === 'retiring') this.w.up += dt;
       if (this.state === 'on') {
@@ -540,6 +547,11 @@ class EdgeRT {
   rng: Rng;
   w: EdgeStats = zeroEdge();
   tot: EdgeStats = zeroEdge();
+  /** Blocking wait time accumulated by callers over this edge in the current window (internal only). */
+  wWaitMs = 0;
+  /** In-flight awaited calls on this edge and sum of their effective start times in this window (internal only). */
+  waitPending = 0;
+  waitStartSum = 0;
   constructor(e: DesignEdge, from: NodeRT, to: NodeRT, seed: number, interRegionMs: number) {
     this.id = edgeId(e);
     this.from = from;
@@ -1176,6 +1188,15 @@ export class Simulation {
   private nextReqId = 1;
   /** Sequence number for replicated writes (orders a replica's pending commits). */
   private nextCommit = 1;
+  /** Initial upstream bottleneck displaced to a saturated downstream (used by explain/failureSource). */
+  private displacedUpstream: { from: string; to: string } | null = null;
+  /** Per-window internal counters used for bottleneck attribution, 1:1 with `this.windows` (not part of WindowStat). */
+  private winDetails: {
+    qFull: Record<string, number>;
+    edgeWaitMs: Record<string, number>;
+    nodeBusyMs: Record<string, number>;
+    nodeWaitMs: Record<string, number>;
+  }[] = [];
   /** Arrival-rate bounds per time segment (between traffic event edges), for Poisson thinning. */
   /** `lam` bounds the rate in the segment; when `flat`, the rate is exactly `lam` throughout. */
   private rateSegs: RateSeg[] = [];
@@ -1847,11 +1868,13 @@ export class Simulation {
         for (const job of inst.q.drain()) this.failJob(inst, job, 'down');
         for (const job of [...inst.inflight, ...inst.detached]) {
           job.dead = true;
+          job.waitCalls = 0;
           this.failJob(inst, job, 'down');
         }
         inst.inflight.clear();
         inst.detached.clear();
         inst.busy = 0;
+        inst.waitSlots = 0;
         // a crashed cache comes back empty (cold)
         inst.lru?.clear();
         inst.fills?.clear();
@@ -2283,11 +2306,51 @@ export class Simulation {
   // -------------------------------------------------------------------------------------------
   // Calls
 
+  private beginJobWait(inst: Instance, job: Job): void {
+    if (job.dead || job.released) return;
+    if (!job.waitCalls) {
+      inst.touch(this.now);
+      inst.waitSlots++;
+    }
+    job.waitCalls = (job.waitCalls ?? 0) + 1;
+  }
+
+  private endJobWait(inst: Instance, job: Job): void {
+    if (!job.waitCalls) return;
+    job.waitCalls--;
+    if (job.waitCalls === 0 && !job.dead && !job.released) {
+      inst.touch(this.now);
+      inst.waitSlots--;
+    }
+  }
+
   /**
    * Call `edge.to` over `edge`, with the edge's timeout, retries, bulkhead and fallback. `from` is
    * the caller's instance (its bulkhead is per instance); without it the limit is for the whole edge.
    */
-  private callEdge(edge: EdgeRT, req: Req, op: Op, done: Done, route?: Route, from?: Instance, noFallback = false): void {
+  private callEdge(edge: EdgeRT, req: Req, op: Op, done: Done, route?: Route, from?: Instance, noFallback = false, callerJob?: Job): void {
+    // Measure cross-window edge wait and per-slot waiting time (skip side calls, fire-and-forget fills, and async outbox relays).
+    if (!edge.side && op !== CACHE_SET && (from !== undefined || !edge.from.insts.length)) {
+      const t0 = this.now;
+      edge.waitPending++;
+      edge.waitStartSum += t0;
+      const trackJob = from && callerJob ? callerJob : undefined;
+      if (from && trackJob) this.beginJobWait(from, trackJob);
+      let settledWait = false;
+      const origDone = done;
+      done = (o) => {
+        if (!settledWait) {
+          settledWait = true;
+          const effStart = Math.max(t0, this.windowStart);
+          edge.wWaitMs += Math.max(0, this.now - effStart);
+          edge.waitPending--;
+          if (edge.waitPending === 0) edge.waitStartSum = 0;
+          else edge.waitStartSum -= effStart;
+          if (from && trackJob) this.endJobWait(from, trackJob);
+        }
+        origDone(o);
+      };
+    }
     let attempt = 0;
     let reserved: number | null = null; // retry-budget second of the retry waiting for its backoff
     const caller = from ?? null;
@@ -2772,13 +2835,13 @@ export class Simulation {
   }
 
   /** Router behaviour: forward to one matching downstream edge; no edge means "answer here". */
-  private forwardOne(n: NodeRT, req: Req, op: Op, done: Done, from?: Instance): void {
+  private forwardOne(n: NodeRT, req: Req, op: Op, done: Done, from?: Instance, callerJob?: Job): void {
     const e = this.pickEdge(n, op, req.api);
     if (!e) {
       done({ ok: true });
       return;
     }
-    this.callEdge(e, req, op, done, undefined, from);
+    this.callEdge(e, req, op, done, undefined, from, false, callerJob);
   }
 
   /** Wrap `done` so the node counts its outcome. */
@@ -3473,6 +3536,10 @@ export class Simulation {
     inst.inflight.delete(job);
     inst.touch(this.now);
     inst.busy--;
+    if (job.waitCalls) {
+      inst.waitSlots--;
+      job.waitCalls = 0;
+    }
     const hold = this.now - job.ts;
     inst.w.holds++;
     inst.w.holdSum += hold;
@@ -3546,7 +3613,7 @@ export class Simulation {
             n.w.origin.error++;
             return finish({ ok: false, reason: 'error' });
           }
-          this.forwardOne(n, req, op, finish, inst);
+          this.forwardOne(n, req, op, finish, inst, job);
         });
         return;
       }
@@ -3563,7 +3630,7 @@ export class Simulation {
             n.w.origin.error++;
             return finish({ ok: false, reason: 'error' });
           }
-          this.execPlan(n, req, op, finish, inst);
+          this.execPlan(n, req, op, finish, inst, job);
         });
         return;
       }
@@ -3896,10 +3963,10 @@ export class Simulation {
     });
   }
 
-  private execPlan(n: NodeRT, req: Req, op: Op, done: Done, inst?: Instance): void {
+  private execPlan(n: NodeRT, req: Req, op: Op, done: Done, inst?: Instance, callerJob?: Job): void {
     const steps = this.plan(n, op, req.api);
-    if (op === WRITE && steps.some(isStoreCall) && steps.some(isQueueCall)) return this.dualWriteSteps(n, req, steps, done, inst);
-    this.runSteps(n, req, op, steps, done, inst);
+    if (op === WRITE && steps.some(isStoreCall) && steps.some(isQueueCall)) return this.dualWriteSteps(n, req, steps, done, inst, callerJob);
+    this.runSteps(n, req, op, steps, done, inst, undefined, callerJob);
   }
 
   /**
@@ -3908,7 +3975,7 @@ export class Simulation {
    * With an outbox the message is written in the same transaction as the data; a relay then sends
    * it to the queue and tries again until it gets there. The request does not wait for the queue.
    */
-  private dualWriteSteps(n: NodeRT, req: Req, steps: Step[], done: Done, from?: Instance): void {
+  private dualWriteSteps(n: NodeRT, req: Req, steps: Step[], done: Done, from?: Instance, callerJob?: Job): void {
     n.dualWrite = true;
     // stored: the store call succeeded, or the store committed the write after the call to it timed
     // out (a fan-out once as many copies committed as its quorum needs: one copy is not enough).
@@ -3936,7 +4003,7 @@ export class Simulation {
       }, from, (st, o) => {
         if (o.ok && !o.fellBack && isQueueCall(st)) sent = true;
         if (storeOk(st, o)) stored = true;
-      });
+      }, callerJob);
       return;
     }
     const relays = steps.filter(isQueueCall);
@@ -3960,7 +4027,7 @@ export class Simulation {
       done(o);
     }, from, (st, o) => {
       if (storeOk(st, o)) stored = true;
-    });
+    }, callerJob);
   }
 
   /** The outbox relay: send the message to the queue; on a failure, again after outboxRetryMs. */
@@ -3979,7 +4046,7 @@ export class Simulation {
   }
 
   /** Run a node's calls. A response is degraded when any call on the way answered with a fallback. */
-  private runSteps(n: NodeRT, req: Req, op: Op, steps: Step[], done: Done, from?: Instance, seen?: (s: Step, o: Outcome) => void): void {
+  private runSteps(n: NodeRT, req: Req, op: Op, steps: Step[], done: Done, from?: Instance, seen?: (s: Step, o: Outcome) => void, callerJob?: Job): void {
     if (!steps.length) {
       done({ ok: true });
       return;
@@ -3996,7 +4063,7 @@ export class Simulation {
           if (!o.ok && !failure) failure = o;
           if (o.degraded) degraded = true;
           if (--left === 0) done(failure ?? success());
-        }, from);
+        }, from, callerJob);
       }
       return;
     }
@@ -4012,19 +4079,19 @@ export class Simulation {
         if (o.degraded) degraded = true;
         if (!o.ok) done(o);
         else next();
-      }, from);
+      }, from, callerJob);
     };
     next();
   }
 
-  private runStep(s: Step, req: Req, op: Op, done: Done, from?: Instance): void {
+  private runStep(s: Step, req: Req, op: Op, done: Done, from?: Instance, callerJob?: Job): void {
     if (s.t === 'call') {
-      this.callEdge(s.edge, req, op, done, undefined, from);
+      this.callEdge(s.edge, req, op, done, undefined, from, false, callerJob);
       return;
     }
     if (s.t === 'inval') {
       // a failed invalidation does not fail the write
-      this.callEdge(s.edge, req, CACHE_DEL, () => done({ ok: true }), undefined, from, true);
+      this.callEdge(s.edge, req, CACHE_DEL, () => done({ ok: true }), undefined, from, true, callerJob);
       return;
     }
     // cache-aside: try caches in order; on a full miss (or cache failure) read the stores, then fill
@@ -4044,7 +4111,7 @@ export class Simulation {
             // a fallback answer is not real data: pass it on, and do not put it in the cache
             if (!o.ok || o.degraded) done(o);
             else readStore();
-          }, undefined, from);
+          }, undefined, from, false, callerJob);
         };
         readStore();
         return;
@@ -4064,7 +4131,7 @@ export class Simulation {
             tryCache();
           });
         } else tryCache();
-      }, undefined, from, true);
+      }, undefined, from, true, callerJob);
     };
     tryCache();
   }
@@ -4426,7 +4493,11 @@ export class Simulation {
     if (dt <= 0) return;
     const measured = t0 >= this.measureFromMs - 1e-6 && t1 <= this.measureToMs + 1e-6;
     const nodes: Record<string, NodeWindow> = {};
+    const qFull: Record<string, number> = {};
+    const nodeBusyMs: Record<string, number> = {};
+    const nodeWaitMs: Record<string, number> = {};
     for (const n of this.nodes) {
+      if (n.w.origin.queue_full > 0) qFull[n.id] = n.w.origin.queue_full;
       const nw: NodeWindow = { arrivals: n.w.arrivals, ok: n.w.ok, fail: n.w.fail };
       if (n.insts.length) {
         let util = 0;
@@ -4435,6 +4506,7 @@ export class Simulation {
         let ws = 0;
         let st = 0;
         let busyA = 0;
+        let waitA = 0;
         let capA = 0;
         let active = 0;
         let booting = 0;
@@ -4444,6 +4516,7 @@ export class Simulation {
           // an autoscaled instance is measured over the time it was provisioned
           const u = n.elastic ? (inst.w.up > 0 ? inst.w.busyArea / (inst.w.up * inst.slots) : 0) : inst.w.busyArea / (dt * inst.slots);
           busyA += inst.w.busyArea;
+          waitA += inst.wWaitArea;
           capA += inst.w.up * inst.slots;
           if (inst.state === 'on') active++;
           if (inst.state === 'boot') booting++;
@@ -4455,7 +4528,10 @@ export class Simulation {
           st += inst.w.started;
           if (measured) addInst(inst.tot, inst.w);
           inst.w = zeroInst();
+          inst.wWaitArea = 0;
         }
+        if (busyA > 0) nodeBusyMs[n.id] = busyA;
+        if (waitA > 0) nodeWaitMs[n.id] = waitA;
         nw.util = n.elastic ? round(capA ? busyA / capA : 0, 4) : round(util / n.insts.length, 4);
         // a function starts environments as it needs them: how busy it is means its share of the limit
         if (n.kind === 'function') nw.util = maxU = round(busyA / (dt * n.num('maxConcurrency')), 4);
@@ -4496,7 +4572,13 @@ export class Simulation {
       n.w = zeroNode();
     }
     const edges: WindowStat['edges'] = {};
+    const edgeWaitMs: Record<string, number> = {};
     for (const e of this.edges) {
+      if (e.waitPending > 0) {
+        e.wWaitMs += Math.max(0, e.waitPending * t1 - e.waitStartSum);
+        e.waitStartSum = e.waitPending * t1;
+      }
+      if (e.wWaitMs > 0) edgeWaitMs[e.id] = e.wWaitMs;
       edges[e.id] = { calls: e.w.calls, read: e.w.read, write: e.w.write, fail: e.w.fail, retries: e.w.retries };
       if (e.w.denied) edges[e.id].denied = e.w.denied;
       if (e.w.throttled) edges[e.id].throttled = e.w.throttled;
@@ -4510,7 +4592,9 @@ export class Simulation {
       if (e.w.crossRegion) edges[e.id].crossRegion = e.w.crossRegion;
       if (measured) addEdge(e.tot, e.w);
       e.w = zeroEdge();
+      e.wWaitMs = 0;
     }
+    this.winDetails.push({ qFull, edgeWaitMs, nodeBusyMs, nodeWaitMs });
     const lat = this.whist.summary();
     this.windows.push({
       t: round(t1 / 1000, 3),
@@ -4615,8 +4699,11 @@ export class Simulation {
     const measuredS = measuredMs / 1000;
     const trafficMs = measuredMs;
     const nodes: Record<string, NodeResult> = {};
+    this.displacedUpstream = null;
     let bottleneck: SimResult['bottleneck'] = null;
     let worst = -1;
+    let queueBottleneck = false;
+    const candidates = new Map<string, NonNullable<SimResult['bottleneck']>>();
     const peaks = new Map<string, { util: number; t: number; queue: number }>();
     for (const w of this.windows) {
       if (!this.inMeasure(w)) continue;
@@ -4744,22 +4831,24 @@ export class Simulation {
         r.peakAtS = peak.t;
         r.peakQueue = round(peak.queue, 2);
         // a node that dropped requests because its queue was full is a stronger signal than busy time alone
-        const score = peak.util + (t.origin.queue_full > 0 ? 0.5 : 0);
-        if (score > worst && t.arrivals > 0) {
-          worst = score;
+        const cand: NonNullable<SimResult['bottleneck']> = {
+          node: n.id,
+          label: n.label,
           // The instance to name: the one whose full queue turned requests away, when there is one.
           // The busiest on average can be a healthy one (a slow instance that the load balancer
           // took out has a low average), and the rejections would be told under its name.
-          bottleneck = {
-            node: n.id,
-            label: n.label,
-            instance: n.insts.length > 1 ? (rejMax > 0 ? rejIdx : maxIdx) : undefined,
-            utilization: round(rejMax > 0 ? rejU : maxU, 4),
-            peakUtilization: round(peak.util, 4),
-            peakAtS: peak.t,
-            avgQueue: round(avgQ, 2),
-            why: '',
-          };
+          instance: n.insts.length > 1 ? (rejMax > 0 ? rejIdx : maxIdx) : undefined,
+          utilization: round(rejMax > 0 ? rejU : maxU, 4),
+          peakUtilization: round(peak.util, 4),
+          peakAtS: peak.t,
+          avgQueue: round(avgQ, 2),
+          why: '',
+        };
+        if (t.arrivals > 0) candidates.set(n.id, cand);
+        const score = peak.util + (t.origin.queue_full > 0 ? 0.5 : 0);
+        if (score > worst && t.arrivals > 0) {
+          worst = score;
+          bottleneck = cand;
         }
       }
       if (n.kind === 'cache' || n.kind === 'cdn' || n.kind === 'dns') {
@@ -4787,6 +4876,7 @@ export class Simulation {
         const growing = qDepth(n.queue) > Math.max(100, t.maxDepth * 0.5) && t.enq > t.deq * 1.05;
         if (growing && worst < 2) {
           worst = 2;
+          queueBottleneck = true;
           bottleneck = { node: n.id, label: n.label, utilization: 1, peakUtilization: 1, peakAtS: this.durationMs / 1000, avgQueue: round(t.depthArea / measuredMs, 2), why: '' };
         }
       }
@@ -4819,6 +4909,26 @@ export class Simulation {
         r.dlq = t.dlq;
       }
       nodes[n.id] = r;
+    }
+    // An upstream waiting on a saturated downstream can fill its queue and outscore that downstream (+0.5).
+    // Only transfer blame when measured downstream wait accounts for >= 2/3 of slot busy time within
+    // the measured windows where the upstream rejected requests, so slow/paused upstreams and
+    // disjoint saturation windows are not misattributed.
+    if (bottleneck && !queueBottleneck && nodes[bottleneck.node].origin.queue_full > 0) {
+      const rejWinIndices: number[] = [];
+      for (let i = 0; i < this.windows.length; i++) {
+        if (this.inMeasure(this.windows[i]) && (this.winDetails[i]?.qFull[bottleneck.node] ?? 0) > 0) {
+          rejWinIndices.push(i);
+        }
+      }
+      if (rejWinIndices.length && this.isWaitingInWindows(bottleneck.node, rejWinIndices)) {
+        const targetId = this.resolveBlockingDownstream(bottleneck.node, nodes, candidates, new Set(), rejWinIndices);
+        const target = targetId ? candidates.get(targetId) : undefined;
+        if (target && target.node !== bottleneck.node) {
+          this.displacedUpstream = { from: bottleneck.node, to: target.node };
+          bottleneck = target;
+        }
+      }
     }
     this.explain(bottleneck, nodes);
     const edges: SimResult['edges'] = {};
@@ -4979,7 +5089,7 @@ export class Simulation {
         if (!top || r.origin[reason] > top.n) top = { id, reason, n: r.origin[reason] };
       }
     }
-    if (!top || top.n === 0 || (top.id === b.node && top.reason === 'queue_full')) return '';
+    if (!top || top.n === 0 || (top.reason === 'queue_full' && (top.id === b.node || (this.displacedUpstream?.to === b.node && top.id === this.displacedUpstream.from)))) return '';
     const why: Record<FailReason, string> = {
       rate_limited: tx('限流器照設定擋掉超過額度的請求，保護後面的服務'),
       shed: tx('過載時先丟掉可丟棄（batch）的請求，把位置留給重要的請求'),
@@ -5002,11 +5112,11 @@ export class Simulation {
   /** The bottleneck's text, from the numbers of the result (at full size when the run was scaled). */
   private explain(b: SimResult['bottleneck'], nodes: SimResult['nodes']): void {
     if (!b) return;
-    const parts = [this.why(b, nodes[b.node]), this.failureSource(b, nodes)].filter(Boolean);
+    const parts = [this.why(b, nodes[b.node], nodes), this.failureSource(b, nodes)].filter(Boolean);
     b.why = parts.join(getLang() === 'zh-TW' ? '' : ' ');
   }
 
-  private why(b: NonNullable<SimResult['bottleneck']>, r: NodeResult): string {
+  private why(b: NonNullable<SimResult['bottleneck']>, r: NodeResult, nodes?: SimResult['nodes']): string {
     if (r.kind === 'queue') {
       // A FIFO queue whose workers are idle: a message that keeps failing holds its group, and the
       // messages behind it wait (head-of-line blocking). More workers do not help.
@@ -5040,10 +5150,22 @@ export class Simulation {
       return t('目前沒有元件接近上限；最忙的是{name}（最忙時 {peak}）。', { name: who, peak: pct(b.peakUtilization) });
     }
     if (dropped) parts.push(t('有 {k} 個請求因為排隊滿了被拒絕。', { k: dropped.toLocaleString('en-US') }));
+    if (this.displacedUpstream?.to === b.node && nodes) {
+      const up = nodes[this.displacedUpstream.from];
+      if (up && up.origin.queue_full > 0) {
+        parts.push(
+          t('上游{up}有 {k} 個請求因為排隊滿了被拒絕，當時是在等{name}。', {
+            up: up.label,
+            k: up.origin.queue_full.toLocaleString('en-US'),
+            name: b.label,
+          }),
+        );
+      }
+    }
     // In the blocking model a slot is held while waiting for downstream calls. Say so when that dominates.
     const own = this.ownWorkMs(b.node);
-    if (own !== null && r.holdMs !== undefined && r.holdMs > own * 3 && r.holdMs - own > 2) {
-      parts.push(t('每個請求佔住一個執行緒平均 {hold} ms，自己處理只要約 {own} ms，其餘時間在等下游回應。', { hold: round(r.holdMs, 1), own: round(own, 1) }));
+    if (this.isWaitingOnDownstream(b.node, r)) {
+      parts.push(t('每個請求佔住一個執行緒平均 {hold} ms，自己處理只要約 {own} ms，其餘時間在等下游回應。', { hold: round(r.holdMs!, 1), own: round(own!, 1) }));
       const down = this.busiestDownstream(b.node);
       if (down && down.peak >= 0.7) parts.push(t('下游最忙的是{name}（最忙時 {peak}）。', { name: down.label, peak: pct(down.peak) }));
       else parts.push(t('下游沒有很忙，但回應慢（例如變慢、逾時或重試）。'));
@@ -5077,6 +5199,79 @@ export class Simulation {
       }
     }
     return best;
+  }
+
+  /** True when a node's slot hold time is dominated by waiting on downstream calls (>3× own work and >2 ms above it). Used by why(). */
+  private isWaitingOnDownstream(id: string, r: NodeResult | undefined): boolean {
+    const own = this.ownWorkMs(id);
+    return own !== null && r?.holdMs !== undefined && r.holdMs > own * 3 && r.holdMs - own > 2;
+  }
+
+  /**
+   * True when measured slot-waiting time in `winIndices` accounts for >= 2/3 of slot busy time
+   * (matching the >3× own-work threshold without relying on configured work duration).
+   */
+  private isWaitingInWindows(id: string, winIndices: number[]): boolean {
+    const WAIT_SHARE = 2 / 3;
+    let busy = 0;
+    let wait = 0;
+    for (const i of winIndices) {
+      const d = this.winDetails[i];
+      if (!d) continue;
+      busy += d.nodeBusyMs[id] ?? 0;
+      wait += d.nodeWaitMs[id] ?? 0;
+    }
+    return busy > 0 && wait >= busy * WAIT_SHARE;
+  }
+
+  /**
+   * Follow the single highest-wait blocking edge from `id` to a saturated downstream (peak >= 0.95)
+   * within `winIndices` (the measured windows where the upstream rejected requests).
+   *
+   * Known limitations:
+   * - Shared routers or intermediate layers: outgoing edge wait time is aggregated across all callers,
+   *   so traversal can follow a branch that this upstream never calls if another caller saturates it
+   *   in the same windows.
+   * - Edge latency: if waiting is mostly network latency on the edge while another client saturates
+   *   the downstream in the same windows, blame still transfers to that downstream.
+   * - Parallel calls: only the single branch with the longest cumulative wait is followed; when two
+   *   parallel branches have nearly equal wait times, blame conservatively stays on the upstream.
+   */
+  private resolveBlockingDownstream(
+    id: string,
+    nodes: SimResult['nodes'],
+    candidates: Map<string, NonNullable<SimResult['bottleneck']>>,
+    seen: Set<string>,
+    winIndices: number[],
+  ): string | null {
+    const FULL_UTIL = 0.95; // Matches why()'s full-load threshold.
+    if (seen.has(id)) return null;
+    seen.add(id);
+    const n = this.byId.get(id);
+    if (!n) return null;
+    let topEdge: EdgeRT | null = null;
+    let topWait = 0;
+    for (const e of n.out) {
+      if (e.side || e.to.kind === 'queue') continue;
+      let waitMs = 0;
+      for (const i of winIndices) waitMs += this.winDetails[i]?.edgeWaitMs[e.id] ?? 0;
+      if (waitMs > topWait) {
+        topWait = waitMs;
+        topEdge = e;
+      }
+    }
+    if (!topEdge) return null;
+    const t = topEdge.to;
+    if (!t.insts.length || this.isWaitingInWindows(t.id, winIndices)) {
+      const deep = this.resolveBlockingDownstream(t.id, nodes, candidates, seen, winIndices);
+      if (deep) return deep;
+    }
+    let peak = 0;
+    for (const i of winIndices) {
+      const u = this.windows[i]?.nodes[t.id]?.maxUtil ?? 0;
+      if (u > peak) peak = u;
+    }
+    return t.insts.length && candidates.has(t.id) && peak >= FULL_UTIL ? t.id : null;
   }
 
   /** Mean time a node spends on its own work per request (not waiting for others), or null. */

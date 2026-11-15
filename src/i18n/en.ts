@@ -435,6 +435,7 @@ export const EN: Record<string, string> = {
   "上傳＋非同步任務：同步路徑上的慢依賴（參考 Dropbox）": "Upload + async jobs: a slow dependency on the sync path (after Dropbox)",
   "上次執行": "Last run",
   "上次執行的結果": "Result of the last run",
+  "上游{up}有 {k} 個請求因為排隊滿了被拒絕，當時是在等{name}。": "{k} requests at upstream {up} were rejected because its queue was full while waiting on {name}.",
   "上限 {c} · {ms} · 冷啟動 {cold}": "limit {c} · {ms} · cold start {cold}",
   "上限 {n} 則": "Limit {n} messages",
   "下一個": "Next",
