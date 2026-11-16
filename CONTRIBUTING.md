@@ -244,7 +244,7 @@ npm run i18n:check
 
 - **If you do not write Traditional Chinese:** `src/i18n/en.ts` only translates from Traditional Chinese keys to English (there is no English-to-Chinese catalog). Right now you have two options:
   1. **Write the JSON fields in English.** `scripts/i18n-extract.ts` only extracts strings containing CJK characters, so `npm run i18n:check` and `tests/i18n.test.ts` still pass; Traditional Chinese UI users will see that example's text in English until a maintainer adds Traditional Chinese text and moves the English strings to `src/i18n/en.ts`.
-  2. **Submit via issue form or ask in the PR.** Open an issue with the **Propose an example / case** template (`.github/ISSUE_TEMPLATE/propose-case.yml`) and paste your design JSON or share link, or open the PR in English and ask a maintainer to add the Traditional Chinese copy.
+  2. **Submit via issue form or ask in the PR.** Open an issue with the **Propose an example or case study** template (`.github/ISSUE_TEMPLATE/propose-case.yml`) and paste your design JSON or share link, or open the PR in English and ask a maintainer to add the Traditional Chinese copy.
 
 ### 5. Update the Golden Snapshot and Verify
 
