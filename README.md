@@ -6,14 +6,12 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 
 **[Try it in your browser →](https://loadsketch.mclee.dev)** · [繁體中文](README.zh-TW.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
-  <img alt="A retry storm in loadsketch: the API servers stay overloaded after the traffic spike ends" src="docs/images/screenshot-light.png">
-</picture>
+![A retry storm in loadsketch: after a traffic spike ends, retries keep the API servers overloaded](docs/images/retry-storm-en.gif)
 
 ## What it does
 
 - **Discrete-event simulation.** Every request goes through every component, with queues, timeouts, retries, circuit breakers and failures. Queueing theory values (M/G/c) are shown next to the simulated results.
+- **Find limit.** Raises steady traffic step by step until the design stops meeting its SLO (`p99 <= 1000 ms`, error rate `<= 1%`), colouring each component on the canvas by busy share and marking what breaks first.
 - **"Why it happened".** After every run, the simulator tells the story of the run in time order: overload, retries that multiply the load, failures, recovery or a stuck system.
 - **16 kinds of component, and every parameter can be changed.** Load balancer, API server, cache, database, queue, CDN and more: instances, concurrency, timeouts, retries, circuit breakers, hit rates.
 - **Custom services and presets.** A service that is not in the catalog (search, a payment provider, email) is a custom service: you give its name, icon, service time, capacity, error rate, calls and price per instance. Save any component with its settings as a preset; your presets are in the palette, kept in this browser, and can be exported to a file.
@@ -32,6 +30,13 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 The examples are simplified models. Some refer to public information about well-known services; they are not the real architecture of any company.
 
 ## Screenshots
+
+### Retry storm
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
+  <img alt="A retry storm in loadsketch: the API servers stay overloaded after the traffic spike ends" src="docs/images/screenshot-light.png">
+</picture>
 
 ### "Why it happened"
 
@@ -74,6 +79,15 @@ The examples are simplified models. Some refer to public information about well-
   <source media="(prefers-color-scheme: dark)" srcset="src/site/media/terraform-en-dark.webp">
   <img alt="A design made from Terraform plan JSON, with capacity findings" src="src/site/media/terraform-en-light.webp">
 </picture>
+
+## Find the limit
+
+Click **Find limit** in the bottom bar to see how much steady traffic a design holds before breaking:
+
+- **How it searches:** starts at `1 req/s` and doubles until the first failing step (plus one more step past it to check monotonicity), then bisects `4` times between the last passing rate and the first failing rate. Each step runs a warm-up (at least `30 s`, longer when autoscaled), measures at peak load (at least `120 s`), and stops new traffic to check draining (`120 s`). It keeps the current scenario's settings (read ratio, client timeout, seed) and strips scenario events (spikes, ramps, faults).
+- **What you see on the canvas:** as each step completes, cards are coloured by their average busy share while the load ran (excluding the drain period). When the search ends, the canvas highlights the component that saturated or failed first.
+- **Pass criteria:** front-end `p99 <= 1000 ms`, front-end error rate `<= 1%`, background queue fail rate `<= 0%` (DLQ or expired messages count as failed), and all work drained within `120 s` after traffic stops.
+- **Scaling and known deviations:** high-traffic steps run scaled down (`1/k` traffic and capacity, targeting ~300,000 requests per run) and multiply counts back, listing any `k > 1` steps under assumptions. Because per-instance slots or instances shrink under scaling, queueing waits near saturation are longer than at full size (making limits conservative), and short cache TTLs read a lower hit ratio. See [docs/accuracy.md](docs/accuracy.md) for the measured checks and known deviations.
 
 ## How accurate is it?
 
