@@ -9,6 +9,7 @@ Thanks for your interest in contributing to loadsketch! This document provides g
 - [Development Setup](#development-setup)
 - [Contribution Workflow](#contribution-workflow)
 - [Coding Standards](#coding-standards)
+- [Add an Example in 5 Minutes](#add-an-example-in-5-minutes)
 - [Adding a Terraform Resource Mapping](#adding-a-terraform-resource-mapping)
 - [Commit Messages](#commit-messages)
 - [Pull Request Process](#pull-request-process)
@@ -167,6 +168,100 @@ Read [docs/design-system.md](docs/design-system.md) before a UI change. In short
 
 - Two spaces for indentation (project convention)
 - Follow the style of the code around your change
+
+## Add an Example in 5 Minutes
+
+Bundled examples live in `examples/designs/` and `examples/scenarios/`. Adding one does not require touching the simulator engine.
+
+### 1. Start from a Minimal Template
+
+Create `examples/designs/<slug>.json` (replacing `<slug>` with a kebab-case name) and, if the example needs its own traffic profile or events, `examples/scenarios/<slug>.json`:
+
+Minimal design (`examples/designs/<slug>.json`):
+
+```json
+{
+  "schema": "loadsketch/design@1",
+  "name": "範例名稱",
+  "description": "一句話說明這個設計展示了什麼機制。",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API 伺服器",
+      "pos": [320, 200],
+      "params": { "instances": 1, "concurrency": 4, "serviceMs": { "mean": 10, "cv": 1 } }
+    }
+  ],
+  "edges": [
+    { "from": "users", "to": "api" }
+  ]
+}
+```
+
+Minimal scenario (`examples/scenarios/<slug>.json`, optional—skip if an existing scenario fits):
+
+```json
+{
+  "schema": "loadsketch/scenario@1",
+  "name": "穩定流量",
+  "seed": 1,
+  "durationS": 30,
+  "traffic": { "rps": 100, "readRatio": 0.8 }
+}
+```
+
+You can also sketch the system in the UI and export/copy its JSON via the file menu, then format it with the CLI below.
+
+### 2. Format, Validate, and Run
+
+`tests/format.test.ts` checks that every file in `examples/designs/` and `examples/scenarios/` matches `formatJson()` byte-for-byte, so always run `fmt --write`:
+
+```sh
+node cli/loadsketch.ts fmt examples/designs/<slug>.json examples/scenarios/<slug>.json --write
+node cli/loadsketch.ts fmt examples/designs/<slug>.json examples/scenarios/<slug>.json --check
+node cli/loadsketch.ts validate examples/designs/<slug>.json examples/scenarios/<slug>.json
+node cli/loadsketch.ts run examples/designs/<slug>.json --scenario examples/scenarios/<slug>.json --lang en
+```
+
+### 3. Register the Example in the Catalog
+
+- **Category (`src/app/examples.ts`):** Add `'<slug>'` to one of the arrays in `CATEGORIES` (starter single-mechanism examples go in a `tier: 'start'` category; full architectures or incident reproductions use the `saas-` prefix under `tier: 'real'`). Without this entry, `tests/examples.test.ts` fails (`every example is in exactly one category`).
+- **Default scenario (`src/app/exampleScenarios.ts`, optional):** If your design opens with an existing scenario whose filename differs from `<slug>`, add `'<slug>': '<scenario-name>'` to `EXAMPLE_SCENARIO`. Otherwise the loader looks for `examples/scenarios/<slug>.json` and falls back to `steady`.
+- **General scenarios (`src/app/store.ts`, optional):** Only if you added a new scenario that works on *any* design (no node-specific events), add its slug to `GENERAL_SCENARIOS`.
+
+### 4. Translations (`src/i18n/en.ts`) and Contributors Who Do Not Write Chinese
+
+In this repository, bundled examples use **Traditional Chinese** as the source text for `name`, `description`, `nodes[].label`, and `notes[].text`.
+
+- **If you write Traditional Chinese:** Run the extractor to add new Chinese keys to `src/i18n/en.ts`, fill in their English translations by hand, and verify 0 missing entries:
+
+```sh
+node scripts/i18n-extract.ts
+npm run i18n:check
+```
+
+- **If you do not write Traditional Chinese:** `src/i18n/en.ts` only translates from Traditional Chinese keys to English (there is no English-to-Chinese catalog). Right now you have two options:
+  1. **Write the JSON fields in English.** `scripts/i18n-extract.ts` only extracts strings containing CJK characters, so `npm run i18n:check` and `tests/i18n.test.ts` still pass; Traditional Chinese UI users will see that example's text in English until a maintainer adds Traditional Chinese text and moves the English strings to `src/i18n/en.ts`.
+  2. **Submit via issue form or ask in the PR.** Open an issue with the **Propose an example / case** template (`.github/ISSUE_TEMPLATE/propose-case.yml`) and paste your design JSON or share link, or open the PR in English and ask a maintainer to add the Traditional Chinese copy.
+
+### 5. Update the Golden Snapshot and Verify
+
+`tests/golden.test.ts` simulates every design in `examples/designs/` for 30 s (`seed: 7`) and checks its numeric fingerprint against `tests/golden.json`. Add your new example's hash (existing hashes must stay identical):
+
+```sh
+UPDATE_GOLDEN=1 npx vitest run tests/golden.test.ts
+```
+
+Then run the checks before committing:
+
+```sh
+npm run i18n:check
+npx vitest run tests/examples.test.ts tests/format.test.ts tests/golden.test.ts
+npm run test:quick
+npm run typecheck
+```
 
 ## Adding a Terraform Resource Mapping
 
