@@ -1,0 +1,54 @@
+name: Propose a practice problem
+description: Propose an on-call incident, design brief, or constraint problem (no code required).
+title: "Problem: "
+labels: ["practice"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest a new practice problem for loadsketch. You do not need to write TypeScript—describe the setup, the trade-off, and the solution, and a maintainer can turn it into a runnable drill.
+        English or 中文 are both fine.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Problem type
+      options:
+        - On-call incident (hidden fault to diagnose and fix)
+        - Design brief (requirements and an almost empty canvas)
+        - Constraint problem (meet targets under a monthly budget and complexity limit)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Scenario and setup
+      description: What system is running, what traffic or event hits it, and what are the target SLOs or constraints (latency, error rate, budget, or fixed parts)?
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoff
+    attributes:
+      label: Trade-off to learn
+      description: What system-design principle, failure mode, or trade-off should the learner take away?
+    validations:
+      required: true
+  - type: textarea
+    id: expected_failure
+    attributes:
+      label: What is expected to break
+      description: What fails in the initial or naive design, which component saturates or breaks first, and what symptoms appear?
+    validations:
+      required: true
+  - type: textarea
+    id: answer
+    attributes:
+      label: Answer and explanation
+      description: What is the root cause or passing fix/design, and why does it work?
+    validations:
+      required: true
+  - type: textarea
+    id: design_json
+    attributes:
+      label: Design JSON or share link (optional)
+      description: If you already sketched this in loadsketch, paste a share link or the design/scenario JSON.

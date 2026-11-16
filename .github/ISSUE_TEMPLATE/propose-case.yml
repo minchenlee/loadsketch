@@ -1,0 +1,44 @@
+name: Propose an example or case study
+description: Suggest a new built-in example or real-world architecture / incident reproduction.
+title: "Case: "
+labels: ["example"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest an example for the loadsketch catalog. If you already have design JSON and want to open a PR directly, see [CONTRIBUTING.md](https://github.com/minchenlee/loadsketch/blob/main/CONTRIBUTING.md#add-an-example-in-5-minutes).
+        English or 中文 are both fine. Please do not include internal or non-public company details.
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Example category
+      options:
+        - Single-mechanism starter (teaches one pattern or failure mode)
+        - Real-world architecture (from an engineering blog or public talk)
+        - Real-world incident reproduction (from a public postmortem)
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happens in this case
+      description: Describe the components, traffic pattern or fault, and what the user should observe when running it.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Real-world source
+      description: Public postmortem, engineering blog post, talk, paper, or vendor doc URLs (if applicable).
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Key numbers and expected behaviour
+      description: Rough traffic/latency scale, which bottleneck appears, and what fix resolves it.
+  - type: textarea
+    id: design_json
+    attributes:
+      label: Design JSON or share link (optional)
+      description: If you already sketched this in loadsketch, paste a share link or the design/scenario JSON.

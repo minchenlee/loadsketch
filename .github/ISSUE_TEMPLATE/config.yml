@@ -1,1 +1,8 @@
 blank_issues_enabled: true
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/minchenlee/loadsketch/discussions
+    about: Ask questions, share designs, or discuss modeling ideas.
+  - name: Contributing Guide
+    url: https://github.com/minchenlee/loadsketch/blob/main/CONTRIBUTING.md
+    about: Learn how to add an example in 5 minutes, run checks, or map a Terraform resource.
