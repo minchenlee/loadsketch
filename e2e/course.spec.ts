@@ -337,5 +337,6 @@ test('course: a second guess on the same example waits for its own run (2.4)', a
   await page.getByTestId('course-run').click();
   // the try step shows the answer to the second guess, from the run with the change
   await expect(page.getByTestId('course-answer-primary-busy')).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId('course-answer-primary-busy')).toHaveAttribute('data-right', 'true');
+  // with the 200 ms limit every read goes to the primary: 10% to 30% busy (without the change, under 10%)
+  await expect(page.getByTestId('course-answer-primary-busy')).toContainText('Answer: 10% to 30%');
 });
