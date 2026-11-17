@@ -5,7 +5,7 @@
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
-import { pct } from '../lessonKit.ts';
+import { failUnder1, pct } from '../lessonKit.ts';
 
 const INTRO = tx('All reads go to two Postgres replicas. A write reaches the replicas about 300 ms after the primary finishes it (replication lag). Users send 800 requests a second, 20% of them writes, and the same popular keys are written and read all the time. Guess how often a replica returns old data, then press Run.');
 
@@ -84,7 +84,8 @@ const lesson: Lesson = {
       id: 'replicas/no-stale',
       title: tx('No old data'),
       text: tx('No read may return old data, and the primary must stay under 25% busy. Do not add machines.'),
-      goals: [noStale, { text: tx('Primary under 25% busy'), check: (run) => ({ ok: primaryBusy(run) < 0.25, value: pct(primaryBusy(run)) }) }],
+      // a database that fails every read returns nothing stale: the reads must succeed too (review of 9fd99c3)
+      goals: [noStale, { text: tx('Primary under 25% busy'), check: (run) => ({ ok: primaryBusy(run) < 0.25, value: pct(primaryBusy(run)) }) }, failUnder1],
       rules: [noMoreCapacity],
       hint: tx('Every replica read can be stale while the replicas are 300 ms behind. Stop them taking reads when they lag, and check the primary can carry the reads alone.'),
     },
@@ -95,6 +96,7 @@ const lesson: Lesson = {
       goals: [
         { text: tx('Replicas serve at least half of the requests'), check: (run) => ({ ok: replicaShare(run) >= 0.5, value: pct(replicaShare(run)) }) },
         { text: tx('Under 5% of replica reads stale'), check: (run) => ({ ok: staleShare(run) < 0.05, value: pct(staleShare(run)) }) },
+        failUnder1,
       ],
       rules: [noMoreCapacity],
       hint: tx('A lag limit cannot help: it moves the reads off the replicas. The lag itself has to shrink: replicas close to the primary, confirming writes quickly (semi-synchronous replication). Lower “Replication lag” and see how far it must go: the hottest keys are written every few ms.'),
