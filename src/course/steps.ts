@@ -45,10 +45,13 @@ const guessedOn = (lesson: Lesson, pages: Page[], from: number, to: number, ctx:
 /**
  * The questions a run started on page `i` answers: those guessed on a page before it that read
  * the run's example and scenario. A later guess on the same example (lessons 2.4, 2.5: guess what
- * a change does, then try it) waits for a run on its own page or after.
+ * a change does, then try it) waits for a run on its own page or after. When page `i` is a guess
+ * page, its questions that already have a guess count too (`guesses`): the simulator has its own
+ * Run button, and a run there before Next answers them; a question with no guess yet stays open.
  */
-export function answerable(lesson: Lesson, pages: Page[], i: number, ctx: Ctx): string[] {
-  return [...new Set(guessedOn(lesson, pages, 0, i, ctx))];
+export function answerable(lesson: Lesson, pages: Page[], i: number, ctx: Ctx, guesses: Record<string, string> = {}): string[] {
+  const here = guessedOn(lesson, pages, i, i + 1, ctx).filter((id) => guesses[id] !== undefined);
+  return [...new Set([...guessedOn(lesson, pages, 0, i, ctx), ...here])];
 }
 
 /** The questions whose answers a run or try page shows: those guessed since the last run or try page. */

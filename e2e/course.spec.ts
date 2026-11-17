@@ -524,3 +524,21 @@ test('course: guesses reach the simulator again after it loads another design', 
   const log = () => page.evaluate(() => (JSON.parse(localStorage.getItem('loadsketch-guess-log') ?? '{"entries":[]}').entries as { lesson?: string; question: string }[]).map((e) => `${e.lesson}:${e.question}`).sort());
   expect(await log()).toEqual(['2.1:db-share', '2.1:hit']);
 });
+
+test('course: a run from the simulator on the guess page, before Next, logs and scores the guesses', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await frame.getByTestId('run').click();
+  const status = () => frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { status: string } } }).__loadsketch.getState().status);
+  await expect.poll(status, { timeout: 60_000 }).toBe('done');
+  await page.waitForTimeout(500);
+  const log = () => page.evaluate(() => (JSON.parse(localStorage.getItem('loadsketch-guess-log') ?? '{"entries":[]}').entries as { lesson?: string; question: string }[]).map((e) => `${e.lesson}:${e.question}`).sort());
+  expect(await log()).toEqual(['2.1:db-share', '2.1:hit']);
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-answer-hit')).toBeVisible();
+  await expect(page.getByTestId('course-answer-db-share')).toBeVisible();
+});
