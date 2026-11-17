@@ -13,6 +13,7 @@ import { DESIGN_SCHEMA, edgeId, edgeLatencyMs, type Design, type DesignEdge, typ
 import { KINDS } from '../schema/kinds.ts';
 import { customUsed, judgeLimits, type Broken, type ProblemVerdict } from './constraints.ts';
 import { HOURS_PER_MONTH } from './cost.ts';
+import { parseBriefSpec, type NeedSpec, type ParseOptions } from './practiceData.ts';
 
 /**
  * `windows` end with the traffic (what the charts show). `allWindows` also holds the time after
@@ -267,6 +268,26 @@ const reachesNode = (id: string, text: string, op: Op = 'write', share = 0.97): 
     return reachable(d).has(id) && out > 0 && arrived >= share * out;
   },
 });
+
+export function compileNeed(spec: NeedSpec): Need {
+  switch (spec.kind) {
+    case 'stored':
+      return stored;
+    case 'looked':
+      return looked;
+    case 'finished':
+      return finished;
+    case 'not-degraded':
+      return notDegraded;
+    case 'reaches-node':
+      return reachesNode(spec.node, spec.text, spec.op, spec.share);
+  }
+}
+
+export function parseBrief(file: string, raw: unknown, opts?: ParseOptions): Brief {
+  const spec = parseBriefSpec(file, raw, opts);
+  return { ...spec, needs: spec.needs.map(compileNeed) };
+}
 
 // ---------------------------------------------------------------------------------------------
 // Briefs
