@@ -30,17 +30,17 @@ const retryBudgets: Lesson = {
         return x < 4.5 ? 'x3' : x < 9 ? 'x6' : 'x10';
       },
       measured: (run) => t('At most {x} times the usual', { x: peakAmp(run, 'api', 20, 30).toFixed(1) }),
-      explain: tx('The budget counts first calls and retries over the last 10 s. Once retries reach 10% of the first calls, a failed call is not retried (the connection counts it as “denied”). So during the spike the API gets the 3× spike plus about a tenth more, and the queues do not fill with retries. Only the first second of the spike comes near 4×: the budget saved up in the quiet seconds before it is spent at once.'),
+      explain: tx('The budget counts first calls and retries over the last 10 s. Once retries reach 10% of the first calls, a failed call is not retried (the edge counts it as “denied”). So during the spike the API gets the 3× spike plus about a tenth more, and the queues do not fill with retries. Only the first second of the spike comes near 4×: the budget saved up in the quiet seconds before it is spent at once.'),
       explainFor: {
-        x6: tx('The budget is larger than 10%, or not on the connection into the API servers: more retries get through, and they multiply the spike.'),
-        x10: tx('No budget limits the retries into the API servers. Look at the connection from the load balancer: that is where the storm grows.'),
+        x6: tx('The budget is larger than 10%, or not on the edge into the API servers: more retries get through, and they multiply the spike.'),
+        x10: tx('No budget limits the retries into the API servers. Look at the edge from the load balancer: that is where the storm grows.'),
       },
     },
     {
       id: 'throttle-recover',
       example: 'adaptive-throttle',
       topic: 'recovery',
-      text: tx('Adaptive throttling, K = 2, on every connection. After the spike ends at second 30, how soon does the system recover?'),
+      text: tx('Adaptive throttling, K = 2, on every edge. After the spike ends at second 30, how soon does the system recover?'),
       options: [
         { id: 'fast', text: tx('It recovers within a few seconds') },
         { id: 'slow', text: tx('It recovers slowly, in 10 seconds or more') },
@@ -62,17 +62,17 @@ const retryBudgets: Lesson = {
     {
       id: 'retry-budget/one-edge',
       example: 'retry-storm',
-      title: tx('One connection is enough'),
-      text: tx('On the retry storm, recover within 5 seconds after the spike. Keep every retry, add no machines, and change one connection only.'),
+      title: tx('One edge is enough'),
+      text: tx('On the retry storm, recover within 5 seconds after the spike. Keep every retry, add no machines, and change one edge only.'),
       goals: [recoversWithin(5, tx('Recovered within 5 seconds after the spike (then fewer than 5% fail in every second)'))],
       rules: [noMoreCapacity, keepRetries, oneEdgeOnly],
-      hint: tx('The storm grows where the overloaded component is called. The API servers are the ones that fill up; which connection retries into them? A retry budget on the connections into the cache or the database changes nothing here.'),
+      hint: tx('The storm grows where the overloaded component is called. The API servers are the ones that fill up; which edge retries into them? A retry budget on the edges into the cache or the database changes nothing here.'),
     },
     {
       id: 'adaptive-throttle/let-go',
       example: 'adaptive-throttle',
       title: tx('Let go sooner'),
-      text: tx('With adaptive throttling, recover within 20 seconds after the spike. Keep throttling on every connection that has it (K from 1 to 3), and add no machines.'),
+      text: tx('With adaptive throttling, recover within 20 seconds after the spike. Keep throttling on every edge that has it (K from 1 to 3), and add no machines.'),
       goals: [recoversWithin(20, tx('Recovered within 20 seconds after the spike (then fewer than 5% fail in every second)'))],
       rules: [noMoreCapacity, keepThrottle(3)],
       hint: tx('A smaller K rejects earlier, and takes longer to let go: try 1.5 and see. A larger K lets go sooner. A retry budget next to the throttle also helps: fewer retries fail, so fewer failures stay in the window.'),
@@ -87,7 +87,7 @@ const retryBudgets: Lesson = {
     {
       kind: 'try',
       example: 'adaptive-throttle',
-      text: tx('Set K to 1.5 on every connection and run again. The caller rejects earlier, and then it never lets go: its own rejections leave too few successes in the window.'),
+      text: tx('Set K to 1.5 on every edge and run again. The caller rejects earlier, and then it never lets go: its own rejections leave too few successes in the window.'),
       patch: [
         { edge: 'users->lb', set: { throttleK: 1.5 } },
         { edge: 'lb->api', set: { throttleK: 1.5 } },

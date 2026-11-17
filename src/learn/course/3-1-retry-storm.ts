@@ -64,7 +64,7 @@ const retryStorm: Lesson = {
       text: tx('Recover within 5 seconds after the spike, with no more machines.'),
       goals: [recoversWithin(5, tx('Recovered within 5 seconds after the spike (then fewer than 5% fail in every second)'))],
       rules: [noMoreCapacity],
-      hint: tx('Look at the retry settings on the connections. A retry budget limits retries to a share of the calls, so retries cannot snowball during the spike.'),
+      hint: tx('Look at the retry settings on the edges. A retry budget limits retries to a share of the calls, so retries cannot snowball during the spike.'),
     },
     {
       id: 'retry-storm/fail-less',
@@ -77,7 +77,7 @@ const retryStorm: Lesson = {
     {
       id: 'retry-storm/keep-retries',
       title: tx('Keep the retries'),
-      text: tx('Every connection that had retries still retries at least once (a call into a cache does not count), the failure rate of the whole run is below 10%, and p99 of successful requests is below 130 ms.'),
+      text: tx('Every edge that had retries still retries at least once (a call into a cache does not count), the failure rate of the whole run is below 10%, and p99 of successful requests is below 130 ms.'),
       goals: [failUnder10, p99Under(130, tx('p99 of successful requests below 130 ms'))],
       rules: [noMoreCapacity, keepRetries],
       hint: tx('With a smaller queue limit, the rejected calls are retried, and that multiplies the traffic again. Add a retry budget to limit the total of retries.'),
@@ -87,7 +87,7 @@ const retryStorm: Lesson = {
     { kind: 'read', text: tx('A three-tier site with a 150 ms timeout and 3 retries on every hop. From second 20 to 30, traffic is 3 times higher. Guess what happens, then press Run.') },
     { kind: 'guess', questions: ['recover', 'amp'] },
     { kind: 'run' },
-    { kind: 'try', text: tx('Set the retries of the connection from the load balancer to the API servers to 0 and run again. The spike still fails some requests, but the system recovers as soon as it ends.'), patch: [{ edge: 'lb->api', set: { retries: 0 } }] },
+    { kind: 'try', text: tx('Set the retries of the edge from the load balancer to the API servers to 0 and run again. The spike still fails some requests, but the system recovers as soon as it ends.'), patch: [{ edge: 'lb->api', set: { retries: 0 } }] },
     { kind: 'challenge', challenges: ['retry-storm/recover', 'retry-storm/fail-less', 'retry-storm/keep-retries'] },
     { kind: 'practice', items: [{ kind: 'oncall', id: 'cache-down' }] },
   ],

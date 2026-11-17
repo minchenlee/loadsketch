@@ -34,7 +34,7 @@ const cacheHitRatio: Lesson = {
       measured: (run) => t('Hit ratio {h}', { h: pct(hitRatio(run, 'cache')) }),
       explain: tx('Clicks concentrate on a few hot short URLs (a Zipf distribution), so room for a tenth of the keys catches most reads. It is not above 90% because every short URL misses the first time it is read, and in 60 seconds many cold short URLs are read only once.'),
       explainFor: {
-        tenth: tx("A hit ratio of only about a tenth: this design's cache does not catch the hot keys. Check whether the capacity is too small, or the TTL so short that keys keep expiring."),
+        tenth: tx("A hit ratio of only about a tenth: this design’s cache does not catch the hot keys. Check whether the capacity is too small, or the TTL so short that keys keep expiring."),
         half: tx('A hit ratio of about a half: some hot keys are caught, but the capacity or the TTL evicts or expires many of them.'),
         all: tx('A hit ratio above 90%: the cache caught almost every read. Check whether this is a “fixed hit ratio”: that is a number typed in, not one the run worked out.'),
       },
@@ -75,7 +75,7 @@ const cacheHitRatio: Lesson = {
       text: tx('Shrink the cache to 1000 keys or fewer. Error rate under 1%, p99 under 150 ms. This time you may add machines, but in the right place.'),
       goals: [cacheAtMost('capacityKeys', 1000, tx('Cache capacity (keys) ≤ 1000')), failUnder1, p99Under150],
       rules: [keepLru],
-      hint: tx("Once the hit ratio is under a half, the database is the ceiling: more API servers do not help. The database's “connections” or “replicas” are the place to add."),
+      hint: tx("Once the hit ratio is under a half, the database is the ceiling: more API servers do not help. The database’s “connections” or “replicas” are the place to add."),
     },
     {
       id: 'cache/fresh',

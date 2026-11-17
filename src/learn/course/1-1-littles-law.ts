@@ -79,7 +79,7 @@ const lesson: Lesson = {
     {
       id: 'inside',
       topic: 'queueing',
-      text: tx("Little's law: requests inside = arrivals per second × seconds each one spends inside. On average, how many requests are inside the server at once (being worked on or waiting)?"),
+      text: tx("Little’s law: requests inside = arrivals per second × seconds each one spends inside. On average, how many requests are inside the server at once (being worked on or waiting)?"),
       options: [
         { id: 'one', text: tx('About 1') },
         { id: 'two', text: tx('About 2') },
@@ -91,7 +91,7 @@ const lesson: Lesson = {
         return l < 1.5 ? 'one' : l < 3 ? 'two' : l < 6 ? 'four' : 'many';
       },
       measured: (run) => t('{n} inside on average ({rps}/s × {ms} ms)', { n: inside(run).toFixed(1), rps: Math.round(api(run)?.rps ?? 0), ms: ((api(run)?.waitMs ?? 0) + (api(run)?.holdMs ?? 0)).toFixed(2) }),
-      explain: tx('800 a second × about 2.7 ms inside is about 2 requests: on average 2 of the 4 slots are busy, which is the same 50% from the other side. Little\'s law holds for any queue, whatever the distribution; it turns a rate and a time into a count.'),
+      explain: tx('800 a second × about 2.7 ms inside is about 2 requests: on average 2 of the 4 slots are busy, which is the same 50% from the other side. Little’s law holds for any queue, whatever the distribution; it turns a rate and a time into a count.'),
       explainFor: {
         four: tx('About 4 inside: every slot is busy most of the time, and new requests start to queue.'),
         many: tx('More than 6 inside: the slots are full and the rest are waiting in the queue. The time inside is mostly waiting.'),
