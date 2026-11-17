@@ -58,6 +58,8 @@ export interface Challenge {
   goals: Goal[];
   rules: Rule[];
   hint: string; // message id
+  /** Ids of components of the example this challenge lets the user delete (default: none). */
+  mayRemove?: string[];
 }
 
 /** A change to the design: params of a node, or fields of an edge ("from->to"). Same shape as on-call fixes. */
@@ -222,7 +224,7 @@ export function judge(c: Challenge, run: RunData, original: Design): Verdict {
   // new component), and gets requests (not behind a weight-0 connection)
   for (const o of original.nodes) {
     const n = run.design.nodes.find((x) => x.id === o.id);
-    if (o.kind !== 'client' && (!n || n.kind !== o.kind)) broken.push(t('Removed "{name}"', { name: o.label ? t(o.label) : o.id }));
+    if (o.kind !== 'client' && !c.mayRemove?.includes(o.id) && (!n || n.kind !== o.kind)) broken.push(t('Removed "{name}"', { name: o.label ? t(o.label) : o.id }));
   }
   for (const o of original.nodes) {
     if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('"{name}" got no requests: you cannot go round a component of the original design', { name: o.label ? t(o.label) : o.id }));

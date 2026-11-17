@@ -2270,6 +2270,7 @@ export const ZH: Record<string, string> = {
   "near line {line}, column {col}": "第 {line} 行第 {col} 個字附近",
   "no failures": "沒有失敗",
   "no successful background message": "背景沒有成功的訊息",
+  "no successful requests": "沒有成功的請求",
   "none": "沒有",
   "not done": "還沒做",
   "not in canonical format": "不是標準格式",

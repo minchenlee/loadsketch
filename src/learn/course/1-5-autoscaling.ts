@@ -3,7 +3,7 @@
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
 import { isBad, measured, type RunData } from '../metrics.ts';
-import { errorsUnder, paramOf, pct } from '../lessonKit.ts';
+import { errorsUnder, failShareOf, paramOf, pct } from '../lessonKit.ts';
 
 const INTRO = tx('API servers that scale themselves: 2 instances normally, more when they are over 60% busy, up to 12. They check once a minute, and a new instance takes 2 minutes to boot. Traffic is 300 requests a second, and at minute 5 it triples for 20 minutes. Guess how the autoscaler copes, then press Run (30 simulated minutes take a few seconds).');
 
@@ -106,7 +106,7 @@ const lesson: Lesson = {
       goals: [
         designIs('bootS', (v) => v >= 120, tx('Boot time 120 s or more'), ' s'),
         designIs('scaleEveryS', (v) => v >= 60, tx('Check interval 60 s or more'), ' s'),
-        { text: tx('Error rate under 0.1% for the whole run'), check: (run) => ({ ok: run.result.summary.errorRate < 0.001, value: pct(run.result.summary.errorRate) }) },
+        { text: tx('Error rate under 0.1% for the whole run'), check: (run) => ({ ok: failShareOf(run) < 0.001, value: pct(failShareOf(run)) }) },
       ],
       rules: [noMoreCapacity],
       hint: tx('If scaling cannot be faster, it has to start earlier: a lower target keeps more instances running before the spike, so the spike lands on spare capacity while new instances boot. The cost is idle machines the rest of the time.'),

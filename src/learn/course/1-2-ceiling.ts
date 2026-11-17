@@ -5,7 +5,7 @@ import { t, tx } from '../../i18n/index.ts';
 import { DEFAULT_SLO } from '../../engine/limit.ts';
 import type { Goal, Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
-import { errorsUnder, p99Under, paramOf, pct, ms } from '../lessonKit.ts';
+import { errorsUnder, failShareOf, ms, p99Under, paramOf, pct } from '../lessonKit.ts';
 
 const INTRO = tx('The same three-tier site at a steady 800 requests a second: a load balancer, 3 API servers, Redis and Postgres. Nothing is wrong yet. How much more traffic can it take, and which part gives up first? Guess, then press Run.');
 
@@ -14,7 +14,7 @@ const busiest = (run: RunData) => {
   const b = run.result.bottleneck?.node;
   return b && LAYERS.includes(b) ? b : 'api';
 };
-const meetsTarget = (run: RunData) => run.result.summary.errorRate < DEFAULT_SLO.errorRate && run.result.summary.latencyMs.p99 < DEFAULT_SLO.p99Ms;
+const meetsTarget = (run: RunData) => failShareOf(run) < DEFAULT_SLO.errorRate && run.result.summary.latencyMs.p99 < DEFAULT_SLO.p99Ms;
 
 const apiAtMost5: Goal = {
   text: tx('At most 5 API servers'),
@@ -67,8 +67,8 @@ const lesson: Lesson = {
         { id: 'slow', text: tx('Few fail, but p99 goes over 1 s') },
         { id: 'fails', text: tx('More than 1% fail') },
       ],
-      answer: (run) => (meetsTarget(run) ? 'holds' : run.result.summary.errorRate >= DEFAULT_SLO.errorRate ? 'fails' : 'slow'),
-      measured: (run) => t('{e} failed, p99 {p}', { e: pct(run.result.summary.errorRate), p: ms(run.result.summary.latencyMs.p99) }),
+      answer: (run) => (meetsTarget(run) ? 'holds' : failShareOf(run) >= DEFAULT_SLO.errorRate ? 'fails' : 'slow'),
+      measured: (run) => t('{e} failed, p99 {p}', { e: pct(failShareOf(run)), p: ms(run.result.summary.latencyMs.p99) }),
       explain: tx('Double traffic is well past the ceiling of about 1300 a second. The API queues fill, requests wait until they time out or are turned away, and most of the double-traffic part fails. Past the ceiling a system does not slow down gently: it fails.'),
       explainFor: {
         holds: tx('It meets the target: this design has room for double traffic.'),
