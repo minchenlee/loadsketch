@@ -19,7 +19,7 @@ import type { RunData } from '../learn/metrics.ts';
 import type { Design, Scenario } from '../schema/design.ts';
 import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
-import { EMPTY, PROGRESS_KEY, loadProgress, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
+import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { answerable, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 
@@ -348,6 +348,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const isLocked = (q: Question) => progress.answered.includes(q.id) || started.includes(q.id);
   /** The page the last run started on: its questions are the ones the run answers. */
   const runPage = useRef(i);
+  /** The frame's last status: running after paused is the same run going on. */
+  const frameStatus = useRef('');
   /** The latest run in this visit that answers each question (it started on a page after the question's guess). */
   const [answerRuns, setAnswerRuns] = useState<Record<string, RunData>>({});
   /** Example designs and scenarios as they ship, by name: challenges are judged against them. */
@@ -425,10 +427,12 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         sendGuesses();
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') setStatus(msg.status);
-        if (msg.status === 'running') {
+        // a new run starts on this page; a paused run that goes on keeps the page it started on
+        if (msg.status === 'running' && frameStatus.current !== 'paused') {
           runPage.current = latest.current.i;
           begin(answerable(lesson, pages, latest.current.i, here));
         }
+        frameStatus.current = msg.status;
       } else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run });
     };
     addEventListener('message', onMessage);
@@ -718,16 +722,19 @@ function Course() {
   };
   // Another tab may have saved since this one loaded: read the saved progress before writing, and
   // follow what other tabs save (the storage event), so no tab erases another's lessons.
+  // A lesson this tab could not save (full storage) keeps its progress here: the stored one is older.
+  const unsaved = useRef(new Set<string>());
   const update = useCallback((lessonId: string, p: LessonProgress) => {
     setProgress((all) => {
-      const next = { ...all, ...loadProgress(), [lessonId]: p };
-      saveProgress(next);
+      const next = { ...mergeStored(all, loadProgress(), unsaved.current), [lessonId]: p };
+      if (saveProgress(next)) unsaved.current.clear();
+      else unsaved.current.add(lessonId);
       return next;
     });
   }, []);
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === PROGRESS_KEY) setProgress((all) => ({ ...all, ...loadProgress() }));
+      if (e.key === PROGRESS_KEY) setProgress((all) => mergeStored(all, loadProgress(), unsaved.current));
     };
     addEventListener('storage', onStorage);
     return () => removeEventListener('storage', onStorage);

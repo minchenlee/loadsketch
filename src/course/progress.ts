@@ -65,12 +65,24 @@ export function loadProgress(): Progress {
   }
 }
 
-export function saveProgress(p: Progress): void {
+/** Saves; false when the write failed (private window or full storage: the progress lives until the page closes). */
+export function saveProgress(p: Progress): boolean {
   try {
     localStorage.setItem(PROGRESS_KEY, JSON.stringify({ format: 'loadsketch/course-progress@1', lessons: p }));
+    return true;
   } catch {
-    // private window or full storage: the progress lives until the page closes
+    return false;
   }
+}
+
+/**
+ * This tab's progress with the stored one (another tab may have saved since): the stored lessons
+ * are newer, except those in `unsaved`, which this tab changed but could not write.
+ */
+export function mergeStored(mine: Progress, stored: Progress, unsaved: ReadonlySet<string>): Progress {
+  const out: Progress = { ...mine };
+  for (const [k, v] of Object.entries(stored)) if (!unsaved.has(k)) out[k] = v;
+  return out;
 }
 
 /**
