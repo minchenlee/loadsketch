@@ -1,0 +1,42 @@
+{
+  "schema": "loadsketch/problem@1",
+  "id": "example-problem",
+  "title": "Short title of the constraint problem",
+  "text": "Describe the team, deadline, workload, and the four limits to satisfy.",
+  "example": "three-tier",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "Constraint: example",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 500,
+      "readRatio": 0.9
+    }
+  },
+  "start": [],
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 300,
+    "budgetPerMonth": 1000,
+    "maxPoints": 6
+  },
+  "hint": "Explain the capacity math or complexity trade-off.",
+  "solution": [
+    {
+      "node": "api",
+      "params": {
+        "instances": 3
+      }
+    }
+  ],
+  "naive": [
+    {
+      "node": "api",
+      "params": {
+        "instances": 12
+      }
+    }
+  ]
+}

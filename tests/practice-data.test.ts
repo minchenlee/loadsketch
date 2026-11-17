@@ -176,4 +176,19 @@ describe('practice data files', () => {
       'brief-catalog',
     ]);
   });
+
+  it('validates all three practice templates without CJK or app loading', () => {
+    const readTemplate = (name: string) => {
+      const path = `examples/practice/templates/${name}`;
+      const text = readFileSync(join(ROOT, path), 'utf8');
+      expect(text).not.toMatch(/[　-〿一-鿿＀-￯]/);
+      return [path, JSON.parse(text)] as const;
+    };
+    const [incPath, incRaw] = readTemplate('incident.json');
+    const [probPath, probRaw] = readTemplate('problem.json');
+    const [briefPath, briefRaw] = readTemplate('brief.json');
+    expect(() => parseIncident(incPath, incRaw, { checkFilename: false })).not.toThrow();
+    expect(() => parseProblem(probPath, probRaw, { checkFilename: false })).not.toThrow();
+    expect(() => parseBrief(briefPath, briefRaw, { checkFilename: false })).not.toThrow();
+  });
 });

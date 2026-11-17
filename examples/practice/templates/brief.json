@@ -1,0 +1,132 @@
+{
+  "schema": "loadsketch/brief@1",
+  "id": "example-brief",
+  "title": "Brief: short title",
+  "text": "Describe the team, timeline, and problem context.",
+  "functional": [
+    "Users can read and write items"
+  ],
+  "load": [
+    "1,000 requests per second, 90% reads, 10% writes"
+  ],
+  "given": [
+    "Your API processes one request in 5 ms",
+    "The database takes 3 ms per read and 10 ms per write"
+  ],
+  "outOfScope": [
+    "Authentication and user accounts"
+  ],
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "Brief: example",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 1000,
+      "readRatio": 0.9
+    }
+  },
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 200,
+    "budgetPerMonth": 1500,
+    "maxPoints": 6
+  },
+  "start": {
+    "schema": "loadsketch/design@1",
+    "name": "Brief: example",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "Users",
+        "pos": [0, 200]
+      }
+    ],
+    "edges": []
+  },
+  "fixed": [],
+  "needs": [
+    {
+      "kind": "stored"
+    },
+    {
+      "kind": "looked"
+    },
+    {
+      "kind": "not-degraded"
+    }
+  ],
+  "hint": "Explain how to size the API and database.",
+  "reference": {
+    "schema": "loadsketch/design@1",
+    "name": "Brief: example",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "Users",
+        "pos": [0, 200]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "Load Balancer",
+        "pos": [270, 200]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "API Server",
+        "pos": [540, 200],
+        "params": {
+          "instances": 2
+        }
+      },
+      {
+        "id": "db",
+        "kind": "database",
+        "label": "Database",
+        "pos": [810, 200]
+      }
+    ],
+    "edges": [
+      { "from": "users", "to": "lb" },
+      { "from": "lb", "to": "api" },
+      { "from": "api", "to": "db" }
+    ]
+  },
+  "naive": {
+    "schema": "loadsketch/design@1",
+    "name": "Brief: example",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "Users",
+        "pos": [0, 200]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "API Server",
+        "pos": [400, 200],
+        "params": {
+          "instances": 1,
+          "concurrency": 2
+        }
+      },
+      {
+        "id": "db",
+        "kind": "database",
+        "label": "Database",
+        "pos": [800, 200]
+      }
+    ],
+    "edges": [
+      { "from": "users", "to": "api" },
+      { "from": "api", "to": "db" }
+    ]
+  }
+}

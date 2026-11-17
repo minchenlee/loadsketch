@@ -1,0 +1,42 @@
+{
+  "schema": "loadsketch/incident@1",
+  "id": "example-incident",
+  "title": "On-call alert: starting at 20 s, describe the symptoms users see without naming the component or cause.",
+  "example": "three-tier",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "Incident: example",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 400,
+      "readRatio": 0.9
+    },
+    "events": [
+      {
+        "type": "slow",
+        "atS": 20,
+        "node": "api",
+        "multiplier": 20
+      }
+    ]
+  },
+  "answer": {
+    "node": "api",
+    "fault": "slow"
+  },
+  "explain": "Explain what failed or slowed down and why user metrics behaved that way.",
+  "hint": "Explain how to fix the design.",
+  "solution": [
+    {
+      "node": "api",
+      "params": {
+        "instances": 4
+      }
+    }
+  ],
+  "fixGoal": {
+    "maxErrorRate": 0.01
+  }
+}
