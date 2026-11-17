@@ -107,8 +107,9 @@ node scripts/check-agents-md.ts
 - **元件樣板**：`src/app/presets.ts`（格式 `loadsketch/presets@1`，存在 localStorage，可以匯出和匯入）。只存名稱、種類和 params。元件列的「我的樣板」在 `src/app/components/Palette.tsx`；「存成樣板」在 `src/app/components/Inspector.tsx`。
 - **自訂服務**（kind `custom`，`src/schema/kinds.ts` 的 `CUSTOM_KIND`）：使用者自己填名稱、圖示、時間、容量、錯誤率、呼叫方式和價格。引擎走和 API 伺服器一樣的共用路徑。成本是台數 × 使用者填的單價（`src/learn/cost.ts`）。練習題不能用：`src/learn/constraints.ts` 的 `customUsed()`。新增一種練習題的判定時，要呼叫它。
 - **課程（範例題目、挑戰）**：`src/learn/lessons.ts`，格式在 `src/learn/lesson.ts`（`Lesson`、`Question`、`Challenge`）。
-- **值班題**：`src/learn/oncall.ts` 的 `INCIDENTS`。
-- **需求題**（從需求和幾乎空白的畫布開始）：`src/learn/briefs.ts` 的 `BRIEFS`。每題要有 `reference`（過關）和 `naive`（最常見的第一版，不過關），`tests/briefs.test.ts` 會跑這兩個設計。零件的速度是已知條件：處理時間不能比該種元件的預設值短（`floors` 可以另外給），命中率不能比預設高；`fixed` 的節點不能改也不能刪。題目用的情境裡，指定節點的事件（down、slow…）只能指向 `fixed` 的節點：使用者自己加的節點 id 事先不知道。
+- **值班題**：資料檔在 `examples/practice/oncall/`（`NN-<id>.json`），由 `src/learn/oncall.ts` 的 `INCIDENTS` 載入，格式檢查在 `src/learn/practiceData.ts`；範本在 `examples/practice/templates/`。
+- **限制題**：資料檔在 `examples/practice/constraints/`（`NN-<id>.json`），由 `src/learn/constraints.ts` 的 `PROBLEMS` 載入。
+- **需求題**（從需求和幾乎空白的畫布開始）：資料檔在 `examples/practice/briefs/`（`NN-<id>.json`），由 `src/learn/briefs.ts` 的 `BRIEFS` 載入（`compileNeed()` 把宣告式 `needs` 轉成檢查函式）。每題要有 `reference`（過關）和 `naive`（最常見的第一版，不過關），`tests/briefs.test.ts` 會跑這兩個設計。零件的速度是已知條件：處理時間不能比該種元件的預設值短（`floors` 可以另外給），命中率不能比預設高；`fixed` 的節點不能改也不能刪。題目用的情境裡，指定節點的事件（down、slow…）只能指向 `fixed` 的節點：使用者自己加的節點 id 事先不知道。
 
 ## English summary
 

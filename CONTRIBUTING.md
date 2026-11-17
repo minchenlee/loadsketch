@@ -11,6 +11,7 @@ Thanks for your interest in contributing to loadsketch! This document provides g
 - [Coding Standards](#coding-standards)
 - [Add an Example in 5 Minutes](#add-an-example-in-5-minutes)
 - [Adding a Terraform Resource Mapping](#adding-a-terraform-resource-mapping)
+- [Add a Practice Question](#add-a-practice-question)
 - [Commit Messages](#commit-messages)
 - [Pull Request Process](#pull-request-process)
 
@@ -45,7 +46,7 @@ Feature requests are welcome! Please:
 
 We welcome code contributions! Areas where we especially need help:
 - **Examples**: new designs and scenarios that teach one idea well
-- **Design briefs**: a new problem that starts from requirements (`src/learn/briefs.ts`), with a reference design that passes and a first design that does not
+- **Design briefs**: a new problem that starts from requirements (`examples/practice/briefs/`), with a reference design that passes and a first design that does not
 - **Component kinds**: a new kind of component. It is a code change in several places; [AGENTS.md](AGENTS.md) lists them under "新增一種元件"
 - **Model accuracy**: cases where the simulation differs from how real systems behave
 - **Terraform import**: more resource types and providers
@@ -347,6 +348,80 @@ node scripts/i18n-extract.ts      # extract new Traditional Chinese message ids 
 npm run i18n:check                # verify 0 missing English translations
 npm run loadsketch -- import terraform tests/import/fixtures/ecs-rds.plan.json --out /tmp/design.json --report /tmp/report.md
 ```
+
+## Add a Practice Question
+
+Each practice question is a single JSON file — no TypeScript changes are needed.
+
+### 1. Copy a Template and Name the File
+
+| Kind | Template | Destination | `schema` |
+|---|---|---|---|
+| On-call incident | `examples/practice/templates/incident.json` | `examples/practice/oncall/` | `loadsketch/incident@1` |
+| Constraint problem | `examples/practice/templates/problem.json` | `examples/practice/constraints/` | `loadsketch/problem@1` |
+| Design brief | `examples/practice/templates/brief.json` | `examples/practice/briefs/` | `loadsketch/brief@1` |
+
+Name the new file `NN-<id>.json` (for example `09-my-case.json`). The two-digit `NN` prefix sets list order, and `<id>` must match the `id` field inside the JSON (unique within its folder).
+
+### 2. Fields
+
+Common fields:
+
+- `schema`: Format version string (`loadsketch/incident@1`, `loadsketch/problem@1`, or `loadsketch/brief@1`).
+- `id`: Unique question identifier matching `<id>` in the filename.
+- `title`: Short title shown in the practice list (for incidents, symptoms only — never name the faulty component or cause).
+- `scenario`: Complete `loadsketch/scenario@1` object specifying traffic and events.
+- `hint`: Guidance shown after answering or when requested.
+
+On-call incidents (`loadsketch/incident@1`):
+
+- `example`: Filename stem of the design in `examples/designs/`.
+- `answer`: Target `{ node, fault }` pair (`fault` is `down`, `slow`, `errors`, `gray`, `pause`, or `traffic`).
+- `explain`: Post-answer explanation of what happened and why symptoms appeared.
+- `solution`: Array of patches (`{ node, params }` or `{ edge, set }`) known to fix the fault.
+- `fixGoal`: Passing threshold (`maxErrorRate` and optional `maxP99Ms`).
+
+Constraint problems (`loadsketch/problem@1`):
+
+- `text`: Story stating the team, deadline, traffic, and limits.
+- `example`: Filename stem of the starting design in `examples/designs/`.
+- `start`: Array of patches applied to `example` to create the failing starting design.
+- `limits`: Four gates (`maxErrorRate`, `maxP99Ms`, `budgetPerMonth`, `maxPoints`).
+- `solution`: Array of patches that passes all four limits.
+- `naive`: Array of patches representing an obvious attempt that breaks budget or complexity points.
+
+Design briefs (`loadsketch/brief@1`):
+
+- `text`: Team size, timeline, and problem context.
+- `functional`: Functional requirements ("users can ...").
+- `load`: Workload descriptions in plain words.
+- `given`: Fixed component speeds, capacities, and hit ratios the learner cannot improve.
+- `outOfScope`: Topics explicitly excluded from the exercise.
+- `limits`: Four gates (`maxErrorRate`, `maxP99Ms`, `budgetPerMonth`, `maxPoints`).
+- `start`: Starting `loadsketch/design@1` canvas (users and any `fixed` nodes, with no edges).
+- `fixed`: Node IDs in `start` that cannot be edited or removed.
+- `needs`: Declarative checks (`stored`, `looked`, `finished`, `not-degraded`, or `reaches-node` with `node`, `text`, optional `op`, and optional `share`).
+- `floors`: Optional per-kind parameter speed floors (mean ms) overriding kind defaults.
+- `reference`: Complete `loadsketch/design@1` design that passes every gate, need, and given.
+- `naive`: Complete first-attempt `loadsketch/design@1` design that fails on measured metrics.
+
+### 3. Translations and Verification
+
+Write display text in the JSON as Traditional Chinese source text (message IDs), run `node scripts/i18n-extract.ts` to add empty entries to `src/i18n/en.ts`, and fill in the English translations there.
+
+Run these commands before opening a PR:
+
+```sh
+node scripts/i18n-extract.ts
+npm run i18n:check
+npx tsc --noEmit -p .
+npx vitest run tests/practice-data.test.ts
+npx vitest run tests/oncall.test.ts        # for on-call incidents
+npx vitest run tests/constraints.test.ts   # for constraint problems
+npx vitest run tests/briefs.test.ts        # for design briefs
+```
+
+CI verifies strict schema and filename/id matching (`tests/practice-data.test.ts`), completeness of `src/i18n/en.ts` (`npm run i18n:check`), and simulation behavior: `naive` fails while `solution` or `reference` passes (`tests/oncall.test.ts`, `tests/constraints.test.ts`, `tests/briefs.test.ts`).
 
 ## Commit Messages
 
