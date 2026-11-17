@@ -6,6 +6,7 @@ import { edgeId, type Design, type ParamValue, type Scenario } from '../schema/d
 import { t, tx } from '../i18n/index.ts';
 import type { RunData } from './metrics.ts';
 import { customUsed } from './constraints.ts';
+import type { Patch } from './oncall.ts';
 
 export interface Option {
   id: string;
@@ -15,6 +16,12 @@ export interface Option {
 /** Guess first, then run: the answer is read from the run, so it holds for a changed design too. */
 export interface Question {
   id: string;
+  /**
+   * Course lessons with more than one example (a pair) or scenario: the run this question reads.
+   * Defaults to the lesson's own example and scenario.
+   */
+  example?: string;
+  scenario?: string;
   text: string; // message id
   options: Option[];
   answer: (run: RunData) => string; // option id
@@ -41,7 +48,11 @@ export interface Goal {
 export type Rule = { short: string; text: string; check: (d: Design, original: Design) => string[] };
 
 export interface Challenge {
+  /** Unique over every lesson: the store keeps passed challenges by id. */
   id: string;
+  /** Course lessons: the run this challenge is judged on (default: the lesson's example and scenario). */
+  example?: string;
+  scenario?: string;
   title: string; // message id
   text: string; // message id
   goals: Goal[];
@@ -49,14 +60,69 @@ export interface Challenge {
   hint: string; // message id
 }
 
+/** A change to the design: params of a node, or fields of an edge ("from->to"). Same shape as on-call fixes. */
+export type { Patch };
+
+/** Where a practice problem lives: on-call drills, constraint problems, briefs (by their id). */
+export type PracticeLink = { kind: 'oncall' | 'constraint' | 'brief'; id: string };
+
+/**
+ * One step of a course lesson, in order. A course page shows them top to bottom; the side panel
+ * ignores them. Text is a message id.
+ * - read: a paragraph.
+ * - guess: the questions (ids) to answer before the next run.
+ * - run: open this example and scenario (default: the lesson's) and run it.
+ * - try: change the design (`patch`, optional: the text may only describe it) or open another
+ *   scenario, and run again. Not judged: the run shows the answer.
+ * - challenge: the challenges (ids), judged on every run.
+ * - practice: problems to do after the lesson.
+ */
+export type Step =
+  | { kind: 'read'; text: string }
+  | { kind: 'guess'; questions: string[] }
+  | { kind: 'run'; example?: string; scenario?: string; text?: string }
+  | { kind: 'try'; text: string; example?: string; scenario?: string; patch?: Patch[] }
+  | { kind: 'challenge'; challenges: string[] }
+  | { kind: 'practice'; text?: string; items: PracticeLink[] };
+
 export interface Lesson {
   example: string;
+  /** Course lessons (src/learn/course/): the number in the outline, e.g. "2.1". Unique. */
+  id?: string;
+  /** Course lessons: the title (message id). */
+  title?: string;
+  /** Course lessons: the unit (0–6, a key of UNITS in course.ts) and the order inside it. */
+  unit?: number;
+  order?: number;
+  /** Course lessons: about how long it takes, in minutes. */
+  minutes?: number;
+  /** Course lessons: the wave it ships in. */
+  wave?: 1 | 2;
+  /** Course lessons: other examples the lesson opens (a pair: the problem, then the fix). */
+  extraExamples?: string[];
+  /** Course lessons: the steps in order. Without it: stepsOf() (intro, guess all, run, challenges). */
+  steps?: Step[];
   /** Shown instead of the example's description until the first run: the description gives the answer away. */
   intro: string; // message id
-  /** Challenges count only with this scenario (the one the example opens with). */
+  /** Challenges count only with this scenario (the one the example opens with). A key of SCENARIOS. */
   scenario: string;
   questions: Question[];
   challenges: Challenge[];
+}
+
+/** The steps of a lesson: its own, or read the intro, guess every question, run, then the challenges. */
+export function stepsOf(l: Lesson): Step[] {
+  if (l.steps) return l.steps;
+  const out: Step[] = [{ kind: 'read', text: l.intro }];
+  if (l.questions.length) out.push({ kind: 'guess', questions: l.questions.map((q) => q.id) });
+  out.push({ kind: 'run' });
+  if (l.challenges.length) out.push({ kind: 'challenge', challenges: l.challenges.map((c) => c.id) });
+  return out;
+}
+
+/** The example and scenario a question or challenge reads (its own, else the lesson's). */
+export function runOf(l: Lesson, x: { example?: string; scenario?: string }): { example: string; scenario: string } {
+  return { example: x.example ?? l.example, scenario: x.scenario ?? l.scenario };
 }
 
 export interface Verdict {
