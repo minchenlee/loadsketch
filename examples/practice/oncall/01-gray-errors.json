@@ -1,0 +1,43 @@
+{
+  "schema": "loadsketch/incident@1",
+  "id": "gray-errors",
+  "title": "值班告警：第 20 秒起，大約三分之一的使用者請求失敗。延遲沒變。",
+  "example": "three-tier",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "值班：失敗三分之一",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 400,
+      "readRatio": 0.9
+    },
+    "events": [
+      {
+        "type": "errors",
+        "atS": 20,
+        "node": "api",
+        "instance": 1,
+        "rate": 0.9
+      }
+    ]
+  },
+  "answer": {
+    "node": "api",
+    "fault": "gray"
+  },
+  "explain": "API Server 3 台裡的第 2 台（#1）有九成請求回錯誤，另外 2 台正常。負載平衡器預設只看實例有沒有活著（它活著），所以照樣把三分之一的請求送給它。打開 API Server 的指標，每台的使用率差不多，但失敗數升高：問題在單台，不在整體容量。",
+  "hint": "在負載平衡器打開 outlier detection（看回應自動剔除出錯的實例）。",
+  "solution": [
+    {
+      "node": "lb",
+      "params": {
+        "outlier": "on"
+      }
+    }
+  ],
+  "fixGoal": {
+    "maxErrorRate": 0.01
+  }
+}

@@ -1,7 +1,17 @@
 // Validation and loading tests for data-driven practice files (no simulations run here, so fast).
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BRIEF_SCHEMA, INCIDENT_SCHEMA, PROBLEM_SCHEMA, loadPracticeList, parseIncident, parseProblem } from '../src/learn/practiceData.ts';
+import { INCIDENTS } from '../src/learn/oncall.ts';
 import { parseBrief } from '../src/learn/briefs.ts';
+
+const ROOT = join(import.meta.dirname, '..');
+const readPracticeDir = (dir: string) =>
+  readdirSync(join(ROOT, dir))
+    .filter((f) => f.endsWith('.json'))
+    .sort()
+    .map((f) => [`${dir}/${f}`, JSON.parse(readFileSync(join(ROOT, dir, f), 'utf8'))] as const);
 
 const baseScenario = {
   schema: 'loadsketch/scenario@1',
@@ -125,5 +135,23 @@ describe('practice data validation errors', () => {
     expect(msg).toContain('explain');
     expect(msg).toContain('extraKey');
     expect(msg).toContain('id');
+  });
+});
+
+describe('practice data files', () => {
+  it('validates all oncall incident files and preserves order', () => {
+    const entries = readPracticeDir('examples/practice/oncall');
+    expect(entries.length).toBe(8);
+    for (const [file, raw] of entries) expect(() => parseIncident(file, raw)).not.toThrow();
+    expect(INCIDENTS.map((i) => i.id)).toEqual([
+      'gray-errors',
+      'slow-dependency',
+      'db-slow',
+      'gray-slow',
+      'gc-pause',
+      'traffic-spike',
+      'db-errors',
+      'cache-down',
+    ]);
   });
 });

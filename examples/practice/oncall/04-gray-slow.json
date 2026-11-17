@@ -1,0 +1,43 @@
+{
+  "schema": "loadsketch/incident@1",
+  "id": "gray-slow",
+  "title": "值班告警：第 20 秒起，大約一成的請求失敗，p99 小幅上升。",
+  "example": "hedged-reads",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "值班：失敗一成",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 400,
+      "readRatio": 0.95
+    },
+    "events": [
+      {
+        "type": "slow",
+        "atS": 20,
+        "node": "api",
+        "instance": 2,
+        "multiplier": 60
+      }
+    ]
+  },
+  "answer": {
+    "node": "api",
+    "fault": "gray"
+  },
+  "explain": "API Server 4 台裡的第 3 台（#2）變慢 60 倍，其他台正常。負載平衡器輪流送，所以四分之一的請求送到慢的那台。對沖請求在 40 ms 後把讀取再送一份到別台，但不會取消慢的那台上的第一份；它的佇列很快就滿了。佇列滿了之後，送過去的請求立刻被拒絕，比對沖的 40 ms 還快，所以對沖救不到。寫入不做對沖，也救不到。打開 API Server 的指標：一台使用率滿了，其他台很閒。",
+  "hint": "把負載平衡器的策略改成最少連線（least connections）：慢的那台連線多，就少送給它。",
+  "solution": [
+    {
+      "node": "lb",
+      "params": {
+        "policy": "least_conn"
+      }
+    }
+  ],
+  "fixGoal": {
+    "maxErrorRate": 0.01
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema": "loadsketch/incident@1",
+  "id": "slow-dependency",
+  "title": "值班告警：第 20 秒起，大部分請求失敗，p99 升到約 3 秒。",
+  "example": "slow-dependency",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "值班：大部分失敗",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 1500,
+      "readRatio": 0.9
+    },
+    "events": [
+      {
+        "type": "slow",
+        "atS": 20,
+        "node": "recs",
+        "multiplier": 30
+      }
+    ]
+  },
+  "answer": {
+    "node": "recs",
+    "fault": "slow"
+  },
+  "explain": "推薦服務（recs）整個變慢 30 倍。API 每個請求都要等它，逾時 1 秒；等待中的請求佔住 API 的槽，API 的佇列滿了，連不需要推薦的請求也一起失敗。API 的使用率很高，但它是受害者：佔住它的是在等 recs 的請求。",
+  "hint": "把 API → recs 的逾時調短（例如 100 ms），並打開降級回應：推薦拿不到就先回沒有推薦的頁面。",
+  "solution": [
+    {
+      "edge": "api->recs",
+      "set": {
+        "timeoutMs": 100,
+        "fallback": "on"
+      }
+    }
+  ],
+  "fixGoal": {
+    "maxErrorRate": 0.01
+  }
+}

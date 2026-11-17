@@ -1,0 +1,47 @@
+{
+  "schema": "loadsketch/incident@1",
+  "id": "traffic-spike",
+  "title": "值班告警：第 20 秒起，大約一成的請求失敗，p99 升到約 750 ms。",
+  "example": "url-shortener",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "值班：失敗一成又變慢",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 1000,
+      "readRatio": 0.95
+    },
+    "events": [
+      {
+        "type": "spike",
+        "atS": 20,
+        "multiplier": 4
+      }
+    ]
+  },
+  "answer": {
+    "node": "users",
+    "fault": "traffic"
+  },
+  "explain": "沒有元件壞掉：使用者的流量在第 20 秒變成 4 倍。API 和資料庫接不下，排隊變長、逾時增加。打開「使用者」看每秒送出的請求數，就看得出來。",
+  "hint": "加容量：API Server 加到 12 台，資料庫連線加到 32。",
+  "solution": [
+    {
+      "node": "api",
+      "params": {
+        "instances": 12
+      }
+    },
+    {
+      "node": "db",
+      "params": {
+        "connections": 32
+      }
+    }
+  ],
+  "fixGoal": {
+    "maxErrorRate": 0.01
+  }
+}

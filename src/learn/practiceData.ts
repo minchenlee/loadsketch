@@ -149,7 +149,7 @@ function parseWithSchema<T extends { schema: string; id: string }>(
     const rawId = raw && typeof raw === 'object' && !Array.isArray(raw) && 'id' in raw ? (raw as { id: unknown }).id : undefined;
     if (!m) {
       errors.push(`${label}: id: filename "${base}" must match NN-<id>.json`);
-    } else if (typeof rawId === 'string' && m[2] !== rawId) {
+    } else if (typeof rawId === 'string' && m[1] !== rawId) {
       errors.push(`${label}: id: filename "${base}" does not match id "${rawId}"`);
     }
   }

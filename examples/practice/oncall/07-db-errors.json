@@ -1,0 +1,48 @@
+{
+  "schema": "loadsketch/incident@1",
+  "id": "db-errors",
+  "title": "值班告警：第 20 秒起，大約 14% 的請求失敗。延遲沒變。",
+  "example": "async-queue",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "值班：失敗但不慢",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 300,
+      "readRatio": 0.7
+    },
+    "events": [
+      {
+        "type": "errors",
+        "atS": 20,
+        "node": "db",
+        "rate": 0.2
+      }
+    ]
+  },
+  "answer": {
+    "node": "db",
+    "fault": "errors"
+  },
+  "explain": "資料庫有兩成的請求回錯誤（例如連線被重設），每台都一樣。錯誤很快就回來，所以延遲不變，只有失敗率升高。使用者看到的是讀取失敗。worker 寫入資料庫也有兩成失敗：那些背景工作沒有做完，但使用者的失敗率看不出來，要打開佇列的指標才看得到。",
+  "hint": "偶發的錯誤用重試擋：API → db 和 worker → db 都設 2 次重試。只修 API 那一條，背景工作還是會掉兩成。",
+  "solution": [
+    {
+      "edge": "api->db",
+      "set": {
+        "retries": 2
+      }
+    },
+    {
+      "edge": "thumb->db",
+      "set": {
+        "retries": 2
+      }
+    }
+  ],
+  "fixGoal": {
+    "maxErrorRate": 0.01
+  }
+}

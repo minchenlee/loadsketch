@@ -1,0 +1,44 @@
+{
+  "schema": "loadsketch/incident@1",
+  "id": "gc-pause",
+  "title": "值班告警：第 20 秒起，p99 從約 80 ms 跳到約 450 ms。沒有失敗。",
+  "example": "sharded",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "值班：長尾變慢",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 600,
+      "readRatio": 0.8
+    },
+    "events": [
+      {
+        "type": "pause",
+        "atS": 20,
+        "node": "api",
+        "everyS": 2,
+        "pauseMs": 400
+      }
+    ]
+  },
+  "answer": {
+    "node": "api",
+    "fault": "pause"
+  },
+  "explain": "API Server 每 2 秒停頓 400 ms（stop-the-world GC）。停頓時它什麼都不做，剛好在那時進來的請求要等停頓結束，所以 p50 幾乎不變，p99 跳到約 400 ms 以上。使用率平均下來不高，看平均看不出來。",
+  "hint": "在負載平衡器 → API 打開對沖請求（例如 60 ms）：讀取等超過 60 ms 沒有回應，就再送一份到另一台。對沖只用在讀取；寫入重送可能寫兩次，所以不要用短逾時加重試來處理。",
+  "solution": [
+    {
+      "edge": "lb->api",
+      "set": {
+        "hedgeMs": 60
+      }
+    }
+  ],
+  "fixGoal": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 250
+  }
+}
