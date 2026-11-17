@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { EMBEDDED, useApp } from './store.ts';
 import type { RunData } from '../learn/metrics.ts';
 import type { Patch } from '../learn/oncall.ts';
+import type { Lang } from '../i18n/index.ts';
 import type { DesignEdge, ParamValue } from '../schema/design.ts';
 
 export const COURSE = EMBEDDED && new URLSearchParams(location.search).get('course') === '1';
@@ -21,7 +22,9 @@ export type ToCourse =
 export type FromCourse =
   | { source: 'loadsketch-course'; kind: 'run' }
   | { source: 'loadsketch-course'; kind: 'guesses'; guesses: Record<string, string> }
-  | { source: 'loadsketch-course'; kind: 'patch'; patches: Patch[] };
+  | { source: 'loadsketch-course'; kind: 'patch'; patches: Patch[] }
+  /** The page's theme and language changed: the simulator follows without reloading (the design stays). */
+  | { source: 'loadsketch-course'; kind: 'look'; theme: 'light' | 'dark'; lang: Lang };
 
 function post(m: ToCourse) {
   if (window.parent !== window) window.parent.postMessage(m, location.origin);
@@ -37,6 +40,9 @@ export function useCourseBridge(): void {
       const st = useApp.getState();
       if (m.kind === 'run') {
         if (st.status === 'idle' || st.status === 'done') st.run();
+      } else if (m.kind === 'look') {
+        if (m.theme !== st.theme) st.setTheme(m.theme);
+        st.setLang(m.lang);
       } else if (m.kind === 'patch' && (st.status === 'idle' || st.status === 'done')) {
         for (const p of m.patches) {
           if ('node' in p) st.updateNode(p.node, { params: p.params as Record<string, ParamValue> });

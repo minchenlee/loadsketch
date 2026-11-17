@@ -2240,6 +2240,7 @@ export const ZH: Record<string, string> = {
   "{node} fails at {at} s for {for} s (for a database, the primary fails). See how long requests fail and whether something takes over.": "{node} 在第 {at} 秒故障，持續 {for} 秒（資料庫是主庫故障），看請求失敗多久、有沒有別的接手。",
   "{n}": "{n} 個",
   "{n} APIs": "{n} 個 API",
+  "{n} answered guesses have no saved score. Start the lesson again to score them.": "有 {n} 題已作答但沒有存下分數。重新開始這一課就能計分。",
   "{n} are not in the right format": "{n} 個樣板格式不對",
   "{n} components became another kind, so their import source no longer fits: after the replace, they no longer show where their values came from.": "有 {n} 個元件換了種類，匯入時的來源不再適用：換掉後，它們就看不到值是從哪裡來的。",
   "{n} components, {e} lines, {f} findings.": "{n} 個元件、{e} 條線、{f} 個發現。",
