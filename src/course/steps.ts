@@ -33,6 +33,33 @@ export function ctxOf(lesson: Lesson, pages: Page[], i: number): Ctx {
   return ctx;
 }
 
+const guessedOn = (lesson: Lesson, pages: Page[], from: number, to: number, ctx: Ctx): string[] =>
+  pages
+    .slice(Math.max(0, from), Math.max(0, to))
+    .flatMap((p) => (p.kind === 'guess' ? p.questions : []))
+    .filter((id) => {
+      const q = lesson.questions.find((x) => x.id === id);
+      return !!q && ctxKey(runOf(lesson, q)) === ctxKey(ctx);
+    });
+
+/**
+ * The questions a run started on page `i` answers: those guessed on a page before it that read
+ * the run's example and scenario. A later guess on the same example (lessons 2.4, 2.5: guess what
+ * a change does, then try it) waits for a run on its own page or after.
+ */
+export function answerable(lesson: Lesson, pages: Page[], i: number, ctx: Ctx): string[] {
+  return [...new Set(guessedOn(lesson, pages, 0, i, ctx))];
+}
+
+/** The questions whose answers a run or try page shows: those guessed since the last run or try page. */
+export function feedbackOf(lesson: Lesson, pages: Page[], i: number): string[] {
+  const p = pages[i];
+  if (!p || (p.kind !== 'run' && p.kind !== 'try')) return [];
+  let from = i - 1;
+  while (from >= 0 && pages[from].kind !== 'run' && pages[from].kind !== 'try') from--;
+  return [...new Set(guessedOn(lesson, pages, from + 1, i, ctxOf(lesson, pages, i)))];
+}
+
 /** A saved page index that still fits the lesson (its text may have changed since). */
 export function clampStep(i: number, pages: Page[]): number {
   return Number.isInteger(i) ? Math.min(Math.max(i, 0), pages.length - 1) : 0;

@@ -35,7 +35,8 @@ export type ToCourse =
 /** From the course page to this frame. */
 export type FromCourse =
   | { source: 'loadsketch-course'; kind: 'run' }
-  | { source: 'loadsketch-course'; kind: 'guesses'; guesses: Record<string, string> }
+  /** The guesses a run started now answers, and the course lesson they belong to (the guess log records them under it). */
+  | { source: 'loadsketch-course'; kind: 'guesses'; lesson: string; guesses: Record<string, string> }
   | { source: 'loadsketch-course'; kind: 'patch'; patches: Patch[] }
   /** The page's theme and language changed: the simulator follows without reloading (the design stays). */
   | { source: 'loadsketch-course'; kind: 'look'; theme: 'light' | 'dark'; lang: Lang };
@@ -62,8 +63,12 @@ export function useCourseBridge(): void {
           if ('node' in p) st.updateNode(p.node, { params: p.params as Record<string, ParamValue> });
           else st.updateEdge(p.edge, p.set as Partial<Omit<DesignEdge, 'from' | 'to'>>);
         }
-      } else if (m.kind === 'guesses' && st.ran === null) {
-        for (const [q, o] of Object.entries(m.guesses)) if (typeof o === 'string') st.setGuess(q, o);
+      } else if (m.kind === 'guesses' && st.status !== 'running' && st.status !== 'paused' && typeof m.lesson === 'string') {
+        // the page's open guesses replace those not logged yet; a later step's guesses come after a run
+        const guesses: Record<string, string> = {};
+        for (const q of st.loggedGuesses) if (st.guesses[q] !== undefined) guesses[q] = st.guesses[q];
+        for (const [q, o] of Object.entries(m.guesses ?? {})) if (typeof o === 'string' && !st.loggedGuesses.includes(q)) guesses[q] = o;
+        useApp.setState({ courseLesson: m.lesson, guesses });
       }
     };
     window.addEventListener('message', onMessage);
