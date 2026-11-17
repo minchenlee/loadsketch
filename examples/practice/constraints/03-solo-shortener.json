@@ -1,0 +1,43 @@
+{
+  "schema": "loadsketch/problem@1",
+  "id": "solo-shortener",
+  "title": "一個人顧的短網址",
+  "text": "1 人，一週上線。每秒 4000 個請求，95% 是讀取。現在的資料庫撐不住，一成以上的請求失敗。整場失敗率 ≤ 1%、p99 ≤ 200 ms，每月不超過 $2,800，複雜度不超過 6 點：一個人顧不了讀副本。",
+  "example": "url-shortener",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "限制：每秒 4000",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 4000,
+      "readRatio": 0.95
+    }
+  },
+  "start": [],
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 200,
+    "budgetPerMonth": 2800,
+    "maxPoints": 6
+  },
+  "hint": "加讀副本最直覺，但多 1 點，也比較貴。拿掉副本，把主庫的規格開大（在這裡是調大它同時能處理的查詢數，價錢會跟著漲）：快取已經擋掉大部分讀取，主庫只要接得住沒命中的那些。",
+  "solution": [
+    {
+      "node": "db",
+      "params": {
+        "replicas": 0,
+        "connections": 32
+      }
+    }
+  ],
+  "naive": [
+    {
+      "node": "db",
+      "params": {
+        "replicas": 3
+      }
+    }
+  ]
+}

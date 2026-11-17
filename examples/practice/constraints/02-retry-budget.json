@@ -1,0 +1,69 @@
+{
+  "schema": "loadsketch/problem@1",
+  "id": "retry-budget",
+  "title": "重試風暴，兩人團隊",
+  "text": "2 人團隊，兩週。每秒 600 個請求，第 20 秒起有 10 秒變成 3 倍；每一跳都重試 3 次，系統被重試塞爆，之後也沒有恢復。整場失敗率 ≤ 1%、p99 ≤ 300 ms，每月不超過 $850，複雜度不超過 7 點。",
+  "example": "retry-storm",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "限制：重試風暴",
+    "seed": 3,
+    "durationS": 90,
+    "warmupS": 0,
+    "traffic": {
+      "rps": 600,
+      "readRatio": 0.9,
+      "clientTimeoutMs": 1000
+    },
+    "events": [
+      {
+        "type": "spike",
+        "atS": 20,
+        "forS": 10,
+        "multiplier": 3
+      }
+    ]
+  },
+  "start": [],
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 300,
+    "budgetPerMonth": 850,
+    "maxPoints": 7
+  },
+  "hint": "加機器能撐住，但超出預算；每一跳加重試預算又超出點數。先拿掉放大流量的重試，再把每台 API Server 的同時處理數調大一點（比加一台便宜）。",
+  "solution": [
+    {
+      "edge": "lb->api",
+      "set": {
+        "retries": 0
+      }
+    },
+    {
+      "edge": "api->cache",
+      "set": {
+        "retries": 0
+      }
+    },
+    {
+      "edge": "api->db",
+      "set": {
+        "retries": 0
+      }
+    },
+    {
+      "node": "api",
+      "params": {
+        "concurrency": 8
+      }
+    }
+  ],
+  "naive": [
+    {
+      "node": "api",
+      "params": {
+        "instances": 6
+      }
+    }
+  ]
+}

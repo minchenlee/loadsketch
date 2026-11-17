@@ -1,0 +1,59 @@
+{
+  "schema": "loadsketch/problem@1",
+  "id": "spike-budget",
+  "title": "尖峰，但預算有限",
+  "text": "3 人團隊，一個月。平常每秒 300 個請求；第 2 分鐘起有 2 分鐘變成 3 倍。目前固定 2 台 API Server，尖峰時大量失敗。整場失敗率 ≤ 1%、p99 ≤ 500 ms，每月不超過 $800，複雜度不超過 6 點。",
+  "example": "autoscale",
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "限制：尖峰 3 倍",
+    "seed": 1,
+    "durationS": 600,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 300,
+      "readRatio": 0.9,
+      "clientTimeoutMs": 2000
+    },
+    "events": [
+      {
+        "type": "spike",
+        "atS": 120,
+        "forS": 120,
+        "multiplier": 3
+      }
+    ]
+  },
+  "start": [
+    {
+      "node": "api",
+      "params": {
+        "autoscale": "off"
+      }
+    }
+  ],
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 500,
+    "budgetPerMonth": 800,
+    "maxPoints": 6
+  },
+  "hint": "先算要幾台。尖峰每秒 900 個請求 × 每個 20 ms = 同時有 18 個在處理；每台同時處理 8 個，所以要 3 台，不是 6 台。自動擴充在這裡幫不上忙：新機器開機要 2 分鐘，尖峰也只有 2 分鐘，機器好了尖峰已經過了，還多 1 點複雜度。固定開 3 台就夠。",
+  "solution": [
+    {
+      "node": "api",
+      "params": {
+        "instances": 3
+      }
+    }
+  ],
+  "naive": [
+    {
+      "node": "api",
+      "params": {
+        "autoscale": "off",
+        "instances": 6
+      }
+    }
+  ]
+}

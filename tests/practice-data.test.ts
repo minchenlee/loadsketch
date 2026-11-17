@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BRIEF_SCHEMA, INCIDENT_SCHEMA, PROBLEM_SCHEMA, loadPracticeList, parseIncident, parseProblem } from '../src/learn/practiceData.ts';
 import { INCIDENTS } from '../src/learn/oncall.ts';
+import { PROBLEMS } from '../src/learn/constraints.ts';
 import { parseBrief } from '../src/learn/briefs.ts';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -153,5 +154,12 @@ describe('practice data files', () => {
       'db-errors',
       'cache-down',
     ]);
+  });
+
+  it('validates all constraint problem files and preserves order', () => {
+    const entries = readPracticeDir('examples/practice/constraints');
+    expect(entries.length).toBe(3);
+    for (const [file, raw] of entries) expect(() => parseProblem(file, raw)).not.toThrow();
+    expect(PROBLEMS.map((p) => p.id)).toEqual(['spike-budget', 'retry-budget', 'solo-shortener']);
   });
 });

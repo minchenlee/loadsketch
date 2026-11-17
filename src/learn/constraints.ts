@@ -8,6 +8,7 @@ import type { Design, DesignEdge, DesignNode, Scenario } from '../schema/design.
 import { CUSTOM_KIND, KINDS, resolveParams } from '../schema/kinds.ts';
 import { costOf, type Cost } from './cost.ts';
 import type { Patch } from './oncall.ts';
+import { loadPracticeList, parseProblem } from './practiceData.ts';
 
 /** Points to build and run one component of a kind. */
 export const KIND_POINTS: Record<string, number> = {
@@ -89,60 +90,8 @@ export interface Problem {
   naive: Patch[];
 }
 
-const sc = (name: string, traffic: Scenario['traffic'], events: Scenario['events'] = [], o: { durationS?: number; seed?: number; warmupS?: number } = {}): Scenario => ({
-  schema: 'loadsketch/scenario@1',
-  name,
-  seed: o.seed ?? 1,
-  durationS: o.durationS ?? 60,
-  warmupS: o.warmupS ?? 5,
-  traffic,
-  ...(events.length ? { events } : {}),
-});
-
-const NO_RETRIES: Patch[] = [
-  { edge: 'lb->api', set: { retries: 0 } },
-  { edge: 'api->cache', set: { retries: 0 } },
-  { edge: 'api->db', set: { retries: 0 } },
-];
-
-export const PROBLEMS: Problem[] = [
-  {
-    id: 'spike-budget',
-    title: tx('尖峰，但預算有限'),
-    text: tx('3 人團隊，一個月。平常每秒 300 個請求；第 2 分鐘起有 2 分鐘變成 3 倍。目前固定 2 台 API Server，尖峰時大量失敗。整場失敗率 ≤ 1%、p99 ≤ 500 ms，每月不超過 $800，複雜度不超過 6 點。'),
-    example: 'autoscale',
-    scenario: sc(tx('限制：尖峰 3 倍'), { rps: 300, readRatio: 0.9, clientTimeoutMs: 2000 }, [{ type: 'spike', atS: 120, forS: 120, multiplier: 3 }], { durationS: 600 }),
-    start: [{ node: 'api', params: { autoscale: 'off' } }],
-    limits: { maxErrorRate: 0.01, maxP99Ms: 500, budgetPerMonth: 800, maxPoints: 6 },
-    hint: tx('先算要幾台。尖峰每秒 900 個請求 × 每個 20 ms = 同時有 18 個在處理；每台同時處理 8 個，所以要 3 台，不是 6 台。自動擴充在這裡幫不上忙：新機器開機要 2 分鐘，尖峰也只有 2 分鐘，機器好了尖峰已經過了，還多 1 點複雜度。固定開 3 台就夠。'),
-    solution: [{ node: 'api', params: { instances: 3 } }],
-    naive: [{ node: 'api', params: { autoscale: 'off', instances: 6 } }],
-  },
-  {
-    id: 'retry-budget',
-    title: tx('重試風暴，兩人團隊'),
-    text: tx('2 人團隊，兩週。每秒 600 個請求，第 20 秒起有 10 秒變成 3 倍；每一跳都重試 3 次，系統被重試塞爆，之後也沒有恢復。整場失敗率 ≤ 1%、p99 ≤ 300 ms，每月不超過 $850，複雜度不超過 7 點。'),
-    example: 'retry-storm',
-    scenario: sc(tx('限制：重試風暴'), { rps: 600, readRatio: 0.9, clientTimeoutMs: 1000 }, [{ type: 'spike', atS: 20, forS: 10, multiplier: 3 }], { durationS: 90, seed: 3, warmupS: 0 }),
-    start: [],
-    limits: { maxErrorRate: 0.01, maxP99Ms: 300, budgetPerMonth: 850, maxPoints: 7 },
-    hint: tx('加機器能撐住，但超出預算；每一跳加重試預算又超出點數。先拿掉放大流量的重試，再把每台 API Server 的同時處理數調大一點（比加一台便宜）。'),
-    solution: [...NO_RETRIES, { node: 'api', params: { concurrency: 8 } }],
-    naive: [{ node: 'api', params: { instances: 6 } }],
-  },
-  {
-    id: 'solo-shortener',
-    title: tx('一個人顧的短網址'),
-    text: tx('1 人，一週上線。每秒 4000 個請求，95% 是讀取。現在的資料庫撐不住，一成以上的請求失敗。整場失敗率 ≤ 1%、p99 ≤ 200 ms，每月不超過 $2,800，複雜度不超過 6 點：一個人顧不了讀副本。'),
-    example: 'url-shortener',
-    scenario: sc(tx('限制：每秒 4000'), { rps: 4000, readRatio: 0.95 }),
-    start: [],
-    limits: { maxErrorRate: 0.01, maxP99Ms: 200, budgetPerMonth: 2800, maxPoints: 6 },
-    hint: tx('加讀副本最直覺，但多 1 點，也比較貴。拿掉副本，把主庫的規格開大（在這裡是調大它同時能處理的查詢數，價錢會跟著漲）：快取已經擋掉大部分讀取，主庫只要接得住沒命中的那些。'),
-    solution: [{ node: 'db', params: { replicas: 0, connections: 32 } }],
-    naive: [{ node: 'db', params: { replicas: 3 } }],
-  },
-];
+const problemFiles = import.meta.glob('../../examples/practice/constraints/*.json', { eager: true, import: 'default' });
+export const PROBLEMS: Problem[] = loadPracticeList(problemFiles, parseProblem);
 
 export const PROBLEM_BY_ID: Record<string, Problem> = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
 
