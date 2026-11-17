@@ -44,7 +44,7 @@ const atLeastOnce: Lesson = {
       text: tx('One of two worker machines is down for 20 s. What happens to the async p99 (from queued to done)?'),
       options: [
         { id: 'same', text: tx('About the same: the other machine takes over') },
-        { id: 'seconds', text: tx('It becomes seconds') },
+        { id: 'seconds', text: tx('It grows to several seconds') },
       ],
       answer: (run) => (asyncP99(run) < 1000 ? 'same' : 'seconds'),
       measured: (run) => t('Async p99: {v}', { v: ms(asyncP99(run)) }),
@@ -58,7 +58,7 @@ const atLeastOnce: Lesson = {
       topic: 'recovery',
       text: tx('What share of the messages end up in the DLQ?'),
       options: [
-        { id: 'none', text: tx('None') },
+        { id: 'none', text: tx('None of them') },
         { id: 'poison', text: tx('About 1%: the poison messages') },
         { id: 'more', text: tx('More than 3%: the crash sent some there too') },
       ],
@@ -78,7 +78,7 @@ const atLeastOnce: Lesson = {
       topic: 'recovery',
       text: tx('At-least-once can deliver a message twice. How many messages does the worker process twice here?'),
       options: [
-        { id: 'none', text: tx('None') },
+        { id: 'none', text: tx('None: each message is processed once') },
         { id: 'some', text: tx('Tens to hundreds') },
         { id: 'many', text: tx('More than a thousand') },
       ],
