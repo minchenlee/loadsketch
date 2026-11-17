@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
 import { answerable, clampStep, ctxOf, feedbackOf, pagesOf } from '../src/course/steps.ts';
-import { parseProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
+import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
 import { stepsOf, type Lesson } from '../src/learn/lesson.ts';
@@ -178,5 +178,18 @@ describe('guess log entries of a course lesson', () => {
     const e = entriesForRun(l, { q: 'a' }, run, new Date('2026-11-18T00:00:00Z'));
     expect(e[0].lesson).toBeUndefined();
     expect(e[0].id).toBe('2026-11-18T00:00:00.000Z/url-shortener/q');
+  });
+});
+
+describe('saved progress from another tab', () => {
+  const p = (step: number) => ({ step, reached: step, guesses: {}, answered: [], answers: {}, passed: [], done: false });
+  it('the stored lessons are newer, except those this tab could not save', () => {
+    const mine = { '2.1': p(5), '3.1': p(4) };
+    const stored = { '2.1': p(1), '3.1': p(1), '1.1': p(2) };
+    expect(mergeStored(mine, stored, new Set(['2.1']))).toEqual({ '2.1': p(5), '3.1': p(1), '1.1': p(2) });
+  });
+  it('saving says whether it worked', () => {
+    // no localStorage here: the write fails
+    expect(saveProgress({})).toBe(false);
   });
 });

@@ -366,3 +366,28 @@ test('course: a run again shows the answer of that run; the score keeps the firs
   // never was right on the first run: the score keeps it
   await expect(page.getByTestId('course-score')).toHaveAttribute('data-right', /^[12]$/);
 });
+
+test('course: pause, go back, resume: the run still answers the guesses it started with', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=100&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-recover-never').click();
+  await page.getByTestId('course-option-amp-x3').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
+  type S = { getState: () => { pause: (p: boolean) => void; status: string } };
+  const app = () => frame.locator('body');
+  const pause = (p: boolean) => app().evaluate((_, v) => (window as unknown as { __loadsketch: S }).__loadsketch.getState().pause(v), p);
+  const status = () => app().evaluate(() => (window as unknown as { __loadsketch: S }).__loadsketch.getState().status);
+  await pause(true);
+  await expect.poll(status).toBe('paused');
+  await page.getByTestId('course-back').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '1:guess');
+  await pause(false);
+  await expect.poll(status, { timeout: 120_000 }).toBe('done');
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '2:run');
+  await expect(page.getByTestId('course-answer-recover')).toBeVisible({ timeout: 120_000 });
+});
