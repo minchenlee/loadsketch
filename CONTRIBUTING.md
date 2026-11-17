@@ -50,7 +50,7 @@ We welcome code contributions! Areas where we especially need help:
 - **Component kinds**: a new kind of component. It is a code change in several places; [AGENTS.md](AGENTS.md) lists them under "新增一種元件"
 - **Model accuracy**: cases where the simulation differs from how real systems behave
 - **Terraform import**: more resource types and providers
-- **Translations**: English text in `src/i18n/en.ts`
+- **Translations**: Traditional Chinese text in `src/i18n/zh-TW.ts`, and proofreading the English source text
 - **Bug fixes**: check our [issues](https://github.com/minchenlee/loadsketch/issues)
 
 ## Development Setup
@@ -149,7 +149,7 @@ Then open a Pull Request on GitHub from your fork to the main repository.
 
 - **A test that fails first.** For a bug fix or an engine behavior change, write a test that fails before the fix.
 - **Golden test.** `tests/golden.test.ts` runs every example with a fixed seed and compares a hash of the numbers. A change that is not meant to change behavior must keep every hash. When you mean to change behavior, run `UPDATE_GOLDEN=1 npx vitest run tests/golden.test.ts` and say why in the commit message.
-- **UI text.** The Traditional Chinese text in the code is the message id: write `t('…')`. Then run `node scripts/i18n-extract.ts` and fill in the English in `src/i18n/en.ts`. The test fails while an entry is empty.
+- **UI text.** English is the source text and the message id: write `t('…')` in English. Then run `node scripts/i18n-extract.ts`; it adds the new id to `src/i18n/zh-TW.ts` with an empty value. Fill in the Traditional Chinese if you can, or leave it empty: `npm run i18n:check` lists entries without Chinese but does not fail on them (the nightly check on main does, and a maintainer fills them in). It fails when the placeholders (`{name}`) differ between English and Chinese, or when `zh-TW.ts` is out of date. If one English text needs two different Chinese texts, give the second id a context mark (`Off@@not-used`); `t()` drops everything after `@@` before it shows the text.
 - **The file format only gains optional fields.** Old design files and share links must still open. After a format change, run `npm run schema`.
 - **No native `<select>` or number inputs.** Use `Select` and `NumberField` in `src/app/components/Select.tsx`.
 - **Speed budgets use CPU time** (`cpuMs()` in `tests/helpers.ts`), not wall-clock time.
@@ -232,20 +232,16 @@ node cli/loadsketch.ts run examples/designs/<slug>.json --scenario examples/scen
 - **Default scenario (`src/app/exampleScenarios.ts`, optional):** If your design opens with an existing scenario whose filename differs from `<slug>`, add `'<slug>': '<scenario-name>'` to `EXAMPLE_SCENARIO`. Otherwise the loader looks for `examples/scenarios/<slug>.json` and falls back to `steady`.
 - **General scenarios (`src/app/store.ts`, optional):** Only if you added a new scenario that works on *any* design (no node-specific events), add its slug to `GENERAL_SCENARIOS`.
 
-### 4. Translations (`src/i18n/en.ts`) and Contributors Who Do Not Write Chinese
+### 4. Translations (`src/i18n/zh-TW.ts`)
 
-In this repository, bundled examples use **Traditional Chinese** as the source text for `name`, `description`, `nodes[].label`, and `notes[].text`.
-
-- **If you write Traditional Chinese:** Run the extractor to add new Chinese keys to `src/i18n/en.ts`, fill in their English translations by hand, and verify 0 missing entries:
+Write `name`, `description`, `nodes[].label` and `notes[].text` in **English**. English is the source text; Traditional Chinese is a catalog (`src/i18n/zh-TW.ts`, English id → Chinese). Run the extractor; it adds your new texts to `src/i18n/zh-TW.ts` with empty values:
 
 ```sh
 node scripts/i18n-extract.ts
 npm run i18n:check
 ```
 
-- **If you do not write Traditional Chinese:** `src/i18n/en.ts` only translates from Traditional Chinese keys to English (there is no English-to-Chinese catalog). Right now you have two options:
-  1. **Write the JSON fields in English.** `scripts/i18n-extract.ts` only extracts strings containing CJK characters, so `npm run i18n:check` and `tests/i18n.test.ts` still pass; Traditional Chinese UI users will see that example's text in English until a maintainer adds Traditional Chinese text and moves the English strings to `src/i18n/en.ts`.
-  2. **Submit via issue form or ask in the PR.** Open an issue with the **Propose an example or case study** template (`.github/ISSUE_TEMPLATE/propose-case.yml`) and paste your design JSON or share link, or open the PR in English and ask a maintainer to add the Traditional Chinese copy.
+`npm run i18n:check` lists the entries without Chinese and passes. If you write Traditional Chinese, fill them in. If you do not, leave them empty: Traditional Chinese users see the English text until a maintainer adds the Chinese.
 
 ### 5. Update the Golden Snapshot and Verify
 
@@ -344,8 +340,8 @@ scripts/gen-fixtures.sh          # offline: plans inside sandbox-exec and scrubs
 npm run test:quick
 npx vitest run tests/import/rules.test.ts tests/import/checks.test.ts tests/import/fixtures.test.ts
 npm run typecheck
-node scripts/i18n-extract.ts      # extract new Traditional Chinese message ids into src/i18n/en.ts
-npm run i18n:check                # verify 0 missing English translations
+node scripts/i18n-extract.ts      # add new English message ids to src/i18n/zh-TW.ts
+npm run i18n:check                # list entries without Traditional Chinese; fail on placeholder mismatches
 npm run loadsketch -- import terraform tests/import/fixtures/ecs-rds.plan.json --out /tmp/design.json --report /tmp/report.md
 ```
 
@@ -407,7 +403,7 @@ Design briefs (`loadsketch/brief@1`):
 
 ### 3. Translations and Verification
 
-Write display text in the JSON as Traditional Chinese source text (message IDs), run `node scripts/i18n-extract.ts` to add empty entries to `src/i18n/en.ts`, and fill in the English translations there.
+Write display text in the JSON in English (English is the source text and the message id). Run `node scripts/i18n-extract.ts` to add empty entries to `src/i18n/zh-TW.ts`, and fill in the Traditional Chinese if you can; empty entries are listed but do not fail the check.
 
 Run these commands before opening a PR:
 
@@ -421,7 +417,7 @@ npx vitest run tests/constraints.test.ts   # for constraint problems
 npx vitest run tests/briefs.test.ts        # for design briefs
 ```
 
-CI verifies strict schema and filename/id matching (`tests/practice-data.test.ts`), completeness of `src/i18n/en.ts` (`npm run i18n:check`), and simulation behavior: `naive` fails while `solution` or `reference` passes (`tests/oncall.test.ts`, `tests/constraints.test.ts`, `tests/briefs.test.ts`).
+CI verifies strict schema and filename/id matching (`tests/practice-data.test.ts`), that `src/i18n/zh-TW.ts` is up to date with matching placeholders (`npm run i18n:check`; the nightly run on main also requires every entry to have Chinese), and simulation behavior: `naive` fails while `solution` or `reference` passes (`tests/oncall.test.ts`, `tests/constraints.test.ts`, `tests/briefs.test.ts`).
 
 ## Commit Messages
 

@@ -5,13 +5,35 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    - cron: '0 18 * * *' # nightly on main: every message must have Traditional Chinese
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  zh-complete:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Every message has Traditional Chinese
+        run: npm run i18n:strict
+
   check:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -51,6 +73,7 @@ jobs:
         run: npm run build
 
   e2e:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     # The Playwright image has Chromium and its system libraries, so there is no apt step that can
     # fail. Its version must be the same as @playwright/test in package-lock.json; the first step
