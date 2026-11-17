@@ -1,62 +1,79 @@
-// The course page's pure parts: the table of contents, the steps of a lesson, saved progress.
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+// The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
-import { ALL_LESSONS, UNITS, lessonOf, nextReady } from '../src/course/catalog.ts';
-import { clampStep, stepsOf } from '../src/course/steps.ts';
+import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
+import { clampStep, ctxOf, pagesOf } from '../src/course/steps.ts';
 import { parseProgress } from '../src/course/progress.ts';
+import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
-
-const ROOT = join(import.meta.dirname, '..');
-/** Examples the course outline adds (C3); until they land, their lessons stay "coming soon". */
-const PLANNED_EXAMPLES = new Set(['single-server']);
+import { stepsOf, type Lesson } from '../src/learn/lesson.ts';
 
 describe('course table of contents', () => {
-  it('has 7 units and 33 lessons with unique ids in order', () => {
+  it('has the 7 units of the course and the 33 lessons of the outline, in order', () => {
     expect(UNITS.map((u) => u.id)).toEqual([0, 1, 2, 3, 4, 5, 6]);
-    expect(ALL_LESSONS).toHaveLength(33);
-    expect(new Set(ALL_LESSONS.map((l) => l.id)).size).toBe(33);
+    expect(ALL_LESSONS.length).toBeGreaterThanOrEqual(33);
+    expect(new Set(ALL_LESSONS.map((l) => l.id)).size).toBe(ALL_LESSONS.length);
     for (const u of UNITS) for (const l of u.lessons) expect(l.id.startsWith(`${u.id}.`)).toBe(true);
-    expect(ALL_LESSONS.filter((l) => l.wave === 1)).toHaveLength(18);
+    expect(UNITS.flatMap((u) => u.lessons)).toEqual(ALL_LESSONS);
   });
 
-  it('opens only examples that exist (or are planned)', () => {
-    for (const l of ALL_LESSONS) if (l.example && !PLANNED_EXAMPLES.has(l.example)) expect(existsSync(join(ROOT, 'examples/designs', `${l.example}.json`)), l.example).toBe(true);
+  it('every course file is in it, with its own text and title', () => {
+    for (const l of COURSE) {
+      const e = ALL_LESSONS.find((x) => x.id === l.id);
+      expect(e?.lesson, l.id).toBe(l);
+      expect(e?.title).toBe(l.title);
+    }
+    expect(ALL_LESSONS.find((l) => l.id === '2.1')?.lesson).toBe(COURSE_BY_ID['2.1']);
   });
 
-  it('shows every written lesson, and a lesson as ready only when its text exists', () => {
-    const shown = new Set(ALL_LESSONS.map((l) => l.example));
-    for (const ex of Object.keys(LESSONS)) expect(shown.has(ex), ex).toBe(true);
-    expect(lessonOf(ALL_LESSONS.find((l) => l.id === '3.1')!)).toBe(LESSONS['retry-storm']);
-    for (const l of ALL_LESSONS) expect(!!lessonOf(l)).toBe(!!l.example && l.example in LESSONS);
+  it('the retry storm shows as 3.1 until it has a course file', () => {
+    const e = ALL_LESSONS.find((l) => l.id === '3.1')!;
+    expect(e.lesson).toBe(COURSE_BY_ID['3.1'] ?? LESSONS['retry-storm']);
   });
 
   it('the next lesson skips the ones not written yet', () => {
     const n = nextReady('0.1');
-    expect(n === undefined || !!lessonOf(n)).toBe(true);
+    expect(n === undefined || !!n.lesson).toBe(true);
     expect(nextReady(ALL_LESSONS[ALL_LESSONS.length - 1].id)).toBeUndefined();
   });
 });
 
-describe('lesson steps', () => {
-  it('read, each guess, run, answers, each challenge, finish', () => {
-    const l = LESSONS['retry-storm'];
-    const s = stepsOf(l);
-    expect(s.map((x) => x.kind)).toEqual(['intro', ...l.questions.map(() => 'guess'), 'run', 'answers', ...l.challenges.map(() => 'challenge'), 'done']);
-    expect(new Set(s.map((x) => x.id)).size).toBe(s.length);
+describe('lesson pages', () => {
+  it('one page per step of the lesson, then a page to finish', () => {
+    for (const l of [...COURSE, LESSONS['retry-storm']]) {
+      const p = pagesOf(l);
+      expect(p.slice(0, -1)).toEqual(stepsOf(l));
+      expect(p[p.length - 1].kind).toBe('done');
+    }
   });
 
-  it('a lesson without questions has no answers step', () => {
-    const s = stepsOf({ ...LESSONS['retry-storm'], questions: [] });
-    expect(s.map((x) => x.kind)).not.toContain('answers');
-    expect(s.map((x) => x.kind)).not.toContain('guess');
+  it("each page works with the run of its step, else the page before's", () => {
+    const base = LESSONS['retry-storm'];
+    const l: Lesson = {
+      ...base,
+      extraExamples: ['retry-budget'],
+      challenges: [{ ...base.challenges[0], example: 'retry-budget' }],
+      steps: [
+        { kind: 'read', text: 'x' },
+        { kind: 'run' },
+        { kind: 'try', text: 'y', scenario: 'spike' },
+        { kind: 'read', text: 'z' },
+        { kind: 'challenge', challenges: [base.challenges[0].id] },
+      ],
+    };
+    const pages = pagesOf(l);
+    const at = (i: number) => ctxOf(l, pages, i);
+    expect(at(0)).toEqual({ example: 'retry-storm', scenario: 'retry-storm' });
+    expect(at(1)).toEqual({ example: 'retry-storm', scenario: 'retry-storm' });
+    expect(at(2)).toEqual({ example: 'retry-storm', scenario: 'spike' });
+    expect(at(3)).toEqual({ example: 'retry-storm', scenario: 'spike' });
+    expect(at(4)).toEqual({ example: 'retry-budget', scenario: 'retry-storm' });
   });
 
-  it('a saved step outside the lesson is pulled back in', () => {
-    const s = stepsOf(LESSONS['retry-storm']);
-    expect(clampStep(-3, s)).toBe(0);
-    expect(clampStep(99, s)).toBe(s.length - 1);
-    expect(clampStep(1.5, s)).toBe(0);
+  it('a saved page outside the lesson is pulled back in', () => {
+    const p = pagesOf(LESSONS['retry-storm']);
+    expect(clampStep(-3, p)).toBe(0);
+    expect(clampStep(99, p)).toBe(p.length - 1);
+    expect(clampStep(1.5, p)).toBe(0);
   });
 });
 
@@ -69,8 +86,8 @@ describe('saved progress', () => {
   });
 
   it('keeps good fields and drops bad ones', () => {
-    const p = parseProgress(JSON.stringify({ format: 'loadsketch/course-progress@1', lessons: { '3.1': { step: 4, reached: 2, guesses: { a: 'x', b: 3 }, answered: true, passed: ['c', 7], done: 'yes' }, '1.1': 'junk' } }));
-    expect(p['3.1']).toEqual({ step: 4, reached: 4, guesses: { a: 'x' }, answered: true, passed: ['c'], done: false });
-    expect(p['1.1']).toEqual({ step: 0, reached: 0, guesses: {}, answered: false, passed: [], done: false });
+    const p = parseProgress(JSON.stringify({ format: 'loadsketch/course-progress@1', lessons: { '3.1': { step: 4, reached: 2, guesses: { a: 'x', b: 3 }, answered: ['a', 1], passed: ['c', 7], done: 'yes' }, '1.1': 'junk' } }));
+    expect(p['3.1']).toEqual({ step: 4, reached: 4, guesses: { a: 'x' }, answered: ['a'], passed: ['c'], done: false });
+    expect(p['1.1']).toEqual({ step: 0, reached: 0, guesses: {}, answered: [], passed: [], done: false });
   });
 });

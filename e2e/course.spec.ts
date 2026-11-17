@@ -18,6 +18,8 @@ test('course: the table of contents lists 7 units and 33 lessons, unwritten ones
   await page.goto('/learn/?lang=en');
   await expect(page.getByTestId('course-unit')).toHaveCount(7);
   await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
+  // lessons with text are links: 2.1 (a course file) and 3.1 (the retry storm)
+  await expect(page.getByTestId('course-lesson-2.1')).toHaveAttribute('data-state', 'ready');
   // the retry storm lesson is written: a link; 1.1 is not yet: grey, no link
   await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'ready');
   await expect(page.getByTestId('course-lesson-3.1').locator('a')).toHaveCount(1);
@@ -40,34 +42,35 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   await expect(page).toHaveURL(/lesson=3\.1/);
   const frame = page.frameLocator('[data-testid="course-frame"]');
   await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'intro');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '0:read');
 
-  // two guesses, one at a time
+  // the guesses
   await page.getByTestId('course-next').click();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'guess:recover');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '1:guess');
+  await expect(page.getByTestId('course-next')).toHaveText(/Skip/);
   await page.getByTestId('course-option-recover-never').click();
   await expect(page.getByTestId('course-option-recover-never')).toHaveAttribute('aria-checked', 'true');
-  await page.getByTestId('course-next').click();
   await page.getByTestId('course-option-amp-x3').click();
+  await expect(page.getByTestId('course-next')).toHaveText(/Next/);
   await page.getByTestId('course-next').click();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'run');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '2:run');
   await page.screenshot({ path: join(SHOTS, 'course-lesson-run.png') });
 
-  // the run happens in the frame; when it ends the page moves on to the answers, read from that run
+  // the run happens in the frame; the answers are read from that run
   await page.getByTestId('course-run').click();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'answers', { timeout: 60_000 });
+  await expect(page.getByTestId('course-answers')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId('course-answer-recover')).toContainText('Measured:');
   await expect(page.getByTestId('course-answer-recover')).toHaveAttribute('data-right', 'true');
   await expect(page.getByTestId('course-answer-amp')).toContainText('Measured:');
-  // the frame's guess log got the guesses too, as in the simulator
+  // the frame got the guesses too, as in the simulator (its guess log records them)
   const guesses = await frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { guesses: Record<string, string> } } }).__loadsketch.getState().guesses);
   expect(guesses).toEqual({ recover: 'never', amp: 'x3' });
   await page.screenshot({ path: join(SHOTS, 'course-lesson-answers.png') });
 
-  // the first challenge: the original design fails it
+  // the challenges: the original design passes none
   await page.getByTestId('course-next').click();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'challenge:retry-storm/recover');
-  await expect(page.getByTestId('course-verdict')).toBeVisible();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:challenge');
+  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible();
   await expect(page.getByTestId('course-passed')).toHaveCount(0);
 
   // change the design in the frame (a retry budget on every connection), run again: passed
@@ -77,30 +80,49 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
     for (const e of s.edges) if (e.data?.edge.retries) s.updateEdge(e.id, { retryBudget: 0.1 });
   });
   await page.getByTestId('course-run').click();
-  await expect(page.getByTestId('course-passed')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-passed')).toBeVisible({ timeout: 60_000 });
 
   // the progress is kept: after a reload the lesson opens on the same step, guesses locked
   await page.reload();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'challenge:retry-storm/recover');
-  await expect(page.getByTestId('course-passed')).toBeVisible();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:challenge');
+  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-passed')).toBeVisible();
   await page.getByTestId('course-back').click();
   await page.getByTestId('course-back').click();
-  await page.getByTestId('course-back').click();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'guess:amp');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '1:guess');
   await expect(page.getByTestId('course-option-amp-x6')).toBeDisabled();
 
-  // the table of contents shows the lesson in progress
+  // the last page; the table of contents shows the lesson as done
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-finish')).toBeVisible();
   await page.getByTestId('course-home').click();
-  await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'started');
+  await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'done');
+  expect(errors).toEqual([]);
+});
+
+test('course: lesson 2.1 from its course file — guess, run, answers from the run', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  await expect(page.getByRole('heading', { name: 'Hit ratio decides the database' })).toBeVisible();
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answer-hit')).toContainText('Hit ratio', { timeout: 60_000 });
+  await expect(page.getByTestId('course-answer-db-share')).toContainText('Measured:');
   expect(errors).toEqual([]);
 });
 
 test('course: broken saved progress or no storage still opens the course', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('loadsketch-course', '{not json'));
   await page.goto('/learn/?lang=en&lesson=3.1');
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'intro');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '0:read');
   await page.getByTestId('course-next').click();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'guess:recover');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '1:guess');
 
   const page2 = await page.context().newPage();
   await page2.addInitScript(() => {

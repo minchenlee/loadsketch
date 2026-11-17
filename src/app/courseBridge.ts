@@ -1,11 +1,13 @@
 // ?embed=1&course=1: the simulator inside the course page (/learn/, src/course/main.tsx). The page
 // shows the lesson's questions and challenges; this frame is the canvas and the run controls.
 // The bridge tells the page about every run (its status, and the finished run as RunData) and
-// takes two requests from it: start a run, and the learner's guesses (so the guess log records
-// them as in the simulator). Messages go only to and from the parent page of the same origin.
+// takes three requests from it: start a run, the learner's guesses (so the guess log records
+// them as in the simulator), and a change to the design that a lesson step offers (a patch). Messages go only to and from the parent page of the same origin.
 import { useEffect } from 'react';
 import { EMBEDDED, useApp } from './store.ts';
 import type { RunData } from '../learn/metrics.ts';
+import type { Patch } from '../learn/oncall.ts';
+import type { DesignEdge, ParamValue } from '../schema/design.ts';
 
 export const COURSE = EMBEDDED && new URLSearchParams(location.search).get('course') === '1';
 
@@ -16,7 +18,10 @@ export type ToCourse =
   | { source: 'loadsketch-app'; kind: 'run'; example: string | null; run: RunData };
 
 /** From the course page to this frame. */
-export type FromCourse = { source: 'loadsketch-course'; kind: 'run' } | { source: 'loadsketch-course'; kind: 'guesses'; guesses: Record<string, string> };
+export type FromCourse =
+  | { source: 'loadsketch-course'; kind: 'run' }
+  | { source: 'loadsketch-course'; kind: 'guesses'; guesses: Record<string, string> }
+  | { source: 'loadsketch-course'; kind: 'patch'; patches: Patch[] };
 
 function post(m: ToCourse) {
   if (window.parent !== window) window.parent.postMessage(m, location.origin);
@@ -32,6 +37,11 @@ export function useCourseBridge(): void {
       const st = useApp.getState();
       if (m.kind === 'run') {
         if (st.status === 'idle' || st.status === 'done') st.run();
+      } else if (m.kind === 'patch' && (st.status === 'idle' || st.status === 'done')) {
+        for (const p of m.patches) {
+          if ('node' in p) st.updateNode(p.node, { params: p.params as Record<string, ParamValue> });
+          else st.updateEdge(p.edge, p.set as Partial<Omit<DesignEdge, 'from' | 'to'>>);
+        }
       } else if (m.kind === 'guesses' && st.ran === null) {
         for (const [q, o] of Object.entries(m.guesses)) if (typeof o === 'string') st.setGuess(q, o);
       }

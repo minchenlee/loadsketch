@@ -10,8 +10,8 @@ export interface LessonProgress {
   reached: number;
   /** Guesses by question id. Locked once a run has answered them. */
   guesses: Record<string, string>;
-  /** A run has answered the guesses. */
-  answered: boolean;
+  /** Ids of the questions a run has answered (their guesses are locked). */
+  answered: string[];
   /** Ids of the challenges passed. */
   passed: string[];
   /** The last step was reached. */
@@ -20,7 +20,7 @@ export interface LessonProgress {
 
 export type Progress = Record<string, LessonProgress>;
 
-export const EMPTY: LessonProgress = { step: 0, reached: 0, guesses: {}, answered: false, passed: [], done: false };
+export const EMPTY: LessonProgress = { step: 0, reached: 0, guesses: {}, answered: [], passed: [], done: false };
 
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const nat = (x: unknown) => (typeof x === 'number' && Number.isInteger(x) && x >= 0 ? x : 0);
@@ -35,7 +35,7 @@ function clean(x: unknown): LessonProgress {
     step,
     reached: Math.max(step, nat(x.reached)),
     guesses,
-    answered: x.answered === true,
+    answered: Array.isArray(x.answered) ? x.answered.filter((p): p is string => typeof p === 'string') : [],
     passed: Array.isArray(x.passed) ? x.passed.filter((p): p is string => typeof p === 'string') : [],
     done: x.done === true,
   };
