@@ -302,6 +302,12 @@ interface Ran {
   run: RunData;
 }
 
+/**
+ * The guesses the simulator gets: not those a run already answered. A new frame (a reload, the
+ * lesson opened again) would log them in its guess log a second time.
+ */
+const openGuesses = (p: LessonProgress): Record<string, string> => Object.fromEntries(Object.entries(p.guesses).filter(([q]) => !p.answered.includes(q)));
+
 function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, home }: {
   entry: CourseLesson;
   lesson: Lesson;
@@ -387,11 +393,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       if (e.origin !== location.origin || e.source !== frame.current?.contentWindow) return;
       const msg = e.data as ToCourse | null;
       const here = latest.current.ctx;
-      if (!msg || msg.source !== 'loadsketch-app' || msg.example !== here.example) return;
+      // routed by the frame's lesson context (its address), which stays when the learner opens or
+      // pastes another design there
+      if (!msg || msg.source !== 'loadsketch-app' || msg.ctx?.example !== here.example || msg.ctx.scenario !== here.scenario) return;
       if (msg.kind === 'ready') {
         setStatus('idle');
         send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
-        send({ source: 'loadsketch-course', kind: 'guesses', guesses: latest.current.progress.guesses });
+        send({ source: 'loadsketch-course', kind: 'guesses', guesses: openGuesses(latest.current.progress) });
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') setStatus(msg.status);
         if (msg.status === 'running') begin(ctxKey(here));
@@ -404,7 +412,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   // the guesses lock when the simulator says the run started (status 'running'), not here: it
   // refuses a design that does not pass its checks, and then no run starts
   const startRun = () => {
-    send({ source: 'loadsketch-course', kind: 'guesses', guesses: latest.current.progress.guesses });
+    send({ source: 'loadsketch-course', kind: 'guesses', guesses: openGuesses(latest.current.progress) });
     send({ source: 'loadsketch-course', kind: 'run' });
   };
   const guess = (q: string, o: string) => {
@@ -412,7 +420,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     if (!qq || isLocked(qq)) return;
     const guesses = { ...progress.guesses, [q]: o };
     update({ ...progress, guesses });
-    send({ source: 'loadsketch-course', kind: 'guesses', guesses });
+    send({ source: 'loadsketch-course', kind: 'guesses', guesses: openGuesses({ ...progress, guesses }) });
   };
   const restart = () => {
     update({ ...EMPTY });

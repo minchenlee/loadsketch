@@ -12,11 +12,25 @@ import type { DesignEdge, ParamValue } from '../schema/design.ts';
 
 export const COURSE = EMBEDDED && new URLSearchParams(location.search).get('course') === '1';
 
-/** From this frame to the course page. `example` is the loaded example (null for another design). */
+/**
+ * The lesson context this frame was opened with: the example and scenario in its address. It does
+ * not change when the learner opens or pastes another design (that drops the store's example), so
+ * the page routes every message by it.
+ */
+export interface CourseCtx {
+  example: string;
+  scenario: string;
+}
+const CTX: CourseCtx = (() => {
+  const q = new URLSearchParams(location.search);
+  return { example: q.get('example') ?? '', scenario: q.get('scenario') ?? '' };
+})();
+
+/** From this frame to the course page. */
 export type ToCourse =
-  | { source: 'loadsketch-app'; kind: 'ready'; example: string | null }
-  | { source: 'loadsketch-app'; kind: 'status'; example: string | null; status: string }
-  | { source: 'loadsketch-app'; kind: 'run'; example: string | null; run: RunData };
+  | { source: 'loadsketch-app'; kind: 'ready'; ctx: CourseCtx }
+  | { source: 'loadsketch-app'; kind: 'status'; ctx: CourseCtx; status: string }
+  | { source: 'loadsketch-app'; kind: 'run'; ctx: CourseCtx; run: RunData };
 
 /** From the course page to this frame. */
 export type FromCourse =
@@ -53,11 +67,11 @@ export function useCourseBridge(): void {
       }
     };
     window.addEventListener('message', onMessage);
-    post({ source: 'loadsketch-app', kind: 'ready', example: useApp.getState().example });
+    post({ source: 'loadsketch-app', kind: 'ready', ctx: CTX });
     const off = useApp.subscribe((s, prev) => {
       if (s.status === prev.status) return;
-      post({ source: 'loadsketch-app', kind: 'status', example: s.example, status: s.status });
-      if (s.status === 'done' && s.result && s.ran) post({ source: 'loadsketch-app', kind: 'run', example: s.example, run: { design: s.ran.design, scenario: s.ran.scenario, result: s.result, windows: s.windows } });
+      post({ source: 'loadsketch-app', kind: 'status', ctx: CTX, status: s.status });
+      if (s.status === 'done' && s.result && s.ran) post({ source: 'loadsketch-app', kind: 'run', ctx: CTX, run: { design: s.ran.design, scenario: s.ran.scenario, result: s.result, windows: s.windows } });
     });
     return () => {
       window.removeEventListener('message', onMessage);
