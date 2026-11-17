@@ -33,16 +33,16 @@ import {
 export type FailReason = 'timeout' | 'queue_full' | 'error' | 'rate_limited' | 'shed' | 'circuit_open' | 'down' | 'throttled' | 'bulkhead' | 'codel';
 export const FAIL_REASONS: FailReason[] = ['timeout', 'queue_full', 'error', 'rate_limited', 'shed', 'circuit_open', 'down', 'throttled', 'bulkhead', 'codel'];
 export const FAIL_LABEL: Record<FailReason, string> = {
-  timeout: tx('逾時'),
-  queue_full: tx('排隊滿了被拒'),
-  error: tx('元件錯誤'),
-  rate_limited: tx('被限流（429）'),
-  shed: tx('降載丟掉（低優先級）'),
-  circuit_open: tx('保險絲跳開'),
-  down: tx('元件故障'),
-  throttled: tx('呼叫端自我限流'),
-  bulkhead: tx('隔艙已滿'),
-  codel: tx('排隊太久被丟掉（CoDel）'),
+  timeout: tx('Timeout'),
+  queue_full: tx('Rejected because the queue is full'),
+  error: tx('Component error'),
+  rate_limited: tx('Rate limited (429)'),
+  shed: tx('Shed (low priority)'),
+  circuit_open: tx('Circuit breaker opens'),
+  down: tx('Component failure'),
+  throttled: tx('Throttled by the caller'),
+  bulkhead: tx('Bulkhead full'),
+  codel: tx('Dropped after queueing too long (CoDel)'),
 };
 
 const READ = 0;
@@ -1368,8 +1368,8 @@ export class Simulation {
         n.prim.push(0);
         for (let r = 0; r < per; r++) {
           const inst = new Instance(n, n.insts.length, n.num('connections'), n.num('queueLimit'));
-          const role = r === 0 ? t('主庫') : t('副本 {r}', { r });
-          inst.role = shards > 1 ? t('分片 {s} {role}', { s, role }) : role;
+          const role = r === 0 ? t('Primary') : t('Replica {r}', { r });
+          inst.role = shards > 1 ? t('Shard {s} {role}', { s, role }) : role;
           // the first localReplicas replicas stay with the primary; the others are in replicaRegion
           inst.region = r <= n.num('localReplicas') ? n.region : (n.replicaRegion ?? n.region);
           // every instance of a replicated shard can become a replica (after a failover)
@@ -1506,16 +1506,16 @@ export class Simulation {
   private scheduleEvents(): void {
     for (const ev of this.sc.events) {
       if (ev.type === 'spike' || ev.type === 'ramp') {
-        const text = ev.type === 'spike' ? t('流量變 {m} 倍', { m: ev.multiplier }) : t('流量開始爬升到 {m} 倍', { m: ev.toMultiplier });
+        const text = ev.type === 'spike' ? t('Traffic {m}×', { m: ev.multiplier }) : t('Traffic starts to ramp up to {m}×', { m: ev.toMultiplier });
         this.at(ev.atS * 1000, () => this.log({ type: ev.type, text }));
-        if (ev.type === 'spike' && ev.forS !== undefined) this.at((ev.atS + ev.forS) * 1000, () => this.log({ type: 'spike_end', text: t('突波結束') }));
+        if (ev.type === 'spike' && ev.forS !== undefined) this.at((ev.atS + ev.forS) * 1000, () => this.log({ type: 'spike_end', text: t('Spike ends') }));
         continue;
       }
       if (ev.type === 'wave') {
         this.at(ev.atS * 1000, () =>
-          this.log({ type: 'wave', text: t('流量開始週期變化：每 {p} 秒一輪，在 {lo}–{hi} 倍之間', { p: ev.periodS, lo: round(1 - ev.amplitude, 2), hi: round(1 + ev.amplitude, 2) }) }),
+          this.log({ type: 'wave', text: t('Traffic starts to cycle: one cycle per {p} s, between {lo}× and {hi}×', { p: ev.periodS, lo: round(1 - ev.amplitude, 2), hi: round(1 + ev.amplitude, 2) }) }),
         );
-        if (ev.forS !== undefined) this.at((ev.atS + ev.forS) * 1000, () => this.log({ type: 'wave_end', text: t('週期流量結束') }));
+        if (ev.forS !== undefined) this.at((ev.atS + ev.forS) * 1000, () => this.log({ type: 'wave_end', text: t('Traffic cycle ends') }));
         continue;
       }
       if (ev.type === 'cron') {
@@ -1523,8 +1523,8 @@ export class Simulation {
         const peak = round(cronPeak(ev), 2);
         for (let k = 0; cronStart(ev, k) < Math.min(w1, this.durationMs); k++) {
           const text = ev.jitterS
-            ? t('排程工作觸發：{s} 秒內分散送出，流量最高 {m} 倍', { s: round(ev.burstS + ev.jitterS, 2), m: peak })
-            : t('排程工作觸發：所有使用者同時送出，流量 {m} 倍', { m: peak });
+            ? t('Scheduled job fires: requests spread over {s} s, traffic up to {m}×', { s: round(ev.burstS + ev.jitterS, 2), m: peak })
+            : t('Scheduled job fires: all users send at once, traffic {m}×', { m: peak });
           this.at(cronStart(ev, k), () => this.log({ type: 'cron', text }));
         }
         continue;
@@ -1539,7 +1539,7 @@ export class Simulation {
             if (!n.insts.length || n.insts.every((i) => i.region === R)) this.setDown(n, undefined, down, true);
             else for (const i of n.insts) if (i.region === R) this.setDown(n, i.idx, down, true);
           }
-          this.log({ type: down ? 'region_down' : 'region_up', text: down ? t('區域 {r} 整區故障（{k} 個元件）', { r: ev.region, k: inRegion.length }) : t('區域 {r} 恢復', { r: ev.region }) });
+          this.log({ type: down ? 'region_down' : 'region_up', text: down ? t('Region {r} is down ({k} components)', { r: ev.region, k: inRegion.length }) : t('Region {r} is back', { r: ev.region }) });
         };
         this.at(ev.atS * 1000, () => set(true));
         if (ev.forS !== undefined) this.at((ev.atS + ev.forS) * 1000, () => set(false));
@@ -1570,23 +1570,23 @@ export class Simulation {
         this.at(start, () => {
           inst.slowEv = ev.multiplier;
           if (this.inMeasureEdit()) n.rrDirty = true;
-          this.log({ node: n.id, type: 'slow', text: t('{name}變慢 {m} 倍', { name: `${n.label} ${inst.role || `#${inst.idx}`}`, m: ev.multiplier }) });
+          this.log({ node: n.id, type: 'slow', text: t('{name} slowed down {m}×', { name: `${n.label} ${inst.role || `#${inst.idx}`}`, m: ev.multiplier }) });
         });
-        if (end !== null) this.at(end, () => { inst.slowEv = 1; if (this.inMeasureEdit()) n.rrDirty = true; this.log({ node: n.id, type: 'slow_end', text: t('{name}恢復速度', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
+        if (end !== null) this.at(end, () => { inst.slowEv = 1; if (this.inMeasureEdit()) n.rrDirty = true; this.log({ node: n.id, type: 'slow_end', text: t('{name} is back to normal speed', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
       } else if (ev.type === 'slow') {
         this.at(start, () => {
           n.slow = ev.multiplier;
           if (this.inMeasureEdit()) n.rrDirty = true;
-          this.log({ node: n.id, type: 'slow', text: t('{name}變慢 {m} 倍', { name: n.label, m: ev.multiplier }) });
+          this.log({ node: n.id, type: 'slow', text: t('{name} slowed down {m}×', { name: n.label, m: ev.multiplier }) });
         });
-        if (end !== null) this.at(end, () => { n.slow = 1; if (this.inMeasureEdit()) n.rrDirty = true; this.log({ node: n.id, type: 'slow_end', text: t('{name}恢復速度', { name: n.label }) }); });
+        if (end !== null) this.at(end, () => { n.slow = 1; if (this.inMeasureEdit()) n.rrDirty = true; this.log({ node: n.id, type: 'slow_end', text: t('{name} is back to normal speed', { name: n.label }) }); });
       } else if (ev.type === 'reshard') {
         if (n.kind !== 'sharded_db') continue;
         const copyS = ev.forS ?? 60;
         const load = 1 + (ev.copyLoad ?? 0.5);
         this.at(start, () => {
           for (const i of n.insts) i.copySlow = load;
-          this.log({ node: n.id, type: 'reshard', text: t('{name}開始重新分片：{a} → {b} 份，複製資料 {s} 秒（每份變慢 {m} 倍）', { name: n.label, a: n.shardsNow, b: ev.toShards, s: copyS, m: load }) });
+          this.log({ node: n.id, type: 'reshard', text: t('{name} starts resharding: {a} → {b} shards, copying data for {s} s (each shard {m} times slower)', { name: n.label, a: n.shardsNow, b: ev.toShards, s: copyS, m: load }) });
         });
         this.at(start + copyS * 1000, () => {
           for (const i of n.insts) i.copySlow = 1;
@@ -1600,28 +1600,28 @@ export class Simulation {
               if (p?.down) this.scheduleFailover(n, p);
             }
           }
-          this.log({ node: n.id, type: 'reshard_done', text: t('{name}切換到 {b} 份分片', { name: n.label, b: ev.toShards }) });
+          this.log({ node: n.id, type: 'reshard_done', text: t('{name} switched to {b} shards', { name: n.label, b: ev.toShards }) });
         });
       } else if (ev.type === 'pause') {
         n.pauses.push({ t0: start, t1: end ?? Infinity, every: ev.everyS * 1000, ms: ev.pauseMs });
         this.at(start, () =>
-          this.log({ node: n.id, type: 'pause', text: t('{name}開始週期性 GC 停頓：每 {e} 秒停 {ms} ms', { name: n.label, e: ev.everyS, ms: ev.pauseMs }) }),
+          this.log({ node: n.id, type: 'pause', text: t('{name} starts periodic GC pauses: {ms} ms every {e} s', { name: n.label, e: ev.everyS, ms: ev.pauseMs }) }),
         );
-        if (end !== null) this.at(end, () => this.log({ node: n.id, type: 'pause_end', text: t('{name}停止 GC 停頓', { name: n.label }) }));
+        if (end !== null) this.at(end, () => this.log({ node: n.id, type: 'pause_end', text: t('{name} stops GC pauses', { name: n.label }) }));
       } else if (ev.type === 'errors' && ev.instance !== undefined) {
         const inst = n.insts[ev.instance];
         if (!inst) continue;
         this.at(start, () => {
           inst.errOverride = ev.rate;
-          this.log({ node: n.id, type: 'errors', text: t('{name}錯誤率變 {p}%', { name: `${n.label} ${inst.role || `#${inst.idx}`}`, p: Math.round(ev.rate * 100) }) });
+          this.log({ node: n.id, type: 'errors', text: t('{name} error rate at {p}%', { name: `${n.label} ${inst.role || `#${inst.idx}`}`, p: Math.round(ev.rate * 100) }) });
         });
-        if (end !== null) this.at(end, () => { inst.errOverride = null; this.log({ node: n.id, type: 'errors_end', text: t('{name}錯誤率恢復', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
+        if (end !== null) this.at(end, () => { inst.errOverride = null; this.log({ node: n.id, type: 'errors_end', text: t('{name} error rate recovers', { name: `${n.label} ${inst.role || `#${inst.idx}`}` }) }); });
       } else if (ev.type === 'errors') {
         this.at(start, () => {
           n.errOverride = ev.rate;
-          this.log({ node: n.id, type: 'errors', text: t('{name}錯誤率變 {p}%', { name: n.label, p: Math.round(ev.rate * 100) }) });
+          this.log({ node: n.id, type: 'errors', text: t('{name} error rate at {p}%', { name: n.label, p: Math.round(ev.rate * 100) }) });
         });
-        if (end !== null) this.at(end, () => { n.errOverride = null; this.log({ node: n.id, type: 'errors_end', text: t('{name}錯誤率恢復', { name: n.label }) }); });
+        if (end !== null) this.at(end, () => { n.errOverride = null; this.log({ node: n.id, type: 'errors_end', text: t('{name} error rate recovers', { name: n.label }) }); });
       }
     }
   }
@@ -1649,12 +1649,12 @@ export class Simulation {
     this.at(start, () => this.at(this.now, () => {
       // from the weights at the start (an earlier shift may have changed them)
       w0 = edges.map((e) => e.weight);
-      this.log({ node: from.id, type: 'shift', text: over > 0 ? t('流量移轉：{from} → {to} 的權重在 {s} 秒內改成 {w}', { from: from.label, to: edges[0].to.label, s: round(over / 1000, 2), w: ev.weight }) : t('流量移轉：{from} → {to} 的權重改成 {w}', { from: from.label, to: edges[0].to.label, w: ev.weight }) });
+      this.log({ node: from.id, type: 'shift', text: over > 0 ? t('Traffic shift: {from} → {to} moves to weight {w} over {s} s', { from: from.label, to: edges[0].to.label, s: round(over / 1000, 2), w: ev.weight }) : t('Traffic shift: {from} → {to} now has weight {w}', { from: from.label, to: edges[0].to.label, w: ev.weight }) });
       if (over <= 0) return apply(1);
       for (let k = 1; k * SHIFT_STEP_MS < over; k++) this.at(start + k * SHIFT_STEP_MS, () => apply((k * SHIFT_STEP_MS) / over));
       this.at(start + over, () => {
         apply(1);
-        this.log({ node: from.id, type: 'shift_end', text: t('流量移轉完成：{from} → {to} 的權重是 {w}', { from: from.label, to: edges[0].to.label, w: ev.weight }) });
+        this.log({ node: from.id, type: 'shift_end', text: t('Traffic shift done: {from} → {to} has weight {w}', { from: from.label, to: edges[0].to.label, w: ev.weight }) });
       });
     }));
   }
@@ -1676,7 +1676,7 @@ export class Simulation {
     const prev = new Map<Instance, { slow: number; err: number }>();
     const crashed = new Set<Instance>();
     let stopped = false;
-    const where = ev.node !== undefined ? targets[0].label : t('全部伺服器（{k} 個元件）', { k: targets.length });
+    const where = ev.node !== undefined ? targets[0].label : t('every server ({k} components)', { k: targets.length });
     const update = (n: NodeRT, inst: Instance): void => {
       if (inst.rollout === roll) return;
       inst.touch(this.now);
@@ -1717,13 +1717,13 @@ export class Simulation {
       this.log({
         ...(ev.node !== undefined ? { node: ev.node } : {}),
         type: w === 1 ? 'rollout' : 'rollout_wave',
-        text: waves > 1 ? t('部署新版本到{where}：第 {w}／{n} 波，更新 {k} 台（共 {total} 台）', { where, w, n: waves, k, total: updated.length }) : t('部署新版本到{where}：一次更新全部 {k} 台', { where, k }),
+        text: waves > 1 ? t('New version to {where}: wave {w}/{n}, {k} instances updated ({total} in all)', { where, w, n: waves, k, total: updated.length }) : t('New version to {where}: all {k} instances updated at once', { where, k }),
       });
       const done = (): void => {
         if (this.inMeasureEdit()) for (const n of targets) n.rrDirty = true;
         // the new version stays; the rollout is over, so a later one can update these instances again
         for (const inst of updated) if (inst.rollout === roll) inst.rollout = null;
-        this.log({ ...(ev.node !== undefined ? { node: ev.node } : {}), type: 'rollout_done', text: t('部署完成：{where}共 {k} 台是新版本', { where, k: updated.length }) });
+        this.log({ ...(ev.node !== undefined ? { node: ev.node } : {}), type: 'rollout_done', text: t('Deploy done: {k} instances of {where} run the new version', { where, k: updated.length }) });
       };
       // the last wave without a check has nothing to wait for
       if (w === waves && ev.haltAt === undefined) return done();
@@ -1739,7 +1739,7 @@ export class Simulation {
             this.log({
               ...(ev.node !== undefined ? { node: ev.node } : {}),
               type: 'rollback',
-              text: t('新版本失敗 {p}%，超過 {h}%：自動回滾 {k} 台，停止部署（第 {w}／{n} 波）', { p: Math.round(share * 100), h: Math.round(ev.haltAt * 100), k: updated.length, w, n: waves }),
+              text: t('The new version failed {p}%, above {h}%: rolled back {k} instances automatically and stopped the deploy (wave {w}/{n})', { p: Math.round(share * 100), h: Math.round(ev.haltAt * 100), k: updated.length, w, n: waves }),
             });
             return;
           }
@@ -1778,7 +1778,7 @@ export class Simulation {
     const pair = a < b ? `${a}|${b}` : `${b}|${a}`;
     this.at(ev.atS * 1000, () => {
       this.cuts.set(pair, (this.cuts.get(pair) ?? 0) + 1);
-      this.log({ type: 'partition', text: t('網路分區：區域 {a} 和 {b} 之間斷線', { a, b }) });
+      this.log({ type: 'partition', text: t('Network partition: the network between regions {a} and {b} is cut', { a, b }) });
       for (const n of this.nodes) {
         if ((n.kind !== 'database' && n.kind !== 'sharded_db') || n.str('failover') !== 'auto' || n.num('replicaApplyRatio') <= 0) continue;
         const per = 1 + n.num('replicas');
@@ -1815,7 +1815,7 @@ export class Simulation {
     this.at((ev.atS + ev.forS) * 1000, () => {
       this.cuts.set(pair, (this.cuts.get(pair) ?? 1) - 1);
       if (!this.cuts.get(pair)) this.cuts.delete(pair);
-      this.log({ type: 'partition_end', text: t('網路分區結束：區域 {a} 和 {b} 恢復連線', { a, b }) });
+      this.log({ type: 'partition_end', text: t('Network partition over: regions {a} and {b} are connected again', { a, b }) });
       for (const n of this.nodes) {
         n.zombie.forEach((z, s) => {
           if (!z) return;
@@ -1827,8 +1827,8 @@ export class Simulation {
             type: 'divergence',
             count: z.writes,
             text: z.writes
-              ? t('{name}：舊主庫在分區期間收了 {k} 筆寫入，新主庫沒有，資料分歧', { name: n.label, k: z.writes })
-              : t('{name}：舊主庫在分區期間沒有收寫入，沒有分歧', { name: n.label }),
+              ? t('{name}: the old primary took {k} writes during the partition that the new primary does not have; the data diverged', { name: n.label, k: z.writes })
+              : t('{name}: the old primary took no writes during the partition; no divergence', { name: n.label }),
           });
         });
       }
@@ -1892,7 +1892,7 @@ export class Simulation {
     if (instance === undefined && !down && changed && !n.down && n.kind === 'function') for (const f of n.fnQueues) this.dispatch(f.qs);
     if (quiet || !changed) return;
     const who = instance === undefined ? n.label : `${n.label} ${n.insts[instance]?.role || `#${instance}`}`;
-    this.log({ node: n.id, type: down ? 'down' : 'up', text: down ? t('{name}故障', { name: who }) : t('{name}恢復', { name: who }) });
+    this.log({ node: n.id, type: down ? 'down' : 'up', text: down ? t('{name} goes down', { name: who }) : t('{name} is back up', { name: who }) });
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1932,7 +1932,7 @@ export class Simulation {
       const active = n.insts.filter((x) => x.state === 'on').length;
       n.peakActive = Math.max(n.peakActive, active);
       const vars = { name: n.label, k: ok.length, total: active, s: warmS };
-      this.log({ node: n.id, type: 'scale_ready', text: warm ? t('{name}新的 {k} 台上線，共 {total} 台，新機器暖機 {s} 秒', vars) : t('{name}新的 {k} 台上線，共 {total} 台', vars) });
+      this.log({ node: n.id, type: 'scale_ready', text: warm ? t('{name}: {k} new instances online, {total} total, new instances warm up for {s} s', vars) : t('{name}: {k} new instances online, {total} total', vars) });
     };
     if (!boots.length) return ready(live);
     const ok: Instance[] = [];
@@ -1946,7 +1946,7 @@ export class Simulation {
       n.bootFails += retry.length;
       // bootS 0 would retry at the same instant, again and again: wait at least a second
       const bootS = Math.max(1, n.num('bootS'));
-      this.log({ node: n.id, type: 'boot_fail', text: t('{name}有 {k} 台開機失敗（開機時要呼叫的元件沒回應），{s} 秒後重開', { name: n.label, k: retry.length, s: bootS }) });
+      this.log({ node: n.id, type: 'boot_fail', text: t('{name}: {k} instances failed to boot (a component called at boot did not answer); booting again in {s} s', { name: n.label, k: retry.length, s: bootS }) });
       this.at(this.now + bootS * 1000, () => this.bootUp(n, retry));
     };
     for (const i of live) {
@@ -1983,7 +1983,7 @@ export class Simulation {
         if (ok) {
           if (n.blind) {
             n.blind = false;
-            this.log({ node: n.id, type: 'control_back', text: t('{name}又看得到監控了（{what}）', { name: n.label, what }) });
+            this.log({ node: n.id, type: 'control_back', text: t('{name} can see its metrics again ({what})', { name: n.label, what }) });
           }
           act();
           return;
@@ -1991,14 +1991,14 @@ export class Simulation {
         n.blindChecks++;
         if (!n.blind) {
           n.blind = true;
-          this.log({ node: n.id, type: 'control_lost', text: t('{name}看不到監控（{what}要呼叫的元件失敗），先不動作', { name: n.label, what }) });
+          this.log({ node: n.id, type: 'control_lost', text: t('{name} cannot see its metrics (a call for {what} failed): it does not act', { name: n.label, what }) });
         }
       }, undefined, undefined, true);
     }
   }
 
   private scale(n: NodeRT): void {
-    this.control(n, t('自動擴充'), () => this.scaleNow(n));
+    this.control(n, t('Autoscaling'), () => this.scaleNow(n));
   }
 
   private scaleNow(n: NodeRT): void {
@@ -2050,7 +2050,7 @@ export class Simulation {
       if (!launched.length) return;
       n.launches += launched.length;
       const bootS = n.num('bootS');
-      this.log({ node: n.id, type: 'scale_out', text: t('{name}忙碌 {p}%，決定加 {k} 台（{s} 秒後上線）', { name: n.label, p: pct, k: launched.length, s: bootS }) });
+      this.log({ node: n.id, type: 'scale_out', text: t('{name} busy {p}%, adding {k} instances (online in {s} s)', { name: n.label, p: pct, k: launched.length, s: bootS }) });
       this.at(this.now + bootS * 1000, () => this.bootUp(n, launched));
     } else if (keep < ready && booting === 0) {
       // retire down to the most the window wanted, newest instances first
@@ -2062,7 +2062,7 @@ export class Simulation {
         v.state = 'retiring';
       }
       n.retires += victims.length;
-      this.log({ node: n.id, type: 'scale_in', text: t('{name}忙碌 {p}%，減 {n} 台（剩 {k} 台）', { name: n.label, p: pct, n: victims.length, k: ready - victims.length }) });
+      this.log({ node: n.id, type: 'scale_in', text: t('{name} {p}% busy, removing {n} (leaving {k})', { name: n.label, p: pct, n: victims.length, k: ready - victims.length }) });
       for (const v of victims) this.maybeRetired(v);
     }
   }
@@ -2715,7 +2715,7 @@ export class Simulation {
         if (!best || i.commits!.size + i.missed < best.commits!.size + best.missed) best = i;
       }
       if (!best) {
-        this.log({ node: n.id, type: 'failover_none', text: t('{name}的主庫故障，但沒有可用的副本，無法 failover', { name: n.label }) });
+        this.log({ node: n.id, type: 'failover_none', text: t('{name}: the primary is down and no replica is up, so no failover', { name: n.label }) });
         return;
       }
       this.promote(n, shard, best, primary, false);
@@ -2759,10 +2759,10 @@ export class Simulation {
       node: n.id,
       type: 'failover',
       text: split
-        ? t('{name} failover：副本那一側連不到主庫，「{rep}」升為主庫（遺失 {k} 筆寫入）；舊主庫還在跑', { name: n.label, rep: was, k: lost })
+        ? t('{name} failover: the replicas\' side cannot reach the primary; "{rep}" becomes the primary ({k} writes lost); the old primary still runs', { name: n.label, rep: was, k: lost })
         : lost
-          ? t('{name} failover：「{rep}」升為主庫，遺失 {k} 筆還沒複製過去的寫入', { name: n.label, rep: was, k: lost })
-          : t('{name} failover：「{rep}」升為主庫，沒有遺失寫入', { name: n.label, rep: was }),
+          ? t('{name} failover: "{rep}" is the primary now; {k} writes it had not received yet are lost', { name: n.label, rep: was, k: lost })
+          : t('{name} failover: "{rep}" is the primary now, no writes lost', { name: n.label, rep: was }),
     });
   }
 
@@ -2784,7 +2784,7 @@ export class Simulation {
     for (const e of n.out) if (!e.side) n.dns.set(e, { up: true, since: -Infinity, flip: null });
     const detect = n.num('detectS') * 1000;
     const check = () => {
-      this.control(n, t('DNS 健康檢查'), checkNow);
+      this.control(n, t('DNS health checks'), checkNow);
       if (this.now + 1000 < this.durationMs) this.at(this.now + 1000, check);
     };
     const checkNow = () => {
@@ -2801,7 +2801,7 @@ export class Simulation {
         this.log({
           node: n.id,
           type: s.up ? 'dns_in' : 'dns_out',
-          text: s.up ? t('{dns}把{name}放回答案', { dns: n.label, name: e.to.label }) : t('{dns}把{name}從答案拿掉（客戶端快取 {ttl} 秒）', { dns: n.label, name: e.to.label, ttl: n.num('ttlS') }),
+          text: s.up ? t('{dns} put {name} back in its answer', { dns: n.label, name: e.to.label }) : t('{dns} removed {name} from its answer (clients cache it for {ttl} s)', { dns: n.label, name: e.to.label, ttl: n.num('ttlS') }),
         });
       }
     };
@@ -3264,7 +3264,7 @@ export class Simulation {
       if (!s.up && s.passes >= thr) {
         s.up = true;
         if (this.inMeasureEdit()) n.rrDirty = true;
-        this.log({ node: n.id, type: 'hc_in', text: t('{name}的 health check 把「{target}」放回', name) });
+        this.log({ node: n.id, type: 'hc_in', text: t('{name} health check put {target} back', name) });
       }
     } else {
       s.passes = 0;
@@ -3273,7 +3273,7 @@ export class Simulation {
         s.up = false;
         if (this.inMeasureEdit()) n.rrDirty = true;
         n.w.hcOut++;
-        this.log({ node: n.id, type: 'hc_out', text: t('{name}的 health check 把「{target}」移出', name) });
+        this.log({ node: n.id, type: 'hc_out', text: t('{name} health check took {target} out', name) });
       }
     }
   }
@@ -3309,7 +3309,7 @@ export class Simulation {
     s.ejectUntil = this.now + n.num('ejectS') * 1000;
     if (this.now < this.measureToMs && s.ejectUntil > this.measureFromMs) n.rrDirty = true;
     n.w.ejections++;
-    this.log({ node: n.id, type: 'eject', text: t('{name}暫時剔除「{target}」（連續 {k} 次失敗）', { name: n.label, target: `${inst.node.label} ${inst.role || `#${inst.idx}`}`, k: n.num('outlierErrors') }) });
+    this.log({ node: n.id, type: 'eject', text: t('{name} ejected {target} for a while ({k} failures in a row)', { name: n.label, target: `${inst.node.label} ${inst.role || `#${inst.idx}`}`, k: n.num('outlierErrors') }) });
   }
 
   private balance(n: NodeRT, req: Req, op: Op, done: Done): void {
@@ -4273,7 +4273,7 @@ export class Simulation {
     const k = n.lateDiv;
     if (!k) return;
     n.lateDiv = 0;
-    this.log({ node: n.id, type: 'divergence', count: k, text: t('{name}：分區結束後，舊主庫又完成 {k} 筆分區時開始的寫入，新主庫沒有，資料分歧', { name: n.label, k }) });
+    this.log({ node: n.id, type: 'divergence', count: k, text: t('{name}: after the partition, the old primary finished {k} more writes started during it; the new primary does not have them, so the data diverged', { name: n.label, k }) });
   }
 
   /** FIFO queue: this message is done (or gone): the next one of its group may be delivered. */
@@ -4479,7 +4479,7 @@ export class Simulation {
       cb.opens++;
     }
     const v = { name: n.label };
-    const text = state === 'open' ? t('{name}跳開，暫停呼叫下游', v) : state === 'half_open' ? t('{name}開始試探下游', v) : t('{name}關上，恢復正常', v);
+    const text = state === 'open' ? t('{name} opens, downstream calls stop', v) : state === 'half_open' ? t('{name} starts the half-open probe', v) : t('{name} closes, back to normal', v);
     this.log({ node: n.id, type: `cb_${state}`, text });
   }
 
@@ -5067,8 +5067,8 @@ export class Simulation {
       simPWait: round(s.waited / s.started, 4),
       note:
         [
-          drops ? t('有請求因排隊滿被拒，理論值假設排隊無上限，僅供參考。') : '',
-          balanced && !useEkm1 ? t('理論值假設請求隨機到達；負載平衡器分配得比隨機平均，實際排隊通常比理論少。') : '',
+          drops ? t('Some requests were rejected because the queue was full; the theory value assumes an unlimited queue, for reference only.') : '',
+          balanced && !useEkm1 ? t('The theory value assumes requests arrive at random; the load balancer spreads them more evenly than random, so real queues are usually shorter than the theory.') : '',
         ].join('') || undefined,
     };
   }
@@ -5091,22 +5091,22 @@ export class Simulation {
     }
     if (!top || top.n === 0 || (top.reason === 'queue_full' && (top.id === b.node || (this.displacedUpstream?.to === b.node && top.id === this.displacedUpstream.from)))) return '';
     const why: Record<FailReason, string> = {
-      rate_limited: tx('限流器照設定擋掉超過額度的請求，保護後面的服務'),
-      shed: tx('過載時先丟掉可丟棄（batch）的請求，把位置留給重要的請求'),
-      circuit_open: tx('保險絲跳開後直接拒絕，不再打已經出問題的下游'),
-      error: tx('元件本身回傳錯誤'),
-      down: tx('元件故障，送到它的請求都失敗'),
-      throttled: tx('呼叫端看到下游最近大多失敗，自己先擋掉一部分請求，讓下游有機會恢復'),
-      bulkhead: tx('呼叫端給這個下游的同時呼叫名額用完了，直接失敗，不再佔用更多執行緒'),
-      timeout: tx('呼叫等太久，呼叫端放棄'),
-      queue_full: tx('排隊滿了，新請求直接被拒'),
-      codel: tx('塞車時排太久的請求輪到時直接丟掉，不做呼叫端已經不等的白工'),
+      rate_limited: tx('The rate limiter blocks requests over the allowance as configured and protects the services behind it'),
+      shed: tx('Under overload, batch requests are dropped first to free slots for critical requests'),
+      circuit_open: tx('After the circuit breaker opens, it rejects at once and stops calling the failing downstream'),
+      error: tx('The component itself returns an error'),
+      down: tx('The component is down, so every request sent to it fails'),
+      throttled: tx('The caller saw most recent calls fail and rejected some requests itself, so the downstream can recover'),
+      bulkhead: tx('The caller used up its concurrent-call slots for this dependency, so the call failed at once instead of tying up more threads'),
+      timeout: tx('The call took too long, so the caller gave up'),
+      queue_full: tx('Queue is full, new requests are rejected right away'),
+      codel: tx('When congested, a request that waited too long is dropped when its turn comes, so no work is wasted on callers that stopped waiting'),
     };
     const share = Math.round((top.n / Math.max(1, all)) * 100);
     const n = top.n.toLocaleString('en-US');
     // a timeout is counted at the caller that gave up, so name it as the one waiting
-    if (top.reason === 'timeout') return t('失敗主要是{name}等太久放棄（逾時 {n} 個，占失敗的 {share}%）：下游回應太慢。', { name: nodes[top.id].label, n, share });
-    return t('失敗主要來自{name}：{reason} {n} 個（占失敗的 {share}%），{why}。', { name: nodes[top.id].label, reason: t(FAIL_LABEL[top.reason]), n, share, why: t(why[top.reason]) });
+    if (top.reason === 'timeout') return t('Most failures are {name} giving up after waiting too long ({n} timeouts, {share}% of failures): the downstream responds too slowly.', { name: nodes[top.id].label, n, share });
+    return t('Most failures come from {name}: {reason}, {n} ({share}% of failures). {why}.', { name: nodes[top.id].label, reason: t(FAIL_LABEL[top.reason]), n, share, why: t(why[top.reason]) });
   }
 
   /** The bottleneck's text, from the numbers of the result (at full size when the run was scaled). */
@@ -5124,11 +5124,11 @@ export class Simulation {
       if (r.holBlocked && (!worker || worker.peak < 0.7)) {
         // (no failed delivery: the groups are too few for the traffic)
         if (!this.byId.get(b.node)?.queue?.failedRx) {
-          return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是同一組一次只能處理一則，分組太少，訊息在等同組的前一則做完。', { name: b.label, k: r.queueDepthEnd ?? 0 });
+          return t('{name} keeps filling up ({k} messages left at the end): the workers are not busy. A group handles one message at a time and there are too few groups, so messages wait for the one before them in the same group.', { name: b.label, k: r.queueDepthEnd ?? 0 });
         }
-        return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 不忙，是一直失敗的訊息卡住自己的分組，同組後面的訊息都在等（head-of-line blocking）。', { name: b.label, k: r.queueDepthEnd ?? 0 });
+        return t('{name} keeps growing ({k} messages at the end): the workers are not busy. A message that keeps failing holds its group, and the messages behind it in the group wait (head-of-line blocking).', { name: b.label, k: r.queueDepthEnd ?? 0 });
       }
-      return t('{name}的訊息越積越多（結束時還有 {k} 則）：worker 處理得比寫入慢。', { name: b.label, k: r.queueDepthEnd ?? 0 });
+      return t('Messages pile up in {name} ({k} left at the end): workers process slower than writes.', { name: b.label, k: r.queueDepthEnd ?? 0 });
     }
     const pct = (x: number) => `${Math.round(x * 100)}%`;
     const count = r.instances?.length ?? 1;
@@ -5136,25 +5136,25 @@ export class Simulation {
     const pool = count > 1 && r.utilization !== undefined && (r.maxInstanceUtilization ?? b.utilization) <= r.utilization * 1.15;
     const role = b.instance !== undefined && r.instances ? r.instances.find((x) => x.idx === b.instance)?.role || `#${b.instance}` : '';
     // an autoscaled pool has a row for every instance it may start: the count would be its maximum
-    const who = pool ? (r.autoscale ? t('{name}（開著的每一台都很忙）', { name: b.label }) : t('{name}（{k} 台都很忙）', { name: b.label, k: count })) : role ? `${b.label} ${role}` : b.label;
+    const who = pool ? (r.autoscale ? t('{name} (every running instance is busy)', { name: b.label }) : t('{name} ({k} instances all busy)', { name: b.label, k: count })) : role ? `${b.label} ${role}` : b.label;
     const util = pool ? (r.utilization ?? b.utilization) : b.utilization;
     const queued = Math.round(r.peakQueue ?? 0);
     const dropped = r.origin.queue_full;
     const parts: string[] = [];
     if (b.peakUtilization >= 0.95) {
-      if (util >= 0.9) parts.push(t('{name}幾乎一直滿載（平均忙碌 {u}），請求在這裡排隊。', { name: who, u: pct(util) }));
-      else parts.push(t('{name}在第 {s} 秒前後滿載（那一秒忙碌 {peak}，排隊 {q} 個）；整段平均忙碌 {u}。', { name: who, s: Math.round(b.peakAtS), peak: pct(b.peakUtilization), q: queued.toLocaleString('en-US'), u: pct(util) }));
+      if (util >= 0.9) parts.push(t('{name} is saturated almost all the time (average busy {u}); requests queue here.', { name: who, u: pct(util) }));
+      else parts.push(t('{name} is saturated around second {s} (busy {peak} at that second, {q} queued); average busy over the window is {u}.', { name: who, s: Math.round(b.peakAtS), peak: pct(b.peakUtilization), q: queued.toLocaleString('en-US'), u: pct(util) }));
     } else if (b.peakUtilization >= 0.7) {
-      parts.push(t('{name}最忙時忙碌 {peak}，是最接近上限的元件；流量再增加，這裡會先開始排隊。', { name: who, peak: pct(b.peakUtilization) }));
+      parts.push(t('{name} is the busiest component at {peak} and the closest to its limit; if traffic rises, requests queue here first.', { name: who, peak: pct(b.peakUtilization) }));
     } else {
-      return t('目前沒有元件接近上限；最忙的是{name}（最忙時 {peak}）。', { name: who, peak: pct(b.peakUtilization) });
+      return t('No component is near its limit right now; the busiest is {name} ({peak} at its busiest).', { name: who, peak: pct(b.peakUtilization) });
     }
-    if (dropped) parts.push(t('有 {k} 個請求因為排隊滿了被拒絕。', { k: dropped.toLocaleString('en-US') }));
+    if (dropped) parts.push(t('{k} requests were rejected because the queue was full.', { k: dropped.toLocaleString('en-US') }));
     if (this.displacedUpstream?.to === b.node && nodes) {
       const up = nodes[this.displacedUpstream.from];
       if (up && up.origin.queue_full > 0) {
         parts.push(
-          t('上游{up}有 {k} 個請求因為排隊滿了被拒絕，當時是在等{name}。', {
+          t('{k} requests at upstream {up} were rejected because its queue was full while waiting on {name}.', {
             up: up.label,
             k: up.origin.queue_full.toLocaleString('en-US'),
             name: b.label,
@@ -5165,10 +5165,10 @@ export class Simulation {
     // In the blocking model a slot is held while waiting for downstream calls. Say so when that dominates.
     const own = this.ownWorkMs(b.node);
     if (this.isWaitingOnDownstream(b.node, r)) {
-      parts.push(t('每個請求佔住一個執行緒平均 {hold} ms，自己處理只要約 {own} ms，其餘時間在等下游回應。', { hold: round(r.holdMs!, 1), own: round(own!, 1) }));
+      parts.push(t('Each request holds a thread for {hold} ms on average, but its own work takes only about {own} ms; the rest of the time it waits for the downstream.', { hold: round(r.holdMs!, 1), own: round(own!, 1) }));
       const down = this.busiestDownstream(b.node);
-      if (down && down.peak >= 0.7) parts.push(t('下游最忙的是{name}（最忙時 {peak}）。', { name: down.label, peak: pct(down.peak) }));
-      else parts.push(t('下游沒有很忙，但回應慢（例如變慢、逾時或重試）。'));
+      if (down && down.peak >= 0.7) parts.push(t('The busiest downstream is {name} (peak {peak}).', { name: down.label, peak: pct(down.peak) }));
+      else parts.push(t('Downstream is not very busy, but it responds slowly (for example slow, timeout or retry).'));
     }
     // Chinese sentences end in 。 and join without a space; English ones need one.
     return parts.join(getLang() === 'zh-TW' ? '' : ' ');

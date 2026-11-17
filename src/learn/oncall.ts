@@ -13,12 +13,12 @@ import { loadPracticeList, parseIncident, type FaultValue } from './practiceData
 export type Fault = FaultValue;
 
 export const FAULTS: { id: Fault; text: string }[] = [
-  { id: 'down', text: tx('整個元件故障（不回應）') },
-  { id: 'slow', text: tx('整個元件變慢') },
-  { id: 'errors', text: tx('整個元件回錯誤') },
-  { id: 'gray', text: tx('只有一台實例出問題，其他台正常') },
-  { id: 'pause', text: tx('定期停頓（GC）') },
-  { id: 'traffic', text: tx('流量暴增') },
+  { id: 'down', text: tx('The whole component is down (no answer)') },
+  { id: 'slow', text: tx('The whole component is slower') },
+  { id: 'errors', text: tx('The whole component returns errors') },
+  { id: 'gray', text: tx('Only one instance has a problem; the others are fine') },
+  { id: 'pause', text: tx('Periodic pauses (GC)') },
+  { id: 'traffic', text: tx('A traffic surge') },
 ];
 
 /** A change to the design: params of a node, or fields of an edge ("from->to"). */

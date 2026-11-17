@@ -151,7 +151,7 @@ export function DescriptionText({ text }: { text: string }) {
       <p className="whitespace-pre-line"><Linked text={body} /></p>
       {sources.length > 0 && (
         <div className="mt-2">
-          <div className="text-[12px] font-semibold tracking-wide">{t('來源')}</div>
+          <div className="text-[12px] font-semibold tracking-wide">{t('Sources')}</div>
           <ul className="mt-0.5 space-y-0.5">
             {sources.map((s) => (
               <li key={s.url} className="flex gap-1.5">

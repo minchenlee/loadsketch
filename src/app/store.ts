@@ -61,7 +61,7 @@ function initialLang(): Lang {
 function applyLang(l: Lang) {
   setLang(l);
   document.documentElement.lang = l === 'en' ? 'en' : 'zh-Hant';
-  document.title = t('loadsketch 系統設計模擬器');
+  document.title = t('loadsketch: system design simulator');
 }
 applyLang(initialLang());
 
@@ -296,7 +296,7 @@ function loadPanels(): Panels {
   }
 }
 
-export const UNTITLED = tx('未命名設計');
+export const UNTITLED = tx('Untitled design');
 const empty: Design = { schema: DESIGN_SCHEMA, name: t(UNTITLED), nodes: [], edges: [] };
 
 function withIssues(doc: Design, nodes: SdNode[], edges: SdEdge[]) {
@@ -304,7 +304,7 @@ function withIssues(doc: Design, nodes: SdNode[], edges: SdEdge[]) {
 }
 
 /** The scenario a new page starts with, and the one a loaded design falls back to. */
-const defaultScenario = (): Scenario => ({ schema: SCENARIO_SCHEMA, name: tx('自訂'), durationS: 60, traffic: { rps: 500, readRatio: 0.9 } });
+const defaultScenario = (): Scenario => ({ schema: SCENARIO_SCHEMA, name: tx('Custom'), durationS: 60, traffic: { rps: 500, readRatio: 0.9 } });
 
 export const useApp = create<AppState>((set, get) => {
   // Edits of the same field in quick succession (typing a number, dragging a slider) are one step.
@@ -529,12 +529,12 @@ export const useApp = create<AppState>((set, get) => {
     const d = get().design();
     const r = parseDesign(d);
     if (!r.ok) {
-      set({ issues: r.issues, error: t('設計有錯誤，先修好再執行（看右邊的檢查結果）。') });
+      set({ issues: r.issues, error: t('The design has errors. Fix them first (see the checks on the right).') });
       return;
     }
     // the scenario editor can produce values the engine must not run (a pause as long as its period)
     if (!parseScenario(get().scenario, r.value).ok) {
-      set({ error: t('情境有錯誤，先修好再執行（看「情境」分頁的檢查結果）。') });
+      set({ error: t('The scenario has errors. Fix them before you run (see the checks in the Scenario tab).') });
       return;
     }
     resetLive();
@@ -744,9 +744,9 @@ function changeVersions(change: VersionChange): void {
   useApp.setState({ versions: r.list, versionsMemoryOnly: r.memoryOnly });
   // the kept curves follow the list: another id for the same run, a removed version (M14)
   curves.follow(r.list);
-  if (r.dropped) useApp.setState({ error: t('瀏覽器的儲存空間滿了：最舊的 {n} 個版本已經移除。要留下版本，先匯出成檔案。', { n: r.dropped }) });
-  if (r.refused && r.memoryOnly) useApp.setState({ error: t('瀏覽器存不了版本，還沒存的改動已經有 {n} 個：這次的改動沒有做。先匯出成檔案。', { n: r.pending.length }) });
-  else if (r.refused) useApp.setState({ error: t('瀏覽器的儲存空間滿了，釘選的版本就佔滿了：這次的改動沒有存。取消釘選幾個版本，或先匯出再刪除。') });
+  if (r.dropped) useApp.setState({ error: t('The browser\'s storage is full: the {n} oldest versions were removed. To keep versions, export them to a file first.', { n: r.dropped }) });
+  if (r.refused && r.memoryOnly) useApp.setState({ error: t('This browser cannot save versions, and {n} changes are already waiting: this change was not made. Export them to a file first.', { n: r.pending.length }) });
+  else if (r.refused) useApp.setState({ error: t('The browser\'s storage is full, and the pinned versions fill it: this change was not saved. Unpin some versions, or export them and then delete them.') });
 }
 
 /** A finished run leaves a version: the design and scenario that ran, and a summary of the result. */
@@ -789,7 +789,7 @@ let lastPush = 0;
 connect((m) => {
   const st = useApp.getState();
   if (m.type === 'error') {
-    useApp.setState({ error: t('模擬出錯：{why}', { why: m.message }), status: 'idle' });
+    useApp.setState({ error: t('The simulation failed: {why}', { why: m.message }), status: 'idle' });
     return;
   }
   if (m.type === 'result') {

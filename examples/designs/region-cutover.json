@@ -1,14 +1,14 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "整區撤出：流量移到另一區，快取要先熱",
-  "description": "兩個區域各有一組 API 和快取，資料庫在東區。DNS 先把全部流量送到東區。情境在第 30 秒把流量整個移到西區（流量移轉事件）。兩個快取之間的線是跨區複製：一邊寫入或刪除快取，會在跨區延遲之後套到另一邊，所以西區快取一直是熱的。試試看：刪掉兩條快取之間的線再跑一次，西區接手後命中率掉下來，資料庫的讀取量突然變大。沒有跨區複製時，另一個做法是把移轉時間改長（例如 20 秒）：西區先接一小部分流量，快取自己慢慢熱起來。",
+  "name": "Region evacuation: move the traffic to another region, with a warm cache",
+  "description": "Each of two regions has an API and a cache; the database is in the east. DNS first sends all traffic to the east. The scenario moves all of it to the west at 30 s (a traffic shift event). The edges between the two caches are cross-region replication: a cache set or delete on one side is applied to the other after the inter-region latency, so the west cache stays warm. Try it: delete the two edges between the caches and run again. When the west takes over, its hit ratio drops and the database reads jump. Without replication, another way is a longer shift time (for example 20 s): the west takes a small part of the traffic first, and its cache warms up by itself.",
   "nodes": [
-    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 250] },
+    { "id": "users", "kind": "client", "label": "Users", "pos": [0, 250] },
     { "id": "dns", "kind": "dns", "label": "DNS", "pos": [250, 250] },
     {
       "id": "api_e",
       "kind": "service",
-      "label": "API（東區）",
+      "label": "API (east)",
       "region": "us-east",
       "pos": [500, 100],
       "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 0.5 } }
@@ -16,7 +16,7 @@
     {
       "id": "api_w",
       "kind": "service",
-      "label": "API（西區）",
+      "label": "API (west)",
       "region": "us-west",
       "pos": [500, 400],
       "params": { "instances": 4, "concurrency": 64, "serviceMs": { "mean": 2, "cv": 0.5 } }
@@ -24,7 +24,7 @@
     {
       "id": "cache_e",
       "kind": "cache",
-      "label": "快取（東區）",
+      "label": "Cache (east)",
       "region": "us-east",
       "pos": [780, 100],
       "params": {
@@ -39,7 +39,7 @@
     {
       "id": "cache_w",
       "kind": "cache",
-      "label": "快取（西區）",
+      "label": "Cache (west)",
       "region": "us-west",
       "pos": [780, 400],
       "params": {
@@ -54,7 +54,7 @@
     {
       "id": "db",
       "kind": "database",
-      "label": "資料庫（東區）",
+      "label": "Database (east)",
       "region": "us-east",
       "pos": [1060, 250],
       "params": {

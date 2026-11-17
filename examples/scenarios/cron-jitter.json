@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "排程加上 jitter：同樣的請求分散到 10 秒",
+  "name": "Cron with jitter: the same requests spread over 10 s",
   "seed": 1,
   "durationS": 240,
   "warmupS": 0,

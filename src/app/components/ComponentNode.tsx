@@ -21,32 +21,32 @@ function paramSummary(n: DesignNode): string {
   const ms = (k: string) => `${(p[k] as { mean: number }).mean} ms`;
   switch (n.kind) {
     case 'client':
-      return t('產生流量');
+      return t('Generate traffic');
     case 'dns':
-      return t('快取命中 {p}', { p: pct(p.resolverCacheHit as number) });
+      return t('Cache hit {p}', { p: pct(p.resolverCacheHit as number) });
     case 'cdn':
-      return t('命中 {p}', { p: pct(p.hitRatio as number) });
+      return t('Hit {p}', { p: pct(p.hitRatio as number) });
     case 'load_balancer':
       return String(p.policy);
     case 'rate_limiter':
-      return t('{rate}/s · 突發 {burst}', { rate: fmtN(p.ratePerSec as number), burst: String(p.burst) });
+      return t('{rate}/s · burst {burst}', { rate: fmtN(p.ratePerSec as number), burst: String(p.burst) });
     case 'circuit_breaker':
-      return t('失敗 ≥ {p} 跳開', { p: pct(p.failureRatio as number) });
+      return t('Open at failures ≥ {p}', { p: pct(p.failureRatio as number) });
     case 'api_gateway':
     case 'service':
     case 'custom':
     case 'worker':
-      return t('{c} 並行 · {ms}', { c: String(p.concurrency), ms: ms('serviceMs') }) + (p.autoscale === 'on' ? ` · ${t('自動擴充')}` : '');
+      return t('{c} concurrent · {ms}', { c: String(p.concurrency), ms: ms('serviceMs') }) + (p.autoscale === 'on' ? ` · ${t('Autoscaling')}` : '');
     case 'function':
-      return t('上限 {c} · {ms} · 冷啟動 {cold}', { c: fmtN(p.maxConcurrency as number), ms: ms('serviceMs'), cold: ms('coldStartMs') });
+      return t('limit {c} · {ms} · cold start {cold}', { c: fmtN(p.maxConcurrency as number), ms: ms('serviceMs'), cold: ms('coldStartMs') });
     case 'cache':
-      return p.mode === 'lru' ? `LRU ${fmtN(p.capacityKeys as number)} keys` : t('命中 {p}', { p: pct(p.hitRatio as number) });
+      return p.mode === 'lru' ? `LRU ${fmtN(p.capacityKeys as number)} keys` : t('Hit {p}', { p: pct(p.hitRatio as number) });
     case 'database':
-      return (p.replicas as number) ? t('主庫＋{r} 副本 · {c} 連線', { r: String(p.replicas), c: String(p.connections) }) : t('單一主庫 · {c} 連線', { c: String(p.connections) });
+      return (p.replicas as number) ? t('Primary + {r} replicas · {c} connections', { r: String(p.replicas), c: String(p.connections) }) : t('Single primary · {c} connections', { c: String(p.connections) });
     case 'sharded_db':
-      return t('{s} 分片 · {c} 連線', { s: String(p.shards), c: String(p.connections) });
+      return t('{s} shards · {c} connections', { s: String(p.shards), c: String(p.connections) });
     case 'queue':
-      return t('上限 {n} 則', { n: fmtN(p.maxDepth as number) });
+      return t('Limit {n} messages', { n: fmtN(p.maxDepth as number) });
     case 'object_storage':
       return `GET ${ms('getMs')}`;
     default:
@@ -59,7 +59,7 @@ const OFF = 1;
 const BOOT = 2;
 const WARM = 3;
 const RETIRING = 4;
-const STATE_TEXT: Record<number, string> = { [OFF]: tx('未啟動'), [BOOT]: tx('開機中'), [WARM]: tx('暖機中'), [RETIRING]: tx('縮減中') };
+const STATE_TEXT: Record<number, string> = { [OFF]: tx('Not started'), [BOOT]: tx('Booting'), [WARM]: tx('Warming up'), [RETIRING]: tx('Scaling down') };
 
 /** One row per instance: role, how busy it is now, its queue, and whether it is down. */
 function InstanceList({ id, roles }: { id: string; roles: string[] }) {
@@ -73,7 +73,7 @@ function InstanceList({ id, roles }: { id: string; roles: string[] }) {
         const [b, sl, q, d, st] = inst?.[i] ?? [0, 0, 0, 0, 0];
         const u = sl ? b / sl : 0;
         const idle = st === OFF || st === BOOT;
-        const note = STATE_TEXT[st] ? t('，{state}', { state: t(STATE_TEXT[st]) }) : '';
+        const note = STATE_TEXT[st] ? t(', {state}', { state: t(STATE_TEXT[st]) }) : '';
         return (
           <div
             key={i}
@@ -81,7 +81,7 @@ function InstanceList({ id, roles }: { id: string; roles: string[] }) {
             data-instance={i}
             data-state={st || undefined}
             style={{ opacity: st === OFF ? 0.45 : 1 }}
-            title={inst ? t('{role}：{b}/{sl} 個請求在處理', { role, b, sl }) + (q ? t('，{q} 個在排隊', { q }) : '') + (d ? t('，故障中') : '') + note : role}
+            title={inst ? t('{role}: {b}/{sl} requests in flight', { role, b, sl }) + (q ? t(', {q} queued', { q }) : '') + (d ? t(', down') : '') + note : role}
           >
             <span className="muted w-[62px] shrink-0 truncate">{role}</span>
             <div
@@ -94,7 +94,7 @@ function InstanceList({ id, roles }: { id: string; roles: string[] }) {
               {!d && !idle && inst && <div className="h-full rounded-full" style={{ width: `${Math.min(100, u * 100)}%`, background: utilColor(u) }} />}
             </div>
             <span className="w-[54px] shrink-0 text-right" style={{ color: d ? 'var(--bad-ink)' : st === WARM || q ? 'var(--warn-ink)' : 'var(--ink-3)' }}>
-              {!inst ? '–' : d ? t('故障') : idle || st === RETIRING ? t(STATE_TEXT[st]) : st === WARM && !q ? t('暖機') : q ? `${b}/${sl} +${fmtN(q)}` : `${b}/${sl}`}
+              {!inst ? '–' : d ? t('Down') : idle || st === RETIRING ? t(STATE_TEXT[st]) : st === WARM && !q ? t('Warm-up') : q ? `${b}/${sl} +${fmtN(q)}` : `${b}/${sl}`}
             </span>
           </div>
         );
@@ -109,7 +109,7 @@ function InstanceCounts({ inst }: { inst: [number, number, number, number, numbe
   const boot = inst.filter((x) => x[4] === BOOT).length;
   return (
     <span data-active={on}>
-      {t('{n} 台', { n: on })}{boot ? <span style={{ color: 'var(--warn-ink)' }}> {t('+{n} 開機中', { n: boot })}</span> : null}
+      {t('{n} instances', { n: on })}{boot ? <span style={{ color: 'var(--warn-ink)' }}> {t('+{n} starting up', { n: boot })}</span> : null}
     </span>
   );
 }
@@ -127,7 +127,7 @@ function LiveRow({ id, station, expanded }: { id: string; station: boolean; expa
   return (
     <div className="mt-2 space-y-1" data-live>
       {station && (
-        <div className="flex items-center gap-2" title={t('最近一秒的平均忙碌程度')}>
+        <div className="flex items-center gap-2" title={t('Average utilization in the last second')}>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--panel-2)' }}>
             <div className="h-full rounded-full transition-[width] duration-100" style={{ width: `${Math.min(100, util * 100)}%`, background: utilColor(util) }} />
           </div>
@@ -135,7 +135,7 @@ function LiveRow({ id, station, expanded }: { id: string; station: boolean; expa
         </div>
       )}
       {s.inst && !expanded && (
-        <div className="flex gap-0.5" title={t('每台實例的忙碌程度（斜線：開機中；虛線框：暖機中）')}>
+        <div className="flex gap-0.5" title={t('Utilization per instance (hatched: booting; dashed frame: warming up)')}>
           {s.inst.map(([b, sl, , d, st], i) =>
             st === OFF ? null : (
               <div
@@ -158,16 +158,16 @@ function LiveRow({ id, station, expanded }: { id: string; station: boolean; expa
       <div className="faint num flex flex-wrap gap-x-2 text-[12px]">
         {w && <span>{fmtN(w.arrivals / Math.max(0.001, (windowAt(now)?.dt ?? 1)))}/s</span>}
         {s.inst && s.inst.some((x) => x[4]) && <InstanceCounts inst={s.inst} />}
-        {station && s.queued > 0 && <span style={{ color: 'var(--warn-ink)' }}>{t('排隊 {n}', { n: fmtN(s.queued) })}</span>}
-        {s.depth !== undefined && <span style={{ color: s.depth > 1000 ? 'var(--warn-ink)' : undefined }}>{t('佇列 {n}', { n: fmtN(s.depth) })}</span>}
-        {w?.hitRatio !== undefined && <span>{t('命中 {p}', { p: pct(w.hitRatio) })}</span>}
-        {w && w.fail > 0 && <span style={{ color: 'var(--bad-ink)' }}>{t('失敗 {n}', { n: fmtN(w.fail) })}</span>}
+        {station && s.queued > 0 && <span style={{ color: 'var(--warn-ink)' }}>{t('Queued {n}', { n: fmtN(s.queued) })}</span>}
+        {s.depth !== undefined && <span style={{ color: s.depth > 1000 ? 'var(--warn-ink)' : undefined }}>{t('Queue {n}', { n: fmtN(s.depth) })}</span>}
+        {w?.hitRatio !== undefined && <span>{t('Hit {p}', { p: pct(w.hitRatio) })}</span>}
+        {w && w.fail > 0 && <span style={{ color: 'var(--bad-ink)' }}>{t('Failed {n}', { n: fmtN(w.fail) })}</span>}
         {s.cb && s.cb !== 'closed' && (
           <span className="sd-pill" style={{ '--pill': s.cb === 'open' ? 'var(--bad)' : 'var(--warn)' } as React.CSSProperties}>
-            {s.cb === 'open' ? t('跳開') : t('試探中')}
+            {s.cb === 'open' ? t('Tripped') : t('Half-open probe')}
           </span>
         )}
-        {allDown && <span className="sd-pill" style={{ '--pill': 'var(--bad)', color: 'var(--bad-ink)' } as React.CSSProperties}>{t('故障')}</span>}
+        {allDown && <span className="sd-pill" style={{ '--pill': 'var(--bad)', color: 'var(--bad-ink)' } as React.CSSProperties}>{t('Down')}</span>}
       </div>
     </div>
   );
@@ -181,7 +181,7 @@ function LimitRow({ id, station, mark }: { id: string; station: boolean; mark: L
   return (
     <div className="mt-2 space-y-1" data-limit-row={id}>
       {station && u !== undefined && (
-        <div className="flex items-center gap-2" title={t('找上限：每秒 {rps} 個請求這一步，有流量那段時間的平均忙碌程度', { rps: fmtN(mark.rps) })} data-limit-util={u.toFixed(3)} data-util-color={utilColor(u)}>
+        <div className="flex items-center gap-2" title={t('Find limit: how busy, on average, while the traffic of the {rps} requests/s step ran', { rps: fmtN(mark.rps) })} data-limit-util={u.toFixed(3)} data-util-color={utilColor(u)}>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--panel-2)' }}>
             <div className="h-full rounded-full" style={{ width: `${Math.min(100, u * 100)}%`, background: utilColor(u) }} />
           </div>
@@ -191,7 +191,7 @@ function LimitRow({ id, station, mark }: { id: string; station: boolean; mark: L
       {first && (
         // inside the card: a long label wraps instead of running over the card's edge and the call labels
         <span className="sd-pill !h-auto max-w-full !whitespace-normal !rounded-[10px] py-0.5 !leading-snug [&::before]:shrink-0" style={{ '--pill': 'var(--bad)', color: 'var(--bad-ink)' } as React.CSSProperties} data-testid="limit-first-down">
-          {first.holdsRps !== undefined ? t('撐到約 {rps}/秒就先倒', { rps: first.holdsRps }) : t('{rps}/秒就撐不住', { rps: first.firstFailRps ?? 0 })}
+          {first.holdsRps !== undefined ? t('Goes first ~{rps}/s', { rps: first.holdsRps }) : t('Fails at {rps}/s', { rps: first.firstFailRps ?? 0 })}
         </span>
       )}
     </div>
@@ -225,7 +225,7 @@ export const ComponentNode = memo(function ComponentNode({ data }: NodeProps<SdN
       data-node={n.id}
       data-guessed={guessed.length ? 'true' : undefined}
       data-stacked={stacked && !expanded ? 'true' : undefined}
-      title={guessed.length ? t('匯入時猜的值：{params}（在設定面板改成實際的值）', { params: guessed.join(', ') }) : undefined}
+      title={guessed.length ? t('Guessed at import: {params} (set the real values in the settings panel)', { params: guessed.join(', ') }) : undefined}
       style={{ width: NODE_W, '--cat': color, '--in-delay': enter ? `${enter}ms` : undefined } as React.CSSProperties}
     >
       {n.kind !== 'client' && <Handle type="target" position={Position.Left} />}
@@ -237,14 +237,14 @@ export const ComponentNode = memo(function ComponentNode({ data }: NodeProps<SdN
           <div className="flex items-baseline gap-1.5">
             <span className="truncate text-[14px] font-semibold">{n.label ?? t(spec.label)}</span>
             {stacked && (
-              <span className="faint num shrink-0 text-[12px]" title={autoMin !== null ? t('自動擴充：最少 {min} 台，最多 {max} 台', { min: autoMin, max: count }) : undefined}>
+              <span className="faint num shrink-0 text-[12px]" title={autoMin !== null ? t('Autoscaling: min {min} instances, max {max} instances', { min: autoMin, max: count }) : undefined}>
                 ×{autoMin !== null ? `${autoMin}–${count}` : count}
               </span>
             )}
           </div>
           <div className="faint truncate text-[12px]">
             {n.region && (
-              <span className="num mr-1.5 rounded px-1 text-[11px]" style={{ background: 'var(--panel-2)', color: 'var(--ink-2)' }} title={t('區域')} data-testid="node-region">
+              <span className="num mr-1.5 rounded px-1 text-[11px]" style={{ background: 'var(--panel-2)', color: 'var(--ink-2)' }} title={t('Region')} data-testid="node-region">
                 {n.region}
               </span>
             )}
@@ -259,8 +259,8 @@ export const ComponentNode = memo(function ComponentNode({ data }: NodeProps<SdN
               toggle(n.id);
             }}
             aria-expanded={expanded}
-            aria-label={expanded ? t('收合 {n} 台實例', { n: count }) : t('展開 {n} 台實例', { n: count })}
-            title={expanded ? t('收合') : t('展開，看每一台（{n} 台）', { n: count })}
+            aria-label={expanded ? t('Collapse {n} instances', { n: count }) : t('Expand {n} instances', { n: count })}
+            title={expanded ? t('Collapse') : t('Expand to see each one ({n} instances)', { n: count })}
           >
             {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </button>

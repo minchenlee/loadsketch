@@ -4,13 +4,13 @@
 // the same text in the prompt), its short index (llmsIndex(), public/llms.txt), and the Agent Skill
 // (skillMd() and referenceMd(), in skills/loadsketch/, public/skills/loadsketch/ and its zip).
 // tests/ai-guide.test.ts fails when a file and the catalog differ.
-import { EN } from '../i18n/en.ts';
+import { stripContext } from '../i18n/index.ts';
 import { REPO } from '../repo.ts';
 import { DESIGN_SCHEMA, DesignSchema, formatJson, type Design } from './design.ts';
 import { CATEGORY_LABEL, CLIENT_EDGE_LATENCY_MS, EDGE_PARAMS, INTER_REGION_MS, KINDS, type KindSpec, type ParamSpec } from './kinds.ts';
 
-/** English for a Chinese message id (the guide is English only, whatever the page language). */
-const en = (msg: string): string => EN[msg] || msg;
+/** Strips any @@context suffix from an English message id. */
+const en = stripContext;
 
 /** What the edges out of a component do, by how it routes. */
 const ROUTING: Record<KindSpec['routing'], string> = {

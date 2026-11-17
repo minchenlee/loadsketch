@@ -15,7 +15,7 @@ import { useCauseHidden } from './OnCall.tsx';
 /** Each part of the lesson is its own block, divided by a line. */
 const SECTION = 'border-t border-[var(--line)] pt-3 mt-4 first:mt-0 first:border-t-0 first:pt-0';
 
-const sec = (s: number) => t('第 {s} 秒', { s: Math.round(s * 10) / 10 });
+const sec = (s: number) => t('{s} s@@at', { s: Math.round(s * 10) / 10 });
 
 /** The finished run, when there is one: what ran, not what the canvas shows now. */
 function useRun(): RunData | null {
@@ -38,8 +38,8 @@ function Questions({ lesson, run }: { lesson: Lesson; run: RunData | null }) {
   const locked = useApp((s) => s.ran !== null);
   return (
     <section className={SECTION} data-testid="quiz">
-      <Heading>{t('先猜，再執行')}</Heading>
-      {!run && <div className="faint mt-0.5 text-[13px]">{status === 'idle' ? t('選一個答案，再按「執行」。跑完就揭曉。') : t('跑完就揭曉。')}</div>}
+      <Heading>{t('Guess first, then run')}</Heading>
+      {!run && <div className="faint mt-0.5 text-[13px]">{status === 'idle' ? t('Pick an answer, then press Run. The answer shows when the run ends.') : t('The answer shows when the run ends.')}</div>}
       {lesson.questions.map((q) => {
         const answer = run ? q.answer(run) : null;
         const mine = guesses[q.id];
@@ -59,8 +59,8 @@ function Questions({ lesson, run }: { lesson: Lesson; run: RunData | null }) {
                     aria-pressed={mine === o.id}
                     data-testid={`guess-${q.id}-${o.id}`}
                   >
-                    {right && <CircleCheck size={14} className="shrink-0" style={{ color: 'var(--ok)' }} aria-label={t('答案')} />}
-                    {wrong && <CircleX size={14} className="shrink-0" style={{ color: 'var(--bad)' }} aria-label={t('你猜的')} />}
+                    {right && <CircleCheck size={14} className="shrink-0" style={{ color: 'var(--ok)' }} aria-label={t('Answer')} />}
+                    {wrong && <CircleX size={14} className="shrink-0" style={{ color: 'var(--bad)' }} aria-label={t('Your guess')} />}
                     <span>{t(o.text)}</span>
                   </button>
                 );
@@ -69,7 +69,7 @@ function Questions({ lesson, run }: { lesson: Lesson; run: RunData | null }) {
             {run && (
               <div className="mt-1 text-[14px] leading-snug" data-testid={`answer-${q.id}`}>
                 <div className="font-medium">
-                  {mine === undefined ? t('實際：{m}', { m: q.measured(run) }) : mine === answer ? t('猜對了。實際：{m}', { m: q.measured(run) }) : t('猜錯了。實際：{m}', { m: q.measured(run) })}
+                  {mine === undefined ? t('Measured: {m}', { m: q.measured(run) }) : mine === answer ? t('Right. Measured: {m}', { m: q.measured(run) }) : t('Not quite. Measured: {m}', { m: q.measured(run) })}
                 </div>
                 <div className="muted mt-0.5">{t((answer !== null && q.explainFor?.[answer]) || q.explain)}</div>
               </div>
@@ -87,7 +87,7 @@ function Why({ run }: { run: RunData }) {
   const told = new Set<string>();
   return (
     <section className={SECTION} data-testid="why">
-      <Heading>{t('為什麼會這樣')}</Heading>
+      <Heading>{t('Why it happened')}</Heading>
       <ol className="mt-1 space-y-1.5">
         {story.map((s, i) => {
           const why = s.why && !told.has(s.why) ? s.why : undefined;
@@ -117,7 +117,7 @@ function ChallengeCard({ c, run, scenarioOk, done }: { c: Challenge; run: RunDat
         {done && (
           <span className="flex items-center gap-1 text-[13px]" style={{ color: 'var(--ok-ink)' }}>
             <Trophy size={12} />
-            {t('已過關')}
+            {t('Passed')}
           </span>
         )}
       </div>
@@ -129,32 +129,32 @@ function ChallengeCard({ c, run, scenarioOk, done }: { c: Challenge; run: RunDat
               {g.ok ? <CircleCheck size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} /> : <CircleX size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--bad)' }} />}
               <span>
                 {g.text}
-                <span className="num faint">{t('（這次：{v}）', { v: g.value })}</span>
+                <span className="num faint">{t(' (this run: {v})', { v: g.value })}</span>
               </span>
             </li>
           ))}
           {v.broken.map((b, i) => (
             <li key={`r${i}`} className="flex gap-1.5">
               <CircleX size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--bad)' }} />
-              <span>{t('不符合規則：{why}', { why: b })}</span>
+              <span>{t('Breaks a rule: {why}', { why: b })}</span>
             </li>
           ))}
         </ul>
       )}
       {v?.passed && (
         <div className="mt-1.5 font-medium" style={{ color: 'var(--ok-ink)' }} data-testid="passed">
-          {t('過關！')}
+          {t('Passed!')}
         </div>
       )}
       {c.rules.map((r, i) => (
         <div key={i} className="faint mt-1 text-[13px]" title={t(r.text)}>
-          {t('規則：{r}', { r: t(r.short) })}
+          {t('Rule: {r}', { r: t(r.short) })}
         </div>
       ))}
       <details className="mt-1">
         <summary className="muted flex cursor-pointer items-center gap-1 text-[13px]">
           <Lightbulb size={12} />
-          {t('提示')}
+          {t('Hint')}
         </summary>
         <div className="muted mt-0.5 text-[13px]">{t(c.hint)}</div>
       </details>
@@ -168,15 +168,15 @@ function Challenges({ lesson, run }: { lesson: Lesson; run: RunData | null }) {
   const scenarioOk = !run || lessonScenario(lesson, run);
   return (
     <section className={SECTION} data-testid="challenges">
-      <Heading>{t('挑戰')}</Heading>
-      <div className="faint mt-0.5 text-[13px]">{t('改設計、按「執行」，每次跑完都會自動判定。')}</div>
+      <Heading>{t('Challenges')}</Heading>
+      <div className="faint mt-0.5 text-[13px]">{t('Change the design and press Run. Each finished run is judged automatically.')}</div>
       {[...new Map(lesson.challenges.flatMap((c) => c.rules).map((r) => [r.short, r])).values()].map((r) => (
         <div key={r.short} className="muted mt-1 text-[13px] leading-snug">
           <span className="font-medium">{t(r.short)}</span>
-          {t('：{text}', { text: t(r.text) })}
+          {t(': {text}', { text: t(r.text) })}
         </div>
       ))}
-      {!scenarioOk && want && <div className="mt-1 text-[14px]" style={{ color: 'var(--warn-ink)' }}>{t('情境改過了：換回「{name}」才算數。', { name: t(want.name ?? lesson.scenario) })}</div>}
+      {!scenarioOk && want && <div className="mt-1 text-[14px]" style={{ color: 'var(--warn-ink)' }}>{t('The scenario was changed. Switch back to "{name}" for the challenges to count.', { name: t(want.name ?? lesson.scenario) })}</div>}
       {lesson.challenges.map((c) => (
         <ChallengeCard key={c.id} c={c} run={run} scenarioOk={scenarioOk} done={passed.includes(c.id)} />
       ))}
@@ -214,7 +214,7 @@ export function Learn() {
   if (!lesson && !run)
     return (
       <div>
-        <div className="muted text-[14px] leading-relaxed">{t('按「執行」。跑完後，這裡會顯示 SLA、成本，並照時間說明發生了什麼。範例的題目和挑戰目前只有「重試風暴」有；限制條件題目、值班練習和先猜紀錄在上方的「練習」。')}</div>
+        <div className="muted text-[14px] leading-relaxed">{t('Press "Run". When the run ends, this tab shows the SLA, the cost, and what happened, in time order. Only the "Retry storm" example has questions and challenges for now; constraint problems, on-call practice and the guess log are under "Practice" at the top.')}</div>
       </div>
     );
   return (
@@ -223,7 +223,7 @@ export function Learn() {
       {run && <SlaSection run={run} />}
       {run && <CostSection run={run} />}
       {run && !hidden && <Why run={run} />}
-      {run && hidden && <div className="faint mt-4 text-[13px]" data-testid="why-hidden">{t('值班練習中：發生了什麼，送出答案後才看得到。')}</div>}
+      {run && hidden && <div className="faint mt-4 text-[13px]" data-testid="why-hidden">{t('On call: what happened shows after you answer.')}</div>}
       {lesson && <Challenges lesson={lesson} run={run} />}
     </div>
   );

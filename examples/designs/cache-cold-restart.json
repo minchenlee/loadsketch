@@ -1,13 +1,13 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "快取停掉又冷啟動後的驚群（參考 Instagram）",
-  "description": "Instagram 的資料主要放在 PostgreSQL（一個主庫、各區域有副本），前面用 memcache 擋讀取。當快取被清空或失效，所有 Django 伺服器同時去查資料庫（thundering herd），他們用 memcache lease 解決。這個模型讓快取停 5 秒，恢復後是冷的，看資料庫副本被灌爆。",
+  "name": "Thundering herd after the cache restarts cold (after Instagram)",
+  "description": "Instagram keeps most data in PostgreSQL (one primary, a replica in each region) and puts memcache in front to absorb reads. When the cache is flushed or expires, all Django servers query the database at once (thundering herd); they solved this with a memcache lease. This model stops the cache for 5 s; it comes back cold, and you can watch the database replicas get flooded.",
   "nodes": [
-    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [270, 200],
       "params": { "policy": "least_conn" }
     },

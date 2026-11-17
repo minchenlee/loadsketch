@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "一個分片變慢 10 倍（只有讀取）",
+  "name": "One shard 10× slower (reads only)",
   "seed": 1,
   "durationS": 80,
   "warmupS": 0,

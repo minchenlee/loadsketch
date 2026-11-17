@@ -1,28 +1,34 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "過載時先丟 bot（優先級降載）",
-  "description": "三種流量進同一組 API：結帳（關鍵）、瀏覽（一般）、爬蟲 bot（可丟棄）。第 20 秒流量變 3 倍，API 排不下。API 設了降載門檻 0.2：排隊到上限的 20% 時，先拒絕 bot，結帳和瀏覽幾乎不受影響。把降載門檻改成 0 再跑一次，比較三個使用者的失敗數。",
+  "name": "Drop bots first under overload (priority load shedding)",
+  "description": "Three traffic sources hit the same set of APIs: checkout (critical), browsing (normal) and a crawler bot (batch). Traffic goes 3× at second 20 and the API cannot keep up. The API has a load-shedding threshold of 0.2: when the queue reaches 20% of its limit, it rejects bots first, so checkout and browsing are barely affected. Set the threshold to 0, run again, and compare the failures of the three users.",
   "nodes": [
     {
       "id": "shop",
       "kind": "client",
-      "label": "結帳",
+      "label": "Checkout",
       "pos": [0, 60],
       "params": { "weight": 1, "priority": "critical" }
     },
-    { "id": "browse", "kind": "client", "label": "瀏覽", "pos": [0, 220], "params": { "weight": 3 } },
+    {
+      "id": "browse",
+      "kind": "client",
+      "label": "Browse",
+      "pos": [0, 220],
+      "params": { "weight": 3 }
+    },
     {
       "id": "bots",
       "kind": "client",
-      "label": "爬蟲 bot",
+      "label": "Crawler bot",
       "pos": [0, 380],
       "params": { "weight": 2, "priority": "batch" }
     },
-    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [340, 220] },
+    { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [340, 220] },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [640, 220],
       "params": {
         "instances": 2,

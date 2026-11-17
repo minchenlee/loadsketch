@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "一台實例變慢 6 倍（長尾延遲，只有讀取）",
+  "name": "One instance 6× slower (tail latency, reads only)",
   "seed": 1,
   "durationS": 80,
   "warmupS": 0,

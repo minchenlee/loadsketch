@@ -1,23 +1,23 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "上傳後非同步處理（佇列＋worker）",
-  "description": "API 收到上傳先存進物件儲存，再丟一則訊息到佇列就回應；worker 從佇列拿訊息慢慢做（例如產生縮圖），寫回資料庫。",
+  "name": "Async processing after upload (queue + worker)",
+  "description": "The API saves the upload to object storage, puts one message on the queue and responds; a worker takes the message and works slowly (for example, makes a thumbnail), then writes back to the database.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     { "id": "gw", "kind": "api_gateway", "label": "API Gateway", "pos": [270, 200] },
     {
       "id": "api",
       "kind": "service",
-      "label": "上傳 API",
+      "label": "Upload API",
       "pos": [540, 200],
       "params": { "instances": 2, "concurrency": 16 }
     },
     { "id": "blob", "kind": "object_storage", "label": "S3", "pos": [840, 60] },
-    { "id": "jobs", "kind": "queue", "label": "工作佇列", "pos": [840, 240] },
+    { "id": "jobs", "kind": "queue", "label": "Work queue", "pos": [840, 240] },
     {
       "id": "thumb",
       "kind": "worker",
-      "label": "縮圖 worker",
+      "label": "Thumbnail worker",
       "pos": [1130, 240],
       "params": { "instances": 2, "concurrency": 4, "serviceMs": { "mean": 40, "cv": 0.5 } }
     },

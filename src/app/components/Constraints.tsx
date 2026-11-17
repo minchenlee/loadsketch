@@ -140,8 +140,8 @@ export function ConstraintJudge(): null {
 }
 
 const nameOf = (d: Design, id: string) => {
-  if (id === 'egress') return t('送給使用者的流量');
-  if (id === 'cross-region') return t('跨區流量');
+  if (id === 'egress') return t('Traffic to users');
+  if (id === 'cross-region') return t('Traffic between regions');
   const n = d.nodes.find((x) => x.id === id);
   return n ? (n.label ?? t(KINDS[n.kind]?.label ?? n.kind)) : id;
 };
@@ -158,7 +158,7 @@ function CostTable({ cost, design, testId }: { cost: Cost; design: Design; testI
                 {nameOf(design, i.id)}
                 <span className="faint block">{t(i.what.text, i.what.vars)}</span>
               </td>
-              <td className="num py-0.5 text-right align-top">{t('{v}/月', { v: fmtUsd(i.perHour * 730) })}</td>
+              <td className="num py-0.5 text-right align-top">{t('{v}/month', { v: fmtUsd(i.perHour * 730) })}</td>
             </tr>
           ))}
       </tbody>
@@ -172,14 +172,14 @@ export function CostSection({ run }: { run: RunData }) {
   return (
     <section className={SECTION} data-testid="cost">
       <div className="flex items-baseline justify-between">
-        <div className="text-[15px] font-semibold">{t('成本')}</div>
+        <div className="text-[15px] font-semibold">{t('Cost')}</div>
         <div className="num text-[15px] font-semibold" data-testid="cost-month">
-          {t('{v}/月', { v: fmtUsd(cost.perMonth) })}
+          {t('{v}/month', { v: fmtUsd(cost.perMonth) })}
         </div>
       </div>
-      <div className="faint text-[13px]">{t('示意價格（接近 2026 年 AWS 的比例，不是報價），照這次執行的流量算一整個月。')}</div>
+      <div className="faint text-[13px]">{t('Sample prices (close to the ratios of 2026 AWS prices, not a quote), for a whole month at this run\'s traffic.')}</div>
       <details className="mt-1">
-        <summary className="muted cursor-pointer text-[13px]">{t('明細')}</summary>
+        <summary className="muted cursor-pointer text-[13px]">{t('Detail')}</summary>
         <CostTable cost={cost} design={run.design} testId="cost-items" />
       </details>
     </section>
@@ -187,24 +187,24 @@ export function CostSection({ run }: { run: RunData }) {
 }
 
 const CHECK_TEXT: Record<Check['id'], string> = {
-  errors: tx('失敗率'),
+  errors: tx('Error rate@@failure'),
   p99: 'p99',
-  budget: tx('每月成本'),
-  points: tx('複雜度'),
+  budget: tx('Cost per month'),
+  points: tx('Complexity'),
 };
 
 function fmtCheck(c: Check): string {
-  if (c.id === 'errors') return t('{v}（上限 {l}）', { v: `${(c.value * 100).toFixed(2)}%`, l: `${(c.limit * 100).toFixed(2)}%` });
-  if (c.id === 'p99') return t('{v}（上限 {l}）', { v: fmtMs(c.value), l: fmtMs(c.limit) });
-  if (c.id === 'budget') return t('{v}（上限 {l}）', { v: fmtUsd(c.value), l: fmtUsd(c.limit) });
-  return t('{v} 點（上限 {l} 點）', { v: c.value, l: c.limit });
+  if (c.id === 'errors') return t('{v} (limit {l})', { v: `${(c.value * 100).toFixed(2)}%`, l: `${(c.limit * 100).toFixed(2)}%` });
+  if (c.id === 'p99') return t('{v} (limit {l})', { v: fmtMs(c.value), l: fmtMs(c.limit) });
+  if (c.id === 'budget') return t('{v} (limit {l})', { v: fmtUsd(c.value), l: fmtUsd(c.limit) });
+  return t('{v} pt (limit {l} pt)', { v: c.value, l: c.limit });
 }
 
 const LIMIT_TEXT: Record<Check['id'], (l: Problem['limits']) => string> = {
-  errors: (l) => t('失敗率 ≤ {v}', { v: `${(l.maxErrorRate * 100).toFixed(2)}%` }),
+  errors: (l) => t('Failure rate ≤ {v}', { v: `${(l.maxErrorRate * 100).toFixed(2)}%` }),
   p99: (l) => t('p99 ≤ {v}', { v: fmtMs(l.maxP99Ms) }),
-  budget: (l) => t('成本 ≤ {v}/月', { v: fmtUsd(l.budgetPerMonth) }),
-  points: (l) => t('複雜度 ≤ {v} 點', { v: l.maxPoints }),
+  budget: (l) => t('Cost ≤ {v}/mo', { v: fmtUsd(l.budgetPerMonth) }),
+  points: (l) => t('Complexity ≤ {v} pts', { v: l.maxPoints }),
 };
 const CHECK_IDS: Check['id'][] = ['errors', 'p99', 'budget', 'points'];
 
@@ -215,10 +215,10 @@ export function ProblemCard() {
 }
 
 const BRIEF_PARTS: { key: 'functional' | 'load' | 'given' | 'outOfScope'; title: string }[] = [
-  { key: 'functional', title: tx('功能需求') },
-  { key: 'load', title: tx('流量') },
-  { key: 'given', title: tx('已知條件') },
-  { key: 'outOfScope', title: tx('不在範圍內') },
+  { key: 'functional', title: tx('Functional requirements') },
+  { key: 'load', title: tx('Traffic') },
+  { key: 'given', title: tx('Given') },
+  { key: 'outOfScope', title: tx('Out of scope') },
 ];
 
 /** The requirements of a brief: what to build, the load, how fast each part is, and what to leave out. */
@@ -266,31 +266,31 @@ function ProblemBar({ id }: { id: string }) {
         <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
           {v ? (
             <span className="font-medium" style={{ color: v.passed ? 'var(--ok-ink)' : undefined }} data-testid="problem-score">
-              {v.passed ? (peeked ? t('參考設計過關（不計分）') : t('過關！得分 {n}', { n: v.score })) : t('還沒過關')}
+              {v.passed ? (peeked ? t('The reference design passes (no score)') : t('Passed! Score {n}', { n: v.score })) : t('Not passed yet')}
             </span>
           ) : (
             best !== undefined && (
               <span className="flex items-center gap-1 text-[13px]" style={{ color: 'var(--ok-ink)' }}>
                 <Trophy size={12} />
-                {t('最高 {n} 分', { n: best })}
+                {t('best {n}', { n: best })}
               </span>
             )
           )}
           <button className="btn text-[13px]" onClick={() => setOpen(!open)} aria-expanded={open} data-testid="problem-details-toggle">
             {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            {t('詳情')}
+            {t('Details')}
           </button>
           <button className="btn text-[13px]" onClick={quit} data-testid="problem-quit">
-            {t('結束題目')}
+            {t('End problem')}
           </button>
         </span>
       </div>
-      <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="problem-checks" aria-label={t('目標')}>
+      <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="problem-checks" aria-label={t('Goals')}>
         {CHECK_IDS.map((c) => {
           const k = check(c);
           return (
-            <li key={c} className="sd-goal num" data-testid={`check-${c}`} data-ok={k ? k.ok : undefined} title={k ? `${t(CHECK_TEXT[c])}${t('：{v}', { v: fmtCheck(k) })}` : undefined}>
-              {k ? k.ok ? <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('達到')} /> : <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('沒達到')} /> : <span className="sd-goal-dot" aria-hidden />}
+            <li key={c} className="sd-goal num" data-testid={`check-${c}`} data-ok={k ? k.ok : undefined} title={k ? `${t(CHECK_TEXT[c])}${t(': {v}', { v: fmtCheck(k) })}` : undefined}>
+              {k ? k.ok ? <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('Met')} /> : <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('Not met')} /> : <span className="sd-goal-dot" aria-hidden />}
               {LIMIT_TEXT[c](p.limits)}
             </li>
           );
@@ -299,7 +299,7 @@ function ProblemBar({ id }: { id: string }) {
           const k = bv?.needs.find((x) => x.id === n.id);
           return (
             <li key={n.id} className="sd-goal" data-testid={`need-${n.id}`} data-ok={k ? k.ok : undefined}>
-              {k ? k.ok ? <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('達到')} /> : <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('沒達到')} /> : <span className="sd-goal-dot" aria-hidden />}
+              {k ? k.ok ? <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('Met')} /> : <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('Not met')} /> : <span className="sd-goal-dot" aria-hidden />}
               {t(n.text)}
             </li>
           );
@@ -315,7 +315,7 @@ function ProblemBar({ id }: { id: string }) {
           ))}
         </ul>
       )}
-      {!v && <div className="faint mt-2 text-[13px]">{run ? t('情境改過了：換回「{name}」才算數。', { name: t(p.scenario.name ?? '') }) : brief ? (isPhone() ? t('從下面的「元件」加元件、連起來，再按「執行」。每次跑完都會自動判定。') : t('從左邊拉元件進來、連起來，再按「執行」。每次跑完都會自動判定。')) : t('改設計、按「執行」，每次跑完都會自動判定。')}</div>}
+      {!v && <div className="faint mt-2 text-[13px]">{run ? t('The scenario was changed. Switch back to "{name}" for the challenges to count.', { name: t(p.scenario.name ?? '') }) : brief ? (isPhone() ? t('Add components from "Component" below, connect them, then press "Run". Every run is judged automatically.') : t('Drag components in from the left, connect them, then press "Run". Every run is judged automatically.')) : t('Change the design and press Run. Each finished run is judged automatically.')}</div>}
       {open && (
         <div className="sd-brief-body mt-2 border-t border-[var(--line)] pt-2" data-testid="problem-details">
           {brief ? <BriefText b={brief} /> : <div className="muted">{t(p.text)}</div>}
@@ -327,25 +327,25 @@ function ProblemBar({ id }: { id: string }) {
                     {c.ok ? <CircleCheck size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} /> : <CircleX size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--bad)' }} />}
                     <span>
                       {t(CHECK_TEXT[c.id])}
-                      <span className="num faint">{t('：{v}', { v: fmtCheck(c) })}</span>
+                      <span className="num faint">{t(': {v}', { v: fmtCheck(c) })}</span>
                     </span>
                   </li>
                 ))}
               </ul>
-              {v.passed && <div className="faint mt-1 text-[13px]">{brief ? t('越便宜分數越高。送給使用者的流量和題目給的元件，每個設計都一樣貴，不列入比較。') : t('越便宜分數越高。')}</div>}
+              {v.passed && <div className="faint mt-1 text-[13px]">{brief ? t('A cheaper design scores higher. Traffic to users and the given components cost the same in every design, so they are not compared.') : t('Cheaper scores higher.')}</div>}
               <details className="mt-1">
-                <summary className="muted cursor-pointer text-[13px]">{t('成本和複雜度明細')}</summary>
-                <div className="faint text-[13px]" data-testid="problem-cost-note">{t('示意價格（接近 2026 年 AWS 的比例，不是報價），照這次執行的流量算一整個月。')}</div>
+                <summary className="muted cursor-pointer text-[13px]">{t('Cost and complexity in detail')}</summary>
+                <div className="faint text-[13px]" data-testid="problem-cost-note">{t('Sample prices (close to the ratios of 2026 AWS prices, not a quote), for a whole month at this run\'s traffic.')}</div>
                 <CostTable cost={v.cost} design={run!.design} testId="problem-cost" />
                 <table className="mt-1 w-full text-[13px]" data-testid="problem-points">
                   <tbody>
                     {v.points.items.map((i, k) => (
                       <tr key={k} className="border-t border-[var(--line)] first:border-t-0">
                         <td className="py-0.5 pr-2">
-                          {i.where ? (i.where.includes('->') ? i.where : nameOf(run!.design, i.where)) : t('整個設計')}
-                          <span className="faint">{t('：{v}', { v: KINDS[i.text] ? t(KINDS[i.text].label) : t(i.text) })}</span>
+                          {i.where ? (i.where.includes('->') ? i.where : nameOf(run!.design, i.where)) : t('Whole design')}
+                          <span className="faint">{t(': {v}', { v: KINDS[i.text] ? t(KINDS[i.text].label) : t(i.text) })}</span>
                         </td>
-                        <td className="num py-0.5 text-right">{t('{n} 點', { n: i.points })}</td>
+                        <td className="num py-0.5 text-right">{t('{n} pt', { n: i.points })}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -356,7 +356,7 @@ function ProblemBar({ id }: { id: string }) {
           <details className="mt-1">
             <summary className="muted flex cursor-pointer items-center gap-1 text-[13px]">
               <Lightbulb size={12} />
-              {t('提示')}
+              {t('Hint')}
             </summary>
             <div className="muted mt-0.5 text-[13px]">{t(p.hint)}</div>
           </details>
@@ -372,9 +372,9 @@ function ProblemBar({ id }: { id: string }) {
                 data-testid="brief-reference"
               >
                 <Eye size={13} />
-                {t('看參考設計')}
+                {t('Show the reference design')}
               </button>
-              <span className="faint text-[13px]">{peeked ? t('畫布上是參考設計。它只是其中一種做法；結束題目後再選一次可以重來。') : t('會換掉畫布上的設計，之後這一題不計分。')}</span>
+              <span className="faint text-[13px]">{peeked ? t('The canvas shows the reference design. It is one way among several; end the problem and pick it again to start over.') : t('It replaces the design on the canvas, and this brief keeps no score after that.')}</span>
             </div>
           )}
         </div>
@@ -390,14 +390,14 @@ export function Briefs({ onStart }: { onStart?: () => void }) {
   const start = useConstraints((s) => s.start);
   return (
     <section data-testid="briefs">
-      <div className="text-[15px] font-semibold">{t('從需求開始設計')}</div>
-      <div className="muted mt-0.5 text-[13px] leading-snug">{t('只有需求和幾乎空白的畫布。自己決定要哪些元件、開多大，跑一次看撐不撐得住。常見的第一版設計都過不了關。')}</div>
+      <div className="text-[15px] font-semibold">{t('Design from requirements')}</div>
+      <div className="muted mt-0.5 text-[13px] leading-snug">{t('Only the requirements and an almost empty canvas. You decide which components to use and how large, then run it to see if it holds. The first design most people draw does not pass.')}</div>
       <ul className="mt-2.5 grid grid-cols-1 gap-2 md:grid-cols-3">
         {BRIEFS.map((b) => (
           <li key={b.id}>
             <PracticeItem
               title={t(b.title).replace(/^[^：:]+[：:]\s*/, '')}
-              about={`${t(b.functional[0])}${t('；')}${t(b.load[0])}`}
+              about={`${t(b.functional[0])}${t('; ')}${t(b.load[0])}`}
               best={best[b.id]}
               on={id === b.id}
               onClick={() => {
@@ -420,9 +420,9 @@ export function Constraints({ onStart }: { onStart?: () => void }) {
   const start = useConstraints((s) => s.start);
   return (
     <section data-testid="constraints">
-      <div className="text-[15px] font-semibold">{t('限制條件題目')}</div>
+      <div className="text-[15px] font-semibold">{t('Constraint problems')}</div>
       <div className="muted mt-0.5 text-[13px] leading-snug">
-        {t('在預算和團隊能顧的複雜度裡，達到失敗率和 p99 的目標。目標是門檻；過關後，越便宜分數越高。')}
+        {t('Meet the error rate and p99 targets inside the budget and the complexity the team can look after. The targets are gates; once you pass, cheaper scores higher.')}
       </div>
       <ul className="mt-2.5 space-y-2">
         {PROBLEMS.map((p) => (

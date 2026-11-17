@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "推薦服務變慢 50 倍",
+  "name": "Recommendations become 50× slower",
   "seed": 1,
   "durationS": 80,
   "warmupS": 0,

@@ -14,12 +14,12 @@ export const GUESS_LOG_MAX = 2000;
 
 /** Topics of the questions (message ids). */
 export const TOPICS: Record<string, string> = {
-  retry: tx('重試放大'),
-  queueing: tx('排隊'),
-  cache: tx('快取'),
-  capacity: tx('容量'),
-  recovery: tx('恢復'),
-  other: tx('其他'),
+  retry: tx('Retry amplification'),
+  queueing: tx('Queueing'),
+  cache: tx('Caching'),
+  capacity: tx('Capacity'),
+  recovery: tx('Recovery'),
+  other: tx('Other'),
 };
 
 export interface GuessEntry {
@@ -129,15 +129,15 @@ export function parseLog(text: string, lessons?: Record<string, Lesson>): { ok: 
   try {
     v = JSON.parse(text);
   } catch {
-    return { ok: false, error: t('不是 JSON。') };
+    return { ok: false, error: t('Not JSON.') };
   }
   const f = v as Partial<GuessLogFile>;
-  if (!f || f.schema !== GUESS_LOG_SCHEMA || !Array.isArray(f.entries)) return { ok: false, error: t('不是先猜紀錄檔（schema 應該是 {s}）。', { s: GUESS_LOG_SCHEMA }) };
+  if (!f || f.schema !== GUESS_LOG_SCHEMA || !Array.isArray(f.entries)) return { ok: false, error: t('Not a guess log file (the schema must be {s}).', { s: GUESS_LOG_SCHEMA }) };
   const bad = f.entries.findIndex((e) => !isEntry(e));
-  if (bad >= 0) return { ok: false, error: t('第 {n} 筆紀錄格式不對。', { n: bad + 1 }) };
+  if (bad >= 0) return { ok: false, error: t('Entry {n} has a bad format.', { n: bad + 1 }) };
   if (lessons) {
     const off = (f.entries as GuessEntry[]).findIndex((e) => !fitsLesson(e, lessons));
-    if (off >= 0) return { ok: false, error: t('第 {n} 筆紀錄對不上現有的題目或選項。', { n: off + 1 }) };
+    if (off >= 0) return { ok: false, error: t('Entry {n} does not match any current question or option.', { n: off + 1 }) };
   }
   return { ok: true, entries: f.entries as GuessEntry[] };
 }
@@ -181,9 +181,9 @@ export function patterns(entries: GuessEntry[]): string[] {
     const miss = s.high + s.low;
     if (miss < 2) continue;
     const topic = t(TOPICS[s.topic] ?? TOPICS.other);
-    if (s.low * 3 >= miss * 2) out.push(t('「{topic}」常猜得太小：{n} 次猜錯裡有 {k} 次低估。', { topic, n: miss, k: s.low }));
-    else if (s.high * 3 >= miss * 2) out.push(t('「{topic}」常猜得太大：{n} 次猜錯裡有 {k} 次高估。', { topic, n: miss, k: s.high }));
-    else out.push(t('「{topic}」常猜錯：{total} 次裡錯 {n} 次，高估、低估都有。', { topic, total: s.total, n: miss }));
+    if (s.low * 3 >= miss * 2) out.push(t('"{topic}": you often guess too low: {k} of {n} misses were underestimates.', { topic, n: miss, k: s.low }));
+    else if (s.high * 3 >= miss * 2) out.push(t('"{topic}": you often guess too high: {k} of {n} misses were overestimates.', { topic, n: miss, k: s.high }));
+    else out.push(t('"{topic}": you often miss: {n} of {total} wrong, both too high and too low.', { topic, total: s.total, n: miss }));
   }
   return out;
 }

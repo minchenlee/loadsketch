@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "跨年夜：流量爬到 3 倍，第 60 秒一台地理索引副本變慢 5 倍",
+  "name": "New Year's Eve: traffic climbs to 3×, and at second 60 one geo index replica becomes 5× slower",
   "seed": 1,
   "durationS": 90,
   "warmupS": 5,

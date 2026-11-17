@@ -2,7 +2,7 @@
 // Agents write designs and scenarios as JSON; the JSON Schema files in /schema are generated from here.
 
 import { z } from 'zod';
-import { t } from '../i18n/index.ts';
+import { stripContext, t } from '../i18n/index.ts';
 import { CLIENT_EDGE_LATENCY_MS, EDGE_PARAMS, INTER_REGION_MS, KINDS, KIND_NAMES, fanoutApplies, resolveParams, type ParamSpec } from './kinds.ts';
 
 export { INTER_REGION_MS };
@@ -14,7 +14,7 @@ export const RESULT_SCHEMA = 'loadsketch/result@1';
 export const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/;
 const Id = z
   .string()
-  .regex(ID_RE, { error: () => t('id：英數字開頭，只能有英數字、底線、連字號，最多 48 字') })
+  .regex(ID_RE, { error: () => t('id: start with a letter or digit; use only letters, digits, underscore and hyphen; at most 48 characters') })
   .describe('Unique id. Letters, digits, _ and -. Max 48 chars.');
 const Pos = z.tuple([z.number(), z.number()]).describe('Canvas position [x, y] in pixels.');
 const DistSchema = z.union([
@@ -59,22 +59,22 @@ const EdgeSourceSchema = z
 
 function paramSchema(p: ParamSpec): z.ZodType {
   // the inspector shows the unit next to the field; the schema puts it in the label
-  const unit = p.type === 'dist' ? 'ms' : 'unit' in p && p.unit ? ({ s: '秒' } as Record<string, string>)[p.unit] ?? p.unit : '';
-  const d = `${p.label}${unit ? `（${unit}）` : ''}。${p.help}${p.type === 'dist' ? ' 可寫數字（平均毫秒），或 { mean, cv }；cv 是變異係數，1 = 指數分布，0 = 固定。' : ''}`;
+  const unit = p.type === 'dist' ? 'ms' : 'unit' in p && p.unit ? p.unit : '';
+  const d = `${stripContext(p.label)}${unit ? ` (${unit})` : ''}. ${p.help}${p.type === 'dist' ? ' Write a number (mean in ms), or { mean, cv }; cv is the coefficient of variation, 1 = exponential, 0 = fixed.' : ''}`;
   switch (p.type) {
     case 'int':
-      return z.int().min(p.min).max(p.max).optional().describe(`${d}（預設 ${p.default}）`);
+      return z.int().min(p.min).max(p.max).optional().describe(`${d} (default ${p.default})`);
     case 'number':
-      return z.number().min(p.min).max(p.max).optional().describe(`${d}（預設 ${p.default}）`);
+      return z.number().min(p.min).max(p.max).optional().describe(`${d} (default ${p.default})`);
     case 'ratio':
-      return z.number().min(0).max(1).optional().describe(`${d}（0–1，預設 ${p.default}）`);
+      return z.number().min(0).max(1).optional().describe(`${d} (0–1, default ${p.default})`);
     case 'dist':
-      return DistSchema.optional().describe(`${d}（預設 mean ${p.default.mean} ms、cv ${p.default.cv}）`);
+      return DistSchema.optional().describe(`${d} (default mean ${p.default.mean} ms, cv ${p.default.cv})`);
     case 'enum':
       return z
         .enum(p.options.map((o) => o.value) as [string, ...string[]])
         .optional()
-        .describe(`${d}（預設 ${p.default}）`);
+        .describe(`${d} (default ${p.default})`);
   }
 }
 
@@ -95,7 +95,7 @@ const nodeSchemas = KIND_NAMES.map((kind) => {
       params: z.strictObject(shape).optional(),
       source: NodeSourceSchema,
     })
-    .describe(`${spec.labelEn}：${spec.summary}`);
+    .describe(`${spec.labelEn}: ${spec.summary}`);
 });
 
 export const NodeSchema = z.discriminatedUnion('kind', nodeSchemas as unknown as [z.ZodObject, ...z.ZodObject[]]);
@@ -433,8 +433,8 @@ export function instanceRoles(n: DesignNode): string[] {
     const out: string[] = [];
     for (let sh = 0; sh < shards; sh++) {
       for (let r = 0; r < per; r++) {
-        const role = r === 0 ? t('主庫') : t('副本 {r}', { r });
-        out.push(shards > 1 ? t('分片 {s} {role}', { s: sh, role }) : role);
+        const role = r === 0 ? t('Primary') : t('Replica {r}', { r });
+        out.push(shards > 1 ? t('Shard {s} {role}', { s: sh, role }) : role);
       }
     }
     return out;
@@ -457,75 +457,75 @@ export function checkDesign(d: Design): Issue[] {
   const issues: Issue[] = [];
   const byId = new Map<string, DesignNode>();
   for (const n of d.nodes) {
-    if (byId.has(n.id)) issues.push({ level: 'error', code: 'duplicate-node', node: n.id, message: t('節點 id「{id}」重複。', { id: n.id }) });
+    if (byId.has(n.id)) issues.push({ level: 'error', code: 'duplicate-node', node: n.id, message: t('Duplicate node id "{id}".', { id: n.id }) });
     byId.set(n.id, n);
     const rp = resolveParams(n.kind, n.params as Record<string, unknown> | undefined);
     if (n.replicaRegion && !rp.replicas)
-      issues.push({ level: 'warning', code: 'replica-region', node: n.id, message: t('「{name}」設了副本所在區域，但沒有讀副本。', { name: n.label ?? n.id }) });
+      issues.push({ level: 'warning', code: 'replica-region', node: n.id, message: t('"{name}" has a replica region but no read replicas.', { name: n.label ?? n.id }) });
     if (rp.failover === 'auto' && (!rp.replicas || !Number(rp.replicaApplyRatio)))
-      issues.push({ level: 'warning', code: 'failover-no-replica', node: n.id, message: t('「{name}」開了自動 failover，但沒有讀副本（或副本套用寫入成本是 0），沒有副本可以升為主庫。', { name: n.label ?? n.id }) });
+      issues.push({ level: 'warning', code: 'failover-no-replica', node: n.id, message: t('"{name}" has automatic failover on but no read replicas (or a replica apply cost of 0), so no replica can become the primary.', { name: n.label ?? n.id }) });
     if (rp.autoscale === 'on' && Number(rp.maxInstances) < Number(rp.instances))
-      issues.push({ level: 'warning', code: 'autoscale-max', node: n.id, message: t('「{name}」的最多台數（{max}）比最少台數（{min}）小，不會擴充。', { name: n.label ?? n.id, max: String(rp.maxInstances), min: String(rp.instances) }) });
+      issues.push({ level: 'warning', code: 'autoscale-max', node: n.id, message: t('The max instances of "{name}" ({max}) is less than its min instances ({min}), so it will not scale.', { name: n.label ?? n.id, max: String(rp.maxInstances), min: String(rp.instances) }) });
   }
   const apiNames = new Set<string>();
   for (const a of d.apis ?? []) {
-    if (apiNames.has(a.name)) issues.push({ level: 'error', code: 'duplicate-api', message: t('API「{name}」重複。', { name: a.name }) });
+    if (apiNames.has(a.name)) issues.push({ level: 'error', code: 'duplicate-api', message: t('API "{name}" is listed twice.', { name: a.name }) });
     apiNames.add(a.name);
   }
-  if (d.apis?.length && !d.apis.some((a) => (a.share ?? 1) > 0)) issues.push({ level: 'error', code: 'api-no-share', message: t('每個 API 的比例都是 0，沒有流量可以跑。') });
+  if (d.apis?.length && !d.apis.some((a) => (a.share ?? 1) > 0)) issues.push({ level: 'error', code: 'api-no-share', message: t('Every API has a share of 0: there is no traffic to run.') });
   const edgeIds = new Set<string>();
   const out = new Map<string, DesignEdge[]>();
   const inc = new Map<string, DesignEdge[]>();
   for (const e of d.edges as DesignEdge[]) {
     const id = edgeId(e);
-    if (edgeIds.has(id)) issues.push({ level: 'error', code: 'duplicate-edge', edge: id, message: t('連線「{id}」重複。', { id }) });
+    if (edgeIds.has(id)) issues.push({ level: 'error', code: 'duplicate-edge', edge: id, message: t('Edge "{id}" is a duplicate.', { id }) });
     edgeIds.add(id);
-    if (!byId.has(e.from)) issues.push({ level: 'error', code: 'unknown-node', edge: id, message: t('連線「{id}」的起點「{from}」不存在。', { id, from: e.from }) });
-    if (!byId.has(e.to)) issues.push({ level: 'error', code: 'unknown-node', edge: id, message: t('連線「{id}」的終點「{to}」不存在。', { id, to: e.to }) });
-    if (e.from === e.to) issues.push({ level: 'error', code: 'self-loop', edge: id, message: t('連線「{id}」連到自己。', { id }) });
+    if (!byId.has(e.from)) issues.push({ level: 'error', code: 'unknown-node', edge: id, message: t('Edge "{id}" has no start node "{from}".', { id, from: e.from }) });
+    if (!byId.has(e.to)) issues.push({ level: 'error', code: 'unknown-node', edge: id, message: t('Edge "{id}" has no end node "{to}".', { id, to: e.to }) });
+    if (e.from === e.to) issues.push({ level: 'error', code: 'self-loop', edge: id, message: t('Edge "{id}" connects to itself.', { id }) });
     for (const a of e.apis ?? []) {
-      if (!apiNames.has(a)) issues.push({ level: 'error', code: 'unknown-api', edge: id, message: t('連線「{id}」只走 API「{api}」，但設計裡沒有這個 API。', { id, api: a }) });
+      if (!apiNames.has(a)) issues.push({ level: 'error', code: 'unknown-api', edge: id, message: t('Edge "{id}" carries API "{api}", but the design has no such API.', { id, api: a }) });
     }
     if (e.apis?.length && byId.get(e.from)?.kind === 'queue')
-      issues.push({ level: 'warning', code: 'queue-edge-api', edge: id, message: t('連線「{id}」從佇列出發：佇列把每個訊息交給任何一個 worker，不分 API。請在進佇列的那條線上分 API。', { id }) });
+      issues.push({ level: 'warning', code: 'queue-edge-api', edge: id, message: t('Edge "{id}" leaves a queue: the queue gives each message to any worker, whatever its API. Split by API on the edge into the queue.', { id }) });
     if (byId.get(e.from)?.kind === 'queue' && (e.timeoutMs || e.retries || e.throttleK || e.bulkhead || e.fallback === 'on' || e.hedgeMs)) {
-      issues.push({ level: 'warning', code: 'queue-edge-timeout', edge: id, message: t('連線「{id}」從佇列出發：佇列把訊息交給 worker，不看這條線的逾時、重試、自我限流、隔艙、降級回應和對沖請求。', { id }) });
+      issues.push({ level: 'warning', code: 'queue-edge-timeout', edge: id, message: t('Connection "{id}" starts at a queue: the queue hands messages to the worker and ignores this connection\'s timeout, retries, adaptive throttling, bulkhead, fallback and hedged requests.', { id }) });
     }
     if (e.on === 'boot' && byId.get(e.from)?.params?.autoscale !== 'on') {
-      issues.push({ level: 'warning', code: 'boot-no-autoscale', edge: id, message: t('連線「{id}」只在開機時用，但「{from}」沒有開自動擴充：它不會開新機器，這條線不會作用。', { id, from: e.from }) });
+      issues.push({ level: 'warning', code: 'boot-no-autoscale', edge: id, message: t('Edge "{id}" is used only at boot, but "{from}" does not autoscale: it starts no new instances, so this edge has no effect.', { id, from: e.from }) });
     }
     if (e.on === 'control') {
       const f = byId.get(e.from);
       const p = f?.params ?? {};
       const controls = p.autoscale === 'on' || ((f?.kind === 'database' || f?.kind === 'sharded_db') && p.failover === 'auto') || (f?.kind === 'dns' && p.failover === 'on');
-      if (f && !controls) issues.push({ level: 'warning', code: 'control-no-controller', edge: id, message: t('連線「{id}」是控制面，但「{from}」沒有自動擴充、資料庫自動 failover 或 DNS failover：沒有人會呼叫它，這條線不會作用。', { id, from: e.from }) });
+      if (f && !controls) issues.push({ level: 'warning', code: 'control-no-controller', edge: id, message: t('Edge "{id}" is a control edge, but "{from}" has no autoscaling, automatic database failover or DNS failover: nothing calls it, so it has no effect.', { id, from: e.from }) });
     }
     if (sideEdge(e) && !e.timeoutMs) {
-      issues.push({ level: 'warning', code: 'side-no-timeout', edge: id, message: t('連線「{id}」沒有設逾時：終點被網路分區切開時，呼叫一直等不到回應，開機或控制動作會卡住。', { id }) });
+      issues.push({ level: 'warning', code: 'side-no-timeout', edge: id, message: t('Edge "{id}" has no timeout: when a network partition cuts its target off, the call never gets an answer and the boot or control action hangs.', { id }) });
     }
     const fan = e.fanout ?? 0;
     const toKind = byId.get(e.to)?.kind ?? '';
     const fromKind = byId.get(e.from)?.kind ?? '';
     if (fan > 1 && KINDS[toKind] && !KINDS[toKind].station)
-      issues.push({ level: 'warning', code: 'fanout-target', edge: id, message: t('連線「{id}」設了扇出，但終點沒有實例或分片可以分送，這個設定不會作用。', { id }) });
+      issues.push({ level: 'warning', code: 'fanout-target', edge: id, message: t('Edge "{id}" has a fan-out, but its target has no instances or shards to send copies to: the fan-out does nothing.', { id }) });
     else if (fan > 1 && fromKind === 'queue')
-      issues.push({ level: 'warning', code: 'fanout-queue', edge: id, message: t('連線「{id}」從佇列出發：佇列把每個訊息交給一個 worker，扇出不會作用。', { id }) });
+      issues.push({ level: 'warning', code: 'fanout-queue', edge: id, message: t('Edge "{id}" leaves a queue: a queue hands each message to one worker, so fan-out has no effect.', { id }) });
     else if (fan > 1 && fromKind === 'load_balancer')
-      issues.push({ level: 'warning', code: 'fanout-lb', edge: id, message: t('連線「{id}」從負載平衡器出發：負載平衡器每次只挑一台，扇出不會作用。要送給多台，請從呼叫端直接連到終點並設扇出。', { id }) });
+      issues.push({ level: 'warning', code: 'fanout-lb', edge: id, message: t('Edge "{id}" leaves a load balancer: a load balancer picks one backend each time, so fan-out has no effect. To send to several, connect the caller straight to the target and set fan-out there.', { id }) });
     // a fan-out that has no effect (warned above): quorum and hedging behave as without one
     const ignored = fan > 1 && !fanoutApplies(fromKind, toKind);
     if (ignored) {
       /* the warning above says it all */
     } else if ((e.quorum ?? 0) > 0 && fan <= 1)
-      issues.push({ level: 'warning', code: 'quorum-no-fanout', edge: id, message: t('連線「{id}」設了 quorum，但沒有扇出（只送一份），這個設定不會作用。', { id }) });
+      issues.push({ level: 'warning', code: 'quorum-no-fanout', edge: id, message: t('Edge "{id}" has a quorum but no fan-out (one copy): the quorum does nothing.', { id }) });
     else if ((e.quorum ?? 0) > fan)
-      issues.push({ level: 'warning', code: 'quorum-gt-fanout', edge: id, message: t('連線「{id}」的 quorum（{q}）比扇出份數（{n}）多：會等全部 {n} 份。', { id, q: e.quorum ?? 0, n: fan }) });
+      issues.push({ level: 'warning', code: 'quorum-gt-fanout', edge: id, message: t('Edge "{id}" has a quorum ({q}) larger than its fan-out ({n}): it waits for all {n} copies.', { id, q: e.quorum ?? 0, n: fan }) });
     if (fan > 1 && !ignored && e.hedgeMs)
-      issues.push({ level: 'warning', code: 'fanout-hedge', edge: id, message: t('連線「{id}」同時設了扇出和對沖請求：扇出時不送對沖請求。要容忍慢的那幾份，請改用 quorum。', { id }) });
+      issues.push({ level: 'warning', code: 'fanout-hedge', edge: id, message: t('Edge "{id}" has both fan-out and hedged requests: a fan-out sends no hedges. To tolerate slow copies, use a quorum.', { id }) });
     // cache-aside only: the caller also reads a store, so a failed lookup falls through to it
     if (e.fallback === 'on' && byId.get(e.to)?.kind === 'cache' && byId.get(e.from)?.kind !== 'cache'
       && (d.edges as DesignEdge[]).some((x) => x.from === e.from && STORE_KINDS.has(byId.get(x.to)?.kind ?? '') && x.on !== 'write' && !sideEdge(x))) {
-      issues.push({ level: 'warning', code: 'fallback-cache', edge: id, message: t('連線「{id}」通往快取：快取查不到或故障時本來就會去讀資料庫，降級回應不會作用。', { id }) });
+      issues.push({ level: 'warning', code: 'fallback-cache', edge: id, message: t('Connection "{id}" goes to a cache: when the cache misses or fails, the request already reads the database, so a fallback has no effect.', { id }) });
     }
     if (!out.has(e.from)) out.set(e.from, []);
     out.get(e.from)!.push(e);
@@ -548,7 +548,7 @@ export function checkDesign(d: Design): Issue[] {
       const outs = out.get(id) ?? [];
       const next = outs.filter(takes);
       if (n && n.kind !== 'client' && KINDS[n.kind]?.routing === 'one' && outs.length && !next.length)
-        issues.push({ level: 'warning', code: 'api-dead-end', node: id, message: t('API「{api}」到了「{name}」就沒有線可以走：請求會停在這裡，直接算成功。', { api: api.name, name: n.label ?? id }) });
+        issues.push({ level: 'warning', code: 'api-dead-end', node: id, message: t('API "{api}" reaches "{name}" and has no edge to go on: the request stops there and counts as a success.', { api: api.name, name: n.label ?? id }) });
       for (const e of next) todo.push(e.to);
     }
   }
@@ -566,7 +566,7 @@ export function checkDesign(d: Design): Issue[] {
       const c = color.get(e.to) ?? 0;
       if (c === 1) {
         const loop = stack.slice(stack.indexOf(e.to)).concat(e.to).join(' → ');
-        issues.push({ level: 'error', code: 'cycle', node: e.to, message: t('有迴圈：{loop}。請求會一直繞，請拿掉其中一條線。', { loop }) });
+        issues.push({ level: 'error', code: 'cycle', node: e.to, message: t('There is a loop: {loop}. Requests keep going around, so remove one of the edges.', { loop }) });
         return true;
       }
       if (c === 0 && visit(e.to)) return true;
@@ -578,10 +578,10 @@ export function checkDesign(d: Design): Issue[] {
   for (const n of d.nodes) if ((color.get(n.id) ?? 0) === 0 && visit(n.id)) break;
 
   const clients = d.nodes.filter((n) => n.kind === 'client');
-  if (clients.length === 0) issues.push({ level: 'error', code: 'no-client', message: t('沒有「使用者」節點，沒有流量可以跑。') });
+  if (clients.length === 0) issues.push({ level: 'error', code: 'no-client', message: t('There is no Users node, so there is no traffic to run.') });
   for (const c of clients) {
-    if ((inc.get(c.id) ?? []).length) issues.push({ level: 'error', code: 'client-incoming', node: c.id, message: t('「{name}」是流量起點，不能有連進來的線。', { name: c.label ?? c.id }) });
-    if (!(out.get(c.id) ?? []).length) issues.push({ level: 'error', code: 'client-no-edge', node: c.id, message: t('「{name}」沒有連出去的線。', { name: c.label ?? c.id }) });
+    if ((inc.get(c.id) ?? []).length) issues.push({ level: 'error', code: 'client-incoming', node: c.id, message: t('"{name}" is the traffic source and cannot have incoming edges.', { name: c.label ?? c.id }) });
+    if (!(out.get(c.id) ?? []).length) issues.push({ level: 'error', code: 'client-no-edge', node: c.id, message: t('"{name}" has no outgoing edges.', { name: c.label ?? c.id }) });
     // several machines called straight from the client: the engine still spreads the calls evenly
     // and skips a machine that is down, which in real life is the load balancer's job. An API
     // gateway is the entry point itself (a managed gateway balances over its own fleet).
@@ -590,21 +590,21 @@ export function checkDesign(d: Design): Issue[] {
       if (!KINDS[dst.kind]?.station || dst.kind === 'api_gateway' || dst.kind === 'cache' || STORE_KINDS.has(dst.kind)) continue;
       // with autoscaling, the most machines it can have
       if (instanceCount(dst) > 1)
-        issues.push({ level: 'warning', code: 'no-lb', edge: edgeId(e), message: t('「{name}」有好幾台，但「{client}」直接連過去，中間沒有負載平衡器。模擬會自動把流量平均分給每一台、也會跳過故障的那台；實際上這是負載平衡器（或 DNS、用戶端分流）的工作。', { name: dst.label ?? t(KINDS[dst.kind].label), client: c.label ?? t(KINDS.client.label) }) });
+        issues.push({ level: 'warning', code: 'no-lb', edge: edgeId(e), message: t('"{name}" has several machines, but "{client}" calls it directly, with no load balancer between. The simulation still spreads the traffic evenly and skips a machine that is down; in real life that is the job of a load balancer (or DNS, or client-side balancing).', { name: dst.label ?? t(KINDS[dst.kind].label), client: c.label ?? t(KINDS.client.label) }) });
     }
   }
   for (const n of d.nodes) {
     const spec = KINDS[n.kind];
     const outs = out.get(n.id) ?? [];
     if (spec.routing === 'leaf' && outs.length) {
-      issues.push({ level: 'warning', code: 'leaf-out', node: n.id, message: t('「{name}」是儲存端，不會呼叫別人；它連出去的線不會有流量。', { name: n.label ?? n.id }) });
+      issues.push({ level: 'warning', code: 'leaf-out', node: n.id, message: t('"{name}" is a storage endpoint and does not call others; its outgoing edges carry no traffic.', { name: n.label ?? n.id }) });
     }
     if (n.kind === 'queue') {
-      if (!outs.length) issues.push({ level: 'warning', code: 'queue-no-consumer', node: n.id, message: t('「{name}」沒有 worker，訊息只會越積越多。', { name: n.label ?? n.id }) });
+      if (!outs.length) issues.push({ level: 'warning', code: 'queue-no-consumer', node: n.id, message: t('"{name}" has no worker, so messages only pile up.', { name: n.label ?? n.id }) });
       for (const e of outs) {
         const dst = byId.get(e.to)!;
         if (KINDS[dst.kind].routing !== 'plan') {
-          issues.push({ level: 'error', code: 'queue-consumer-kind', edge: edgeId(e), message: t('Queue 後面只能接 Worker 或 API Server（它們會來拿訊息），不能接「{kind}」。', { kind: t(KINDS[dst.kind].label) }) });
+          issues.push({ level: 'error', code: 'queue-consumer-kind', edge: edgeId(e), message: t('A queue can only feed a Worker or API Server (they pull messages), not a "{kind}".', { kind: t(KINDS[dst.kind].label) }) });
         }
       }
       const qp = resolveParams(n.kind, n.params as Record<string, unknown> | undefined);
@@ -614,9 +614,9 @@ export function checkDesign(d: Design): Issue[] {
           const tp = resolveParams(dst.kind, dst.params as Record<string, unknown> | undefined);
           const svc = tp.serviceMs as { mean: number } | undefined;
           if (svc && Number(qp.visibilityTimeoutMs) < svc.mean)
-            issues.push({ level: 'warning', code: 'visibility-short', node: n.id, message: t('「{name}」的 visibility timeout（{vis} ms）比「{target}」的平均處理時間（{ms} ms）短：訊息還沒做完就會重新出現，被處理兩次。', { name: n.label ?? n.id, vis: String(qp.visibilityTimeoutMs), target: dst.label ?? dst.id, ms: svc.mean }) });
+            issues.push({ level: 'warning', code: 'visibility-short', node: n.id, message: t('"{name}" has a visibility timeout ({vis} ms) shorter than the average processing time of "{target}" ({ms} ms): the message reappears before it finishes and is processed twice.', { name: n.label ?? n.id, vis: String(qp.visibilityTimeoutMs), target: dst.label ?? dst.id, ms: svc.mean }) });
           if (Number(tp.poisonRate) > 0 && Number(qp.maxReceives) === 0)
-            issues.push({ level: 'warning', code: 'poison-no-dlq', node: n.id, message: t('「{target}」有毒訊息，但「{name}」沒有 DLQ（最多接收次數 0）：毒訊息會一直重試，佔用 worker。', { target: dst.label ?? dst.id, name: n.label ?? n.id }) });
+            issues.push({ level: 'warning', code: 'poison-no-dlq', node: n.id, message: t('"{target}" produces a poison message, but "{name}" has no DLQ (max receives 0): the poison message retries forever and ties up a worker.', { target: dst.label ?? dst.id, name: n.label ?? n.id }) });
         }
       }
     }
@@ -625,7 +625,7 @@ export function checkDesign(d: Design): Issue[] {
       const byPriority = Number(np.shedAt) > 0 || (n.kind === 'rate_limiter' && np.appliesTo === 'batch');
       const anyBatch = d.nodes.some((c) => c.kind === 'client' && resolveParams('client', c.params as Record<string, unknown> | undefined).priority === 'batch');
       if (byPriority && !anyBatch)
-        issues.push({ level: 'warning', code: 'priority-no-batch', node: n.id, message: t('「{name}」只對「可丟棄」的請求動作，但沒有使用者把請求優先級設成「可丟棄」：這個設定不會有作用。', { name: n.label ?? n.id }) });
+        issues.push({ level: 'warning', code: 'priority-no-batch', node: n.id, message: t('"{name}" only acts on "batch" requests, but no user sets the request priority to "batch": this setting has no effect.', { name: n.label ?? n.id }) });
     }
     if (n.kind === 'load_balancer') {
       // the engine checks health per instance only behind instance targets; a database, cache or a
@@ -635,7 +635,7 @@ export function checkDesign(d: Design): Issue[] {
         for (const e of d.edges) {
           const dst = e.from === n.id ? byId.get(e.to) : undefined;
           if (!dst || (KINDS[dst.kind]?.station && dst.kind !== 'database' && dst.kind !== 'sharded_db' && dst.kind !== 'cache')) continue;
-          issues.push({ level: 'warning', code: 'lb-health-logical', node: n.id, message: t('「{name}」的 health check 和自動剔除只作用在 API Server、Worker 這類分成實例的元件；「{target}」被當成一個整體，故障時立刻跳過。', { name: n.label ?? n.id, target: dst.label ?? dst.id }) });
+          issues.push({ level: 'warning', code: 'lb-health-logical', node: n.id, message: t('The health check and outlier detection of "{name}" only work on components with instances, such as API servers and workers; "{target}" is treated as one unit and is skipped at once when it is down.', { name: n.label ?? n.id, target: dst.label ?? dst.id }) });
         }
       }
     }
@@ -643,28 +643,28 @@ export function checkDesign(d: Design): Issue[] {
       const cp = resolveParams(n.kind, n.params as Record<string, unknown> | undefined);
       const name = n.label ?? n.id;
       if (cp.mode !== 'lru' && (Number(cp.ttlJitter) > 0 || cp.stampede !== 'none')) {
-        issues.push({ level: 'warning', code: 'cache-lru-only', node: n.id, message: t('「{name}」是固定命中率模式：TTL jitter 和防擊穿只在 LRU 模式有作用。', { name }) });
+        issues.push({ level: 'warning', code: 'cache-lru-only', node: n.id, message: t('"{name}" uses a fixed hit ratio: TTL jitter and stampede protection only work in LRU mode.', { name }) });
       } else if (Number(cp.ttlJitter) > 0 && !(Number(cp.ttlS) > 0)) {
-        issues.push({ level: 'warning', code: 'jitter-no-ttl', node: n.id, message: t('「{name}」沒有設 TTL，TTL jitter 不會有作用。', { name }) });
+        issues.push({ level: 'warning', code: 'jitter-no-ttl', node: n.id, message: t('"{name}" has no TTL, so TTL jitter has no effect.', { name }) });
       }
       // the engine reads through to a store only over edges to a store that carry reads
       const readStores = outs.filter((e) => STORE_KINDS.has(byId.get(e.to)?.kind ?? '') && (e.on ?? 'all') !== 'write' && !sideEdge(e));
       if (cp.mode === 'lru' && cp.stampede === 'coalesce' && !readStores.length) {
-        issues.push({ level: 'warning', code: 'coalesce-no-store', node: n.id, message: t('「{name}」後面沒有接 DB：合併查詢只在快取自己去查 DB（read-through）時有作用；服務自己查 DB（cache-aside）請用 lease。', { name }) });
+        issues.push({ level: 'warning', code: 'coalesce-no-store', node: n.id, message: t('"{name}" has no DB behind it: coalescing only works when the cache reads the DB itself (read-through). When the service reads the DB (cache-aside), use a lease.', { name }) });
       }
       if (cp.mode === 'lru' && cp.stampede === 'lease' && readStores.length) {
-        issues.push({ level: 'warning', code: 'lease-read-through', node: n.id, message: t('「{name}」後面直接接 DB（read-through）：lease 只在服務自己查 DB（cache-aside）時有作用；read-through 請用合併查詢。', { name }) });
+        issues.push({ level: 'warning', code: 'lease-read-through', node: n.id, message: t('"{name}" reads the DB itself (read-through): a lease only works when the service reads the DB (cache-aside). For read-through, use coalescing.', { name }) });
       }
     }
     if (n.kind === 'worker' && !(inc.get(n.id) ?? []).some((e) => byId.get(e.from)?.kind === 'queue')) {
-      issues.push({ level: 'warning', code: 'worker-no-queue', node: n.id, message: t('「{name}」前面沒有 Queue；它只會在被直接呼叫時工作。', { name: n.label ?? n.id }) });
+      issues.push({ level: 'warning', code: 'worker-no-queue', node: n.id, message: t('"{name}" has no queue in front; it only works when called directly.', { name: n.label ?? n.id }) });
     }
     if (n.kind === 'circuit_breaker') {
       const timeouts = outs.some((e) => (e.timeoutMs ?? 0) > 0);
-      if (outs.length && !timeouts) issues.push({ level: 'warning', code: 'cb-no-timeout', node: n.id, message: t('「{name}」連出去的線沒有設逾時；下游只是變慢時，保險絲看不到失敗。', { name: n.label ?? n.id }) });
+      if (outs.length && !timeouts) issues.push({ level: 'warning', code: 'cb-no-timeout', node: n.id, message: t('An outgoing edge of "{name}" has no timeout; when downstream only slows down, the circuit breaker sees no failures.', { name: n.label ?? n.id }) });
     }
     if (n.kind !== 'client' && !(inc.get(n.id) ?? []).length) {
-      issues.push({ level: 'warning', code: 'unreachable', node: n.id, message: t('「{name}」沒有連進來的線，不會有流量。', { name: n.label ?? n.id }) });
+      issues.push({ level: 'warning', code: 'unreachable', node: n.id, message: t('"{name}" has no incoming edges, so it gets no traffic.', { name: n.label ?? n.id }) });
     }
   }
   return issues;
@@ -678,17 +678,17 @@ const PAUSABLE = new Set(['service', 'custom', 'worker', 'function', 'api_gatewa
 export function checkScenario(s: Scenario, d?: Design): Issue[] {
   const issues: Issue[] = [];
   const r = resolveScenario(s);
-  if ((s.warmupS ?? 5) >= r.durationS) issues.push({ level: 'warning', code: 'warmup', message: t('暖機時間不短於總時長，已改成總時長的一半。') });
+  if ((s.warmupS ?? 5) >= r.durationS) issues.push({ level: 'warning', code: 'warmup', message: t('Warm-up time is not shorter than the total duration, so it was changed to half the total duration.') });
   if (r.windowS !== (s.windowS ?? 1)) {
-    issues.push({ level: 'warning', code: 'window', message: t('統計窗口太長，暖機後放不下一個完整窗口，已改成 {s} 秒。', { s: r.windowS }) });
+    issues.push({ level: 'warning', code: 'window', message: t('The stats window is too long to fit a full window after warm-up, so it was changed to {s} s.', { s: r.windowS }) });
   }
   // relations between fields of one event (the file schema checks them too; the editor needs the words)
   for (const ev of r.events) {
     if (ev.type === 'cron' && ev.burstS + (ev.jitterS ?? 0) > ev.everyS) {
-      issues.push({ level: 'error', code: 'event-cron', message: t('排程工作的爆量持續加分散時間（{b} 秒）比間隔（{e} 秒）長：一陣還沒結束下一陣就開始了。', { b: ev.burstS + (ev.jitterS ?? 0), e: ev.everyS }) });
+      issues.push({ level: 'error', code: 'event-cron', message: t('The scheduled job\'s burst plus spread ({b} s) is longer than its interval ({e} s): a burst starts before the last one ends.', { b: ev.burstS + (ev.jitterS ?? 0), e: ev.everyS }) });
     }
     if (ev.type === 'pause' && ev.pauseMs >= ev.everyS * 1000) {
-      issues.push({ level: 'error', code: 'event-pause', message: t('GC 停頓每次停 {p} ms，不短於間隔 {e} 秒：元件會一直停著。', { p: ev.pauseMs, e: ev.everyS }) });
+      issues.push({ level: 'error', code: 'event-pause', message: t('Each GC pause lasts {p} ms, not shorter than its interval of {e} s: the component would stay stopped.', { p: ev.pauseMs, e: ev.everyS }) });
     }
   }
   if (d) {
@@ -696,43 +696,43 @@ export function checkScenario(s: Scenario, d?: Design): Issue[] {
     const regions = new Set(regionsOf(d));
     for (const ev of r.events) {
       if (ev.type === 'region_down' && !regions.has(ev.region)) {
-        issues.push({ level: 'error', code: 'event-region', message: t('事件指到沒有任何節點的區域「{region}」。', { region: ev.region }) });
+        issues.push({ level: 'error', code: 'event-region', message: t('The event names region "{region}", but no node is in it.', { region: ev.region }) });
       }
       if (ev.type === 'rollout' && ev.node !== undefined) {
         // a missing node is reported below with the other events aimed at a node
         const n = byId.get(ev.node);
-        if (n && !KINDS[n.kind]?.station) issues.push({ level: 'error', code: 'event-rollout-kind', message: t('「{node}」沒有實例，不能部署新版本。', { node: ev.node }) });
+        if (n && !KINDS[n.kind]?.station) issues.push({ level: 'error', code: 'event-rollout-kind', message: t('"{node}" has no instances: a new version cannot be deployed to it.', { node: ev.node }) });
       }
       if (ev.type === 'reshard') {
         const n = byId.get(ev.node);
-        if (n && n.kind !== 'sharded_db') issues.push({ level: 'error', code: 'event-reshard-kind', message: t('「{node}」不是分片資料庫，不能重新分片。', { node: ev.node }) });
+        if (n && n.kind !== 'sharded_db') issues.push({ level: 'error', code: 'event-reshard-kind', message: t('"{node}" is not a sharded database: it cannot be resharded.', { node: ev.node }) });
       }
       if (ev.type === 'partition') {
         const [a, b] = ev.regions;
-        if (a === b) issues.push({ level: 'error', code: 'event-partition', message: t('網路分區要兩個不同的區域。') });
+        if (a === b) issues.push({ level: 'error', code: 'event-partition', message: t('A network partition needs two different regions.') });
         for (const x of new Set(ev.regions)) {
-          if (!regions.has(x)) issues.push({ level: 'error', code: 'event-region', message: t('事件指到沒有任何節點的區域「{region}」。', { region: x }) });
+          if (!regions.has(x)) issues.push({ level: 'error', code: 'event-region', message: t('The event names region "{region}", but no node is in it.', { region: x }) });
         }
       }
       if (ev.type === 'shift') {
         const n = byId.get(ev.from);
         if (!d.edges.some((e) => e.from === ev.from && e.to === ev.to)) {
-          issues.push({ level: 'error', code: 'event-edge', message: t('流量移轉指到不存在的連線「{from} → {to}」。', { from: ev.from, to: ev.to }) });
+          issues.push({ level: 'error', code: 'event-edge', message: t('The traffic shift points to an edge that does not exist: “{from} → {to}”.', { from: ev.from, to: ev.to }) });
         } else if (n && KINDS[n.kind]?.routing !== 'one') {
-          issues.push({ level: 'warning', code: 'event-shift-kind', message: t('「{node}」會呼叫它所有的下游，不照權重分流：流量移轉對它沒有作用。', { node: ev.from }) });
+          issues.push({ level: 'warning', code: 'event-shift-kind', message: t('“{node}” calls all of its downstreams and does not split by weight: a traffic shift does nothing there.', { node: ev.from }) });
         }
       }
       if ('node' in ev && ev.node !== undefined) {
         const n = byId.get(ev.node);
-        if (!n) issues.push({ level: 'error', code: 'event-node', message: t('事件指到不存在的節點「{node}」。', { node: ev.node }) });
+        if (!n) issues.push({ level: 'error', code: 'event-node', message: t('The event points to a node that does not exist: "{node}".', { node: ev.node }) });
         else if (ev.type === 'pause' && !PAUSABLE.has(n.kind)) {
-          issues.push({ level: 'warning', code: 'event-pause-kind', message: t('「{node}」不處理請求，GC 停頓對它沒有作用。', { node: ev.node }) });
+          issues.push({ level: 'warning', code: 'event-pause-kind', message: t('"{node}" does not process requests, so a GC pause has no effect on it.', { node: ev.node }) });
         }
         else if ((ev.type === 'down' || ev.type === 'slow' || ev.type === 'errors') && ev.instance !== undefined && !KINDS[n.kind]?.station) {
-          issues.push({ level: 'error', code: 'event-instance', message: t('「{node}」不分實例，事件不能指定實例。', { node: ev.node }) });
+          issues.push({ level: 'error', code: 'event-instance', message: t('"{node}" has no separate instances, so an event cannot name an instance.', { node: ev.node }) });
         }
         else if ((ev.type === 'down' || ev.type === 'slow' || ev.type === 'errors') && ev.instance !== undefined && ev.instance >= instanceCount(n)) {
-          issues.push({ level: 'error', code: 'event-instance', message: t('「{node}」只有 {k} 個實例，沒有第 {i} 號（從 0 算）。', { node: ev.node, k: instanceCount(n), i: ev.instance }) });
+          issues.push({ level: 'error', code: 'event-instance', message: t('"{node}" has only {k} instances, so there is no #{i} (counting from 0).', { node: ev.node, k: instanceCount(n), i: ev.instance }) });
         }
       }
     }
@@ -747,7 +747,7 @@ function zodIssues(err: z.ZodError): Issue[] {
     level: 'error' as const,
     code: 'schema',
     path: i.path.join('.'),
-    message: `${i.path.join('.') || t('(根)')}：${i.message}`,
+    message: `${i.path.join('.') || t('(root)')}：${i.message}`,
   }));
 }
 

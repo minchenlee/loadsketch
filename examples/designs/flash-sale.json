@@ -1,27 +1,27 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "限時搶購：入口限流（參考 Shopify）",
-  "description": "熱門商家開賣時，結帳流量在幾秒內暴增，每個結帳步驟都要寫資料庫。Shopify 曾在邊緣層加上漏桶節流，把超過的人導到排隊頁。這個模型用限流器擋在最前面：多出來的請求立刻被拒（429），後面的結帳服務和資料庫維持正常速度。",
+  "name": "Flash sale: rate limit at the door (after Shopify)",
+  "description": "When a popular shop starts selling, checkout traffic jumps within seconds, and every checkout step writes to the database. Shopify once added leaky-bucket throttling at the edge and sent the excess users to a queue page. This model puts a rate limiter in front: extra requests are rejected right away (429), so the checkout service and the database behind it keep a normal pace.",
   "nodes": [
-    { "id": "buyers", "kind": "client", "label": "搶購的人", "pos": [0, 200] },
+    { "id": "buyers", "kind": "client", "label": "Flash-sale shoppers", "pos": [0, 200] },
     {
       "id": "limiter",
       "kind": "rate_limiter",
-      "label": "邊緣節流",
+      "label": "Edge throttling",
       "pos": [270, 200],
       "params": { "ratePerSec": 1500, "burst": 300 }
     },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [540, 200],
       "params": { "policy": "least_conn" }
     },
     {
       "id": "checkout",
       "kind": "service",
-      "label": "結帳服務",
+      "label": "Checkout service",
       "pos": [810, 200],
       "params": {
         "instances": 4,
@@ -33,7 +33,7 @@
     {
       "id": "db",
       "kind": "database",
-      "label": "商店資料庫（MySQL）",
+      "label": "Store database (MySQL)",
       "pos": [1080, 200],
       "params": {
         "replicas": 1,

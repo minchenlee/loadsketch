@@ -1,257 +1,101 @@
 {
   "schema": "loadsketch/brief@1",
   "id": "brief-sale",
-  "title": "需求：限量開賣",
-  "text": "3 人團隊，兩個月後有一檔限量開賣。平常流量不大，開賣的 15 秒會暴增。訂單要寫進公司共用的資料庫，它已經在畫布上。",
+  "title": "Brief: limited sale",
+  "text": "A team of 3, a limited sale in two months. Traffic is low most of the time and jumps for the 15 seconds of the sale. Orders go into the company's shared database; it is on the canvas already.",
   "functional": [
-    "使用者能看商品",
-    "使用者能下單；下了單就不能掉"
+    "Users can view products",
+    "Users can place an order; a placed order must not be lost"
   ],
   "load": [
-    "平常每秒 800 個請求，一半是下單（寫入）",
-    "第 20 秒開賣：流量變成 16 倍，持續 15 秒"
+    "800 requests a second most of the time; half are orders (writes)",
+    "The sale opens at second 20: traffic is 16 times higher for 15 seconds"
   ],
   "given": [
-    "共用的資料庫有 50 條連線，讀一筆 3 ms、寫一筆 10 ms；它不歸你管，改不了",
-    "你的程式處理一個請求平均 5 ms",
-    "背景工作處理一筆訂單 2 ms，再加上寫資料庫的時間"
+    "The shared database has 50 connections, a read takes 3 ms and a write 10 ms; it is not yours, so you cannot change it",
+    "Your code takes 5 ms on average for one request",
+    "A worker takes 2 ms for one order, plus the database write"
   ],
-  "outOfScope": [
-    "付款",
-    "庫存扣到負數的問題",
-    "排隊頁面"
-  ],
+  "outOfScope": ["Payment", "Stock going below zero", "A waiting-room page"],
   "scenario": {
     "schema": "loadsketch/scenario@1",
-    "name": "需求：限量開賣",
+    "name": "Brief: limited sale",
     "seed": 1,
     "durationS": 120,
     "warmupS": 5,
-    "traffic": {
-      "rps": 800,
-      "readRatio": 0.5
-    },
-    "events": [
-      {
-        "type": "spike",
-        "atS": 20,
-        "forS": 15,
-        "multiplier": 16
-      }
-    ]
+    "traffic": { "rps": 800, "readRatio": 0.5 },
+    "events": [{ "type": "spike", "atS": 20, "forS": 15, "multiplier": 16 }]
   },
-  "limits": {
-    "maxErrorRate": 0.01,
-    "maxP99Ms": 300,
-    "budgetPerMonth": 4000,
-    "maxPoints": 8
-  },
+  "limits": { "maxErrorRate": 0.01, "maxP99Ms": 300, "budgetPerMonth": 4000, "maxPoints": 8 },
   "start": {
     "schema": "loadsketch/design@1",
-    "name": "需求：限量開賣",
+    "name": "Brief: limited sale",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
-      {
-        "id": "db",
-        "kind": "database",
-        "label": "公司共用的資料庫",
-        "pos": [
-          0,
-          380
-        ]
-      }
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
+      { "id": "db", "kind": "database", "label": "Shared database", "pos": [0, 380] }
     ],
     "edges": []
   },
-  "fixed": [
-    "db"
-  ],
+  "fixed": ["db"],
   "needs": [
-    {
-      "kind": "reaches-node",
-      "node": "db",
-      "text": "訂單有寫進共用的資料庫"
-    },
-    {
-      "kind": "looked"
-    },
-    {
-      "kind": "finished"
-    },
-    {
-      "kind": "not-degraded"
-    }
+    { "kind": "reaches-node", "node": "db", "text": "Orders are written to the shared database" },
+    { "kind": "looked" },
+    { "kind": "finished" },
+    { "kind": "not-degraded" }
   ],
-  "floors": {
-    "worker": {
-      "serviceMs": 2
-    }
-  },
-  "hint": "開賣時每秒 6,400 筆寫入 × 10 ms = 64 條連線，再加上讀取約 19 條，共用的資料庫只有 50 條，而且改不了。下單可以先進佇列就回應，背景工作再照資料庫吃得下的速度寫進去：尖峰被攤平，只要結束前做得完。背景工作的同時處理數就是它最多佔用的連線數，要留一些給讀取。API Server 也要撐得住尖峰：每秒 12,800 個請求。",
+  "floors": { "worker": { "serviceMs": 2 } },
+  "hint": "During the sale, 6,400 writes a second × 10 ms = 64 connections, plus about 19 for reads; the shared database has 50 and you cannot change it. An order can go on a queue and be answered at once, and workers write it at a rate the database can take: the peak is spread out, as long as the work is finished before the end. The workers' concurrency is the most connections they use, so leave some for reads. The API Servers must hold the peak too: 12,800 requests a second.",
   "reference": {
     "schema": "loadsketch/design@1",
-    "name": "需求：限量開賣",
+    "name": "Brief: limited sale",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
-      {
-        "id": "lb",
-        "kind": "load_balancer",
-        "label": "負載平衡器",
-        "pos": [
-          270,
-          200
-        ]
-      },
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
+      { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [270, 200] },
       {
         "id": "api",
         "kind": "service",
-        "label": "商店 API",
-        "pos": [
-          540,
-          200
-        ],
-        "params": {
-          "instances": 6
-        }
+        "label": "Shop API",
+        "pos": [540, 200],
+        "params": { "instances": 6 }
       },
-      {
-        "id": "orders",
-        "kind": "queue",
-        "label": "訂單佇列",
-        "pos": [
-          810,
-          80
-        ]
-      },
+      { "id": "orders", "kind": "queue", "label": "Order queue", "pos": [810, 80] },
       {
         "id": "writer",
         "kind": "worker",
-        "label": "寫訂單的背景工作",
-        "pos": [
-          1080,
-          80
-        ],
-        "params": {
-          "instances": 3,
-          "concurrency": 10,
-          "serviceMs": {
-            "mean": 2,
-            "cv": 1
-          }
-        }
+        "label": "Order writer (worker)",
+        "pos": [1080, 80],
+        "params": { "instances": 3, "concurrency": 10, "serviceMs": { "mean": 2, "cv": 1 } }
       },
-      {
-        "id": "db",
-        "kind": "database",
-        "label": "公司共用的資料庫",
-        "pos": [
-          1080,
-          320
-        ]
-      }
+      { "id": "db", "kind": "database", "label": "Shared database", "pos": [1080, 320] }
     ],
     "edges": [
-      {
-        "from": "users",
-        "to": "lb"
-      },
-      {
-        "from": "lb",
-        "to": "api"
-      },
-      {
-        "from": "api",
-        "to": "orders",
-        "on": "write"
-      },
-      {
-        "from": "orders",
-        "to": "writer"
-      },
-      {
-        "from": "writer",
-        "to": "db"
-      },
-      {
-        "from": "api",
-        "to": "db",
-        "on": "read"
-      }
+      { "from": "users", "to": "lb" },
+      { "from": "lb", "to": "api" },
+      { "from": "api", "to": "orders", "on": "write" },
+      { "from": "orders", "to": "writer" },
+      { "from": "writer", "to": "db" },
+      { "from": "api", "to": "db", "on": "read" }
     ]
   },
   "naive": {
     "schema": "loadsketch/design@1",
-    "name": "需求：限量開賣",
+    "name": "Brief: limited sale",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
-      {
-        "id": "lb",
-        "kind": "load_balancer",
-        "label": "負載平衡器",
-        "pos": [
-          270,
-          200
-        ]
-      },
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
+      { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [270, 200] },
       {
         "id": "api",
         "kind": "service",
-        "label": "商店 API",
-        "pos": [
-          540,
-          200
-        ],
-        "params": {
-          "instances": 6
-        }
+        "label": "Shop API",
+        "pos": [540, 200],
+        "params": { "instances": 6 }
       },
-      {
-        "id": "db",
-        "kind": "database",
-        "label": "公司共用的資料庫",
-        "pos": [
-          1080,
-          320
-        ]
-      }
+      { "id": "db", "kind": "database", "label": "Shared database", "pos": [1080, 320] }
     ],
     "edges": [
-      {
-        "from": "users",
-        "to": "lb"
-      },
-      {
-        "from": "lb",
-        "to": "api"
-      },
-      {
-        "from": "api",
-        "to": "db"
-      }
+      { "from": "users", "to": "lb" },
+      { "from": "lb", "to": "api" },
+      { "from": "api", "to": "db" }
     ]
   }
 }

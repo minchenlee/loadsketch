@@ -368,7 +368,7 @@ function ThroughHint() {
           <div className="mb-0.5 font-medium">{names}</div>
           {throughText()}
         </div>
-        <button className="faint shrink-0 self-start" onClick={() => useApp.setState({ throughHint: null })} aria-label={t('關閉')} data-testid="edge-through-hint-close">
+        <button className="faint shrink-0 self-start" onClick={() => useApp.setState({ throughHint: null })} aria-label={t('Close')} data-testid="edge-through-hint-close">
           <X size={14} />
         </button>
       </div>
@@ -394,12 +394,12 @@ function LimitNote() {
     <Panel position="top-center" className="!mt-3 w-max max-w-[min(640px,calc(100%-24px))]">
       <div className="card sd-over flex items-center gap-2 px-3 py-2 text-[13px]" role={d ? 'status' : undefined} data-testid={d ? 'limit-canvas-done' : 'limit-canvas-now'}>
         <TrendingUp size={14} className="muted shrink-0" />
-        <span className="shrink-0 whitespace-nowrap font-medium">{t('找上限')}</span>
+        <span className="shrink-0 whitespace-nowrap font-medium">{t('Find limit')}</span>
         {/* never cut: a long component name wraps to another line */}
         <span className="num min-w-0 [overflow-wrap:anywhere]">{text}</span>
         {d && (
           <button className="btn shrink-0 text-[13px]" onClick={() => useApp.getState().setLimit(null)} data-testid="limit-canvas-clear">
-            {t('清除')}
+            {t('Clear')}
           </button>
         )}
       </div>
@@ -414,7 +414,7 @@ function Checks() {
   if (!issues.length) return null;
   const errors = issues.filter((i) => i.level === 'error').length;
   const warnings = issues.length - errors;
-  const text = [errors ? t('{n} 個錯誤', { n: errors }) : '', warnings ? t('{n} 個警告', { n: warnings }) : ''].filter(Boolean).join(t('、'));
+  const text = [errors ? t('{n} errors', { n: errors }) : '', warnings ? t('{n} warnings', { n: warnings }) : ''].filter(Boolean).join(t(', @@list'));
   return (
     <Panel position="top-left" className="!m-3 max-w-[420px]">
       <button
@@ -430,7 +430,7 @@ function Checks() {
         data-testid="checks"
       >
         {errors ? <CircleX size={15} /> : <TriangleAlert size={15} />}
-        {t('設計檢查：{text}', { text })}
+        {t('Design check: {text}', { text })}
       </button>
       {open && (
         <ul className="card sd-over mt-1.5 space-y-1 p-2" data-testid="checks-list">

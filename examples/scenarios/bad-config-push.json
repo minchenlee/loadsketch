@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "第 20 秒一次把壞設定推到全部伺服器",
+  "name": "At 20 s a bad config is pushed to every server at once",
   "seed": 1,
   "durationS": 90,
   "traffic": { "rps": 500, "readRatio": 0.8 },

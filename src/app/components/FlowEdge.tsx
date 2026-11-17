@@ -20,7 +20,7 @@ type Pt = [number, number];
 /** Polyline from the source handle (right side) to the target handle (left side). */
 /** What an edge filtered by `on` carries, for its label. */
 const onLabel = (on: string): string =>
-  on === 'read' ? t('只走讀取') : on === 'write' ? t('只走寫入') : on === 'boot' ? t('只在開機時用') : t('控制面（監控、協調）');
+  on === 'read' ? t('Reads only') : on === 'write' ? t('Writes only') : on === 'boot' ? t('Only at boot') : t('Control plane (metrics, coordination)');
 
 type Geo = { d: string; pts: Pt[]; acc: number[] };
 
@@ -92,7 +92,7 @@ function useThrough(source: string, target: string): boolean {
 }
 
 /** What a cache-to-store line means: the label's hover text, the inspector and the hint on connecting. */
-export const throughText = () => t('快取直接接資料庫：這條線是 read-through／write-through。讀取沒命中時，由快取自己去資料庫讀，再填進快取；寫入時，快取先寫進資料庫，再更新自己。呼叫快取的那一方不用另外連資料庫。');
+export const throughText = () => t('A cache connected straight to a database: this edge is read-through / write-through. On a read miss, the cache itself reads the database and fills itself; on a write, the cache writes the database first, then updates itself. The caller of the cache does not need its own edge to the database.');
 
 /**
  * Cache-aside order on a read: a node (not a cache) that calls both a cache and a store reads the
@@ -112,7 +112,7 @@ function useAsideOrder(id: string): string | null {
     const hasStore = reads.some((e) => STORE_KINDS.has(kind(e.target) ?? ''));
     if (!hasCache || !hasStore) return null;
     const k = kind(edge.target);
-    return k === 'cache' ? t('① 讀取先查') : STORE_KINDS.has(k ?? '') ? t('② 沒命中才查') : null;
+    return k === 'cache' ? t('① Read checks first') : STORE_KINDS.has(k ?? '') ? t('② Query on a miss') : null;
   });
 }
 
@@ -138,13 +138,13 @@ function Label({ id, x, y, maxW, cls, delay, timeout, retries, bulkhead, fallbac
     >
       <div>
         {e && <span>{fmtN(rate)}/s</span>}
-        {e && failed > 0.005 && <span>{t('失敗 {p}%', { p: Math.round(failed * 100) })}</span>}
-        {timeout ? <span className="faint">{t('逾時 {ms} ms', { ms: timeout })}</span> : null}
-        {retries ? <span className="faint">{t('重試 {n}', { n: retries })}</span> : null}
-        {bulkhead ? <span className="faint">{t('隔艙 {n}', { n: bulkhead })}</span> : null}
-        {fallback ? <span className="faint">{t('降級')}</span> : null}
-        {hedge && !fan ? <span className="faint">{t('對沖 {ms} ms', { ms: hedge })}</span> : null}
-        {fan ? <span className="faint" data-testid="edge-fanout">{quorum && quorum < fan ? t('扇出 {n}，等 {k}', { n: fan, k: quorum }) : t('扇出 {n}', { n: fan })}</span> : null}
+        {e && failed > 0.005 && <span>{t('Failed {p}%', { p: Math.round(failed * 100) })}</span>}
+        {timeout ? <span className="faint">{t('Timeout {ms} ms', { ms: timeout })}</span> : null}
+        {retries ? <span className="faint">{t('Retry {n}', { n: retries })}</span> : null}
+        {bulkhead ? <span className="faint">{t('bulkhead {n}', { n: bulkhead })}</span> : null}
+        {fallback ? <span className="faint">{t('fallback')}</span> : null}
+        {hedge && !fan ? <span className="faint">{t('hedge {ms} ms', { ms: hedge })}</span> : null}
+        {fan ? <span className="faint" data-testid="edge-fanout">{quorum && quorum < fan ? t('fan-out {n}, wait {k}', { n: fan, k: quorum }) : t('fan-out {n}', { n: fan })}</span> : null}
       </div>
     </div>
   );
@@ -211,7 +211,7 @@ export const FlowEdge = memo(function FlowEdge({ id, source, target, sourceX, so
           <div
             className={`nodrag nopan pointer-events-none absolute rounded px-1 text-[11px]${lab}`}
             style={{ ...labDelay, transform: `translate(-50%, 0) translate(${mid[0]}px, ${mid[1] + 4}px)`, color: 'var(--ink-3)', background: 'var(--bg)' }}
-            title={t('cache-aside：讀取先查快取，沒命中才查資料庫，再寫回快取')}
+            title={t('cache-aside: a read checks the cache first, queries the database on a miss, then writes back to the cache')}
             data-testid="aside-order"
           >
             {order}

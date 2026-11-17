@@ -59,41 +59,41 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
 
   return createPortal(
     <div className="sd-backdrop fixed inset-0 z-50 flex items-center justify-center p-6" data-closing={closing || undefined} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div ref={box} role="dialog" aria-modal="true" aria-label={t('貼上設計 JSON')} className="panel sd-dialog flex max-h-[92vh] w-[min(720px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="paste-design">
+      <div ref={box} role="dialog" aria-modal="true" aria-label={t('Paste design JSON')} className="panel sd-dialog flex max-h-[92vh] w-[min(720px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="paste-design">
         <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-3">
           <ClipboardPaste size={18} className="muted" />
-          <div className="text-[16px] font-semibold">{t('貼上設計 JSON')}</div>
-          <button className="btn ml-auto" onClick={close} aria-label={t('關閉')}>
+          <div className="text-[16px] font-semibold">{t('Paste design JSON')}</div>
+          <button className="btn ml-auto" onClick={close} aria-label={t('Close')}>
             <X size={16} />
           </button>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 text-[14px] leading-relaxed">
           <div className="space-y-2" data-testid="paste-design-step1">
-            <p>{t('1. 複製給 AI 的提示，貼到你用的 AI（ChatGPT、Claude 等），在最後寫要改什麼。提示裡有格式說明和目前的設計。')}</p>
+            <p>{t('1. Copy the prompt for an AI and paste it into the AI you use (ChatGPT, Claude…); at the end, write what to change. The prompt holds the format guide and the current design.')}</p>
             <div className="flex flex-wrap items-center gap-2">
               <button className="btn btn-primary" onClick={() => void copy('prompt')} data-testid="paste-design-prompt">
-                {copied === 'prompt' ? <Check size={14} /> : <Sparkles size={14} />} {copied === 'prompt' ? t('已複製') : t('複製給 AI 的提示')}
+                {copied === 'prompt' ? <Check size={14} /> : <Sparkles size={14} />} {copied === 'prompt' ? t('Copied') : t('Copy a prompt for an AI')}
               </button>
-              <button className="btn" onClick={() => void copy('design')} title={t('把畫布上的設計複製成 JSON，貼給 AI 修改')} data-testid="paste-design-copy">
-                {copied === 'design' ? <Check size={14} /> : <Copy size={14} />} {copied === 'design' ? t('已複製') : t('只複製設計 JSON')}
+              <button className="btn" onClick={() => void copy('design')} title={t('Copy the design on the canvas as JSON, to give to an AI to change')} data-testid="paste-design-copy">
+                {copied === 'design' ? <Check size={14} /> : <Copy size={14} />} {copied === 'design' ? t('Copied') : t('Copy only the design JSON')}
               </button>
-              <a className="btn" href={guideUrl()} target="_blank" rel="noreferrer" title={t('給 AI 讀的格式說明（英文）。可以直接把這個網址給 AI。')} data-testid="paste-design-guide">
-                <FileText size={14} /> {t('格式說明')}
+              <a className="btn" href={guideUrl()} target="_blank" rel="noreferrer" title={t('The format guide for AI models. You can give this address to an AI as it is.')} data-testid="paste-design-guide">
+                <FileText size={14} /> {t('Format guide')}
               </a>
-              <a className="btn" href={skillUrl()} download="loadsketch.zip" title={t('給 Claude Code 等 AI agent 用的技能：SKILL.md（步驟和格式）和 reference.md（每種元件的參數），放在 loadsketch 資料夾裡')} data-testid="paste-design-skill">
-                <Download size={14} /> {t('下載 skill（zip）')}
+              <a className="btn" href={skillUrl()} download="loadsketch.zip" title={t('A skill for AI agents such as Claude Code: SKILL.md (the steps and the format) and reference.md (the parameters of each component), in a loadsketch folder')} data-testid="paste-design-skill">
+                <Download size={14} /> {t('Download the skill (zip)')}
               </a>
             </div>
             <p className="faint text-[13px]" data-testid="paste-design-skill-hint">
-              {t('用 Claude Code 等 AI agent 的話：把 zip 解壓到 ~/.claude/skills/（會多一個 loadsketch 資料夾），之後直接請它改設計 JSON。')}
+              {t('With an AI agent such as Claude Code: unpack the zip into ~/.claude/skills/ (it adds a loadsketch folder), then ask it to change the design JSON.')}
             </p>
             {copied === 'no' && (
               <p className="text-[13px]" style={{ color: 'var(--bad-ink)' }} data-testid="paste-design-copy-failed">
-                {t('不能寫入剪貼簿。改用檔案選單的「存成 JSON」。')}
+                {t('Cannot write to the clipboard. Use "Save as JSON" in the file menu instead.')}
               </p>
             )}
           </div>
-          <p className="border-t border-[var(--line)] pt-3">{t('2. 把 AI 的回答（或別人給你的設計 JSON）貼到下面。先看它和畫布差在哪裡，按「換掉畫布」才會換。')}</p>
+          <p className="border-t border-[var(--line)] pt-3">{t('2. Paste the AI\'s answer (or a design JSON someone gave you) below. See how it differs from the canvas first; the canvas changes only when you click "Replace the canvas".')}</p>
           <textarea
             className="field block w-full resize-y font-mono text-[12.5px] leading-snug"
             // .field is a one-line control: this one is a box
@@ -103,13 +103,13 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
             placeholder={'{ "schema": "loadsketch/design@1", "name": "…", "nodes": [ … ], "edges": [ … ] }'}
             spellCheck={false}
             autoFocus
-            aria-label={t('設計 JSON')}
+            aria-label={t('Design JSON')}
             data-testid="paste-design-text"
           />
           <div aria-live="polite" data-testid="paste-design-result">
             {result && !result.ok && (
               <div data-testid="paste-design-problems">
-                <div className="mb-1 font-medium">{t('還不能用，要先改：')}</div>
+                <div className="mb-1 font-medium">{t('Not usable yet. Fix these first:')}</div>
                 <ul className="space-y-1">
                   {result.problems.map((p, i) => (
                     <li key={i} className="flex gap-1.5">
@@ -124,7 +124,7 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
               <div className="space-y-2">
                 <div data-testid="paste-design-diff">
                   <div className="mb-1 font-medium">
-                    {changes.length ? t('「{name}」和畫布有 {n} 處不同：', { name: result.design.name, n: changes.length }) : t('「{name}」和畫布上的設計一樣（位置和名稱不算）。', { name: result.design.name })}
+                    {changes.length ? t('"{name}" differs from the canvas in {n} places:', { name: result.design.name, n: changes.length }) : t('"{name}" is the same as the design on the canvas (positions and names do not count).', { name: result.design.name })}
                   </div>
                   {!!changes.length && (
                     <ul className="max-h-[220px] list-disc space-y-0.5 overflow-y-auto pl-5">
@@ -139,32 +139,32 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
                     {kept.restored > 0 && (
                       <p className="flex gap-1.5">
                         <Check size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--ok)' }} />
-                        <span>{t('貼上的 JSON 少了 {n} 個元件或線的匯入來源（source）：已經從畫布補回。', { n: kept.restored })}</span>
+                        <span>{t('The pasted JSON left out the import source (source) of {n} components or lines: put back from the canvas.', { n: kept.restored })}</span>
                       </p>
                     )}
                     {kept.edited > 0 && (
                       <p className="flex gap-1.5">
                         <Check size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--ok)' }} />
-                        <span>{t('有 {n} 個匯入的值改過了：來源改標成「使用者填」，和在設定面板改值一樣。', { n: kept.edited })}</span>
+                        <span>{t('{n} imported values were changed: their source now says "set by the user", as when you change a value in the settings panel.', { n: kept.edited })}</span>
                       </p>
                     )}
                     {kept.rewired > 0 && (
                       <p className="flex gap-1.5">
                         <TriangleAlert size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--warn)' }} />
-                        <span>{t('有 {n} 條線接到別的元件了：Terraform 的證據說的是原來的線，所以這幾條改標成「使用者畫的」。', { n: kept.rewired })}</span>
+                        <span>{t('{n} lines now join other components: the Terraform evidence was about the old lines, so these are now marked as drawn by the user.', { n: kept.rewired })}</span>
                       </p>
                     )}
                     {kept.dropped > 0 && (
                       <p className="flex gap-1.5">
                         <TriangleAlert size={14} className="mt-[3px] shrink-0" style={{ color: 'var(--warn)' }} />
-                        <span>{t('有 {n} 個元件換了種類，匯入時的來源不再適用：換掉後，它們就看不到值是從哪裡來的。', { n: kept.dropped })}</span>
+                        <span>{t('{n} components became another kind, so their import source no longer fits: after the replace, they no longer show where their values came from.', { n: kept.dropped })}</span>
                       </p>
                     )}
                   </div>
                 )}
                 {!!result.warnings.length && (
                   <div data-testid="paste-design-warnings">
-                    <div className="muted mb-1">{t('設計檢查（可以換，但要注意）：')}</div>
+                    <div className="muted mb-1">{t('Design check (you can replace, but note):')}</div>
                     <ul className="space-y-1">
                       {result.warnings.map((w, i) => (
                         <li key={i} className="flex gap-1.5">
@@ -180,12 +180,12 @@ export function PasteDesign({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--line)] px-4 py-3">
-          {dirty && result?.ok && <span className="faint mr-auto text-[13px]" data-testid="paste-design-unsaved">{t('畫布上的修改還沒存：換掉後拿不回來。')}</span>}
+          {dirty && result?.ok && <span className="faint mr-auto text-[13px]" data-testid="paste-design-unsaved">{t('The changes on the canvas are not saved: after replacing, they are gone.')}</span>}
           <button className="btn" onClick={close}>
-            {t('取消')}
+            {t('Cancel')}
           </button>
           <button className="btn btn-primary" onClick={apply} disabled={!ready} data-testid="paste-design-apply">
-            {t('換掉畫布')}
+            {t('Replace the canvas')}
           </button>
         </div>
       </div>

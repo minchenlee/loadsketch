@@ -43,7 +43,7 @@ export function reachesWork(run: SimulateResult, work: Set<string>): boolean {
   return [...work].some((id) => (run.sim.nodes[id]?.arrivals ?? 0) > 0);
 }
 
-export const NO_WORK = () => t('流量到不了任何處理請求的元件（伺服器、資料庫、worker 等）：沒有元件在做事，所以找不到上限。');
+export const NO_WORK = () => t('The traffic reaches no component that handles requests (a server, a database, a worker and so on). No component does any work, so there is no limit to find.');
 
 /** No step failed or stopped the search, and in no step did a component that does work get a request:
  *  every step up to the highest held only because nothing did any work. Said instead of a number. A
@@ -115,19 +115,19 @@ export function finalMark(r: LimitResult, steps: LimitState['steps'], noWork: bo
 /** The banner text on the canvas for a limit step or its final mark (roadmap-next M24). */
 export function limitBanner(mark: LimitMark, name: (id: string) => string): string {
   const d = mark.done;
-  if (!d) return t('現在這一步：{rps}/秒', { rps: mark.rps });
+  if (!d) return t('This step: {rps}/s', { rps: mark.rps });
   if (d.firstFailRps !== undefined) {
     const who = d.node ? name(d.node) : '';
     return d.holdsRps !== undefined
-      ? t('撐到約 {rps}/秒，最先倒的是 {name}', { rps: d.holdsRps, name: who })
-      : t('{rps}/秒就撐不住，最先倒的是 {name}', { rps: d.firstFailRps, name: who });
+      ? t('Holds up to about {rps}/s; {name} goes first', { rps: d.holdsRps, name: who })
+      : t('Fails at {rps}/s; {name} goes first', { rps: d.firstFailRps, name: who });
   }
   if (d.stopped) {
     return d.holdsRps !== undefined
-      ? t('到 {holds}/秒還撐得住，在 {stop}/秒停下', { holds: d.holdsRps, stop: d.stopped.rps })
-      : t('在 {rps}/秒停下（沒有結論）', { rps: d.stopped.rps });
+      ? t('Holds up to {holds}/s; stopped at {stop}/s', { holds: d.holdsRps, stop: d.stopped.rps })
+      : t('Stopped at {rps}/s (no conclusion)', { rps: d.stopped.rps });
   }
-  return t('到 {rps}/秒都撐得住（這不是上限）', { rps: d.holdsRps ?? mark.rps });
+  return t('Holds up to {rps}/s (this is not the limit)', { rps: d.holdsRps ?? mark.rps });
 }
 
 /** The search's conclusion on the canvas page (roadmap-next M24): what limitConclusion() says for the
@@ -136,13 +136,13 @@ export function limitBanner(mark: LimitMark, name: (id: string) => string): stri
 export function limitLines(l: LimitResult, name: (id: string) => string): string[] {
   const L: string[] = [];
   const node = l.bottleneck ? name(l.bottleneck) : '?';
-  if (l.firstFailRps !== undefined && l.holdsRps !== undefined) L.push(t('在這些假設下，大約撐到 {holds}/秒；{fail}/秒撐不住，最先壞的是 {node}。', { holds: l.holdsRps, fail: l.firstFailRps, node }));
-  else if (l.firstFailRps !== undefined) L.push(t('在這些假設下，{fail}/秒就撐不住（最先壞的是 {node}）。', { fail: l.firstFailRps, node }));
-  else if (!l.stopped) L.push(t('在這些假設下，到 {rps}/秒都撐得住，沒有找到撐不住的點。', { rps: Math.max(...l.steps.map((s) => s.rps)) }));
+  if (l.firstFailRps !== undefined && l.holdsRps !== undefined) L.push(t('Under these assumptions it holds up to about {holds}/s; at {fail}/s it does not, and {node} goes first.', { holds: l.holdsRps, fail: l.firstFailRps, node }));
+  else if (l.firstFailRps !== undefined) L.push(t('Under these assumptions it does not hold even at {fail}/s ({node} goes first).', { fail: l.firstFailRps, node }));
+  else if (!l.stopped) L.push(t('Under these assumptions it holds up to {rps}/s; no point where it does not hold was found.', { rps: Math.max(...l.steps.map((s) => s.rps)) }));
   if (l.nonMonotonic) {
-    const passes = l.steps.filter((s) => s.verdict === 'pass' && s.rps > l.firstFailRps!).map((s) => t('{rps}/秒', { rps: s.rps }));
-    L.push(t('結果不是單調的：比 {fail}/秒高的 {passes}又撐得住；報的是第一個撐不住的點。', { fail: l.firstFailRps!, passes: passes.join(t('、')) }));
+    const passes = l.steps.filter((s) => s.verdict === 'pass' && s.rps > l.firstFailRps!).map((s) => t('{rps}/s', { rps: s.rps }));
+    L.push(t('The results are not monotonic: at {passes}, above {fail}/s, it holds again; the first point where it does not hold is reported.', { fail: l.firstFailRps!, passes: passes.join(t(', @@list')) }));
   }
-  if (l.stopped) L.push(t('在 {rps}/秒停下：{why}', { rps: l.stopped.rps, why: importMessage(l.stopped.id, {}) }));
+  if (l.stopped) L.push(t('Stopped at {rps}/s: {why}', { rps: l.stopped.rps, why: importMessage(l.stopped.id, {}) }));
   return L;
 }

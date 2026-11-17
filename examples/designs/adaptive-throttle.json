@@ -1,20 +1,20 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "自適應限流（呼叫端自己擋）",
-  "description": "和「重試風暴」一樣，只多了一個設定：每條線都開自適應限流（Google SRE 的 adaptive throttling，K = 2）。呼叫端記住最近 10 秒送出幾次、成功幾次；成功太少時，自己在本地擋掉一部分呼叫，不送出去。突波過後重試風暴停下來，系統約 33 秒後恢復。比「重試預算」（約 3 秒）慢：窗口裡記著很多失敗，要累積夠多成功才完全放行。試試把 K 改成 1.5（擋得更早）或 3。",
+  "name": "Adaptive throttling (the caller rejects)",
+  "description": "Same as \"retry storm\", with one more setting: every edge uses adaptive throttling (Google SRE, K = 2). The caller counts calls sent and successes over the last 10 s; when too few succeed, it rejects some calls locally and does not send them. After the spike the retry storm stops, and the system recovers after about 33 s. That is slower than the retry budget (about 3 s): the window still holds many failures, and enough successes must build up before all calls are let through. Try K = 1.5 (rejects earlier) or 3.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [300, 200],
       "params": { "policy": "least_conn" }
     },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [590, 200],
       "params": { "instances": 3, "concurrency": 4, "serviceMs": { "mean": 6, "cv": 1 } }
     },

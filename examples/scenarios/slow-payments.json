@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "付款服務在第 20 秒變慢 20 倍",
+  "name": "Payment service slows down 20× at second 20",
   "seed": 1,
   "durationS": 60,
   "traffic": { "rps": 400, "readRatio": 0.5 },

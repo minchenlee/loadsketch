@@ -1,14 +1,14 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "Serverless 函式直連資料庫",
-  "description": "API Gateway 後面接一個函式（像 AWS Lambda），函式直接查 Postgres。突波時函式開很多新環境（冷啟動），每個環境各占一條資料庫連線，資料庫連線用完就開始排隊。試試看：把函式的併發上限調低（保留併發），或加讀副本、提高資料庫連線數，再比較延遲。",
+  "name": "Serverless function straight to the database",
+  "description": "An API Gateway in front of a function (like AWS Lambda) that queries Postgres directly. In a spike the function starts many new environments (cold starts); each one holds a database connection, and when the connections run out the queries queue. Try it: lower the function's concurrency limit (reserved concurrency), or add read replicas or more database connections, and compare the latency.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     { "id": "gw", "kind": "api_gateway", "label": "API Gateway", "pos": [270, 200] },
     {
       "id": "fn",
       "kind": "function",
-      "label": "訂單函式",
+      "label": "Orders function",
       "pos": [540, 200],
       "params": {
         "maxConcurrency": 1000,

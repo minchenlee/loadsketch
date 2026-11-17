@@ -1,251 +1,124 @@
 {
   "schema": "loadsketch/brief@1",
   "id": "brief-notify",
-  "title": "需求：簡訊通知",
-  "text": "2 人團隊，三週。其他團隊呼叫你的 API，你負責把簡訊送出去。簡訊由外部供應商發送，已經在畫布上。",
+  "title": "Brief: SMS notifications",
+  "text": "A team of 2, three weeks. Other teams call your API, and you send the text message. An outside provider sends the messages; it is on the canvas already.",
   "functional": [
-    "其他服務能呼叫 API 送出一則簡訊",
-    "每一則都要真的送到簡訊供應商"
+    "Other services can call the API to send one text message",
+    "Every message must reach the provider"
   ],
   "load": [
-    "每秒 500 則，全部是寫入",
-    "呼叫你的服務只等得了 100 ms：API 要很快回應"
+    "500 messages a second, all writes",
+    "Your callers wait 100 ms at most: the API must answer fast"
   ],
   "given": [
-    "簡訊供應商送一則平均 200 ms，這個改不了",
-    "你的 API 處理一個請求平均 5 ms",
-    "背景工作處理一則 2 ms，再加上等供應商的時間"
+    "The provider takes 200 ms on average for one message, and you cannot change that",
+    "Your API takes 5 ms on average for one request",
+    "A worker takes 2 ms for one message, plus the wait for the provider"
   ],
   "outOfScope": [
-    "簡訊內容和範本",
-    "供應商出錯時的重送",
-    "送達回報"
+    "Message text and templates",
+    "Sending again when the provider fails",
+    "Delivery reports"
   ],
   "scenario": {
     "schema": "loadsketch/scenario@1",
-    "name": "需求：簡訊通知",
+    "name": "Brief: SMS notifications",
     "seed": 1,
     "durationS": 60,
     "warmupS": 5,
-    "traffic": {
-      "rps": 500,
-      "readRatio": 0
-    }
+    "traffic": { "rps": 500, "readRatio": 0 }
   },
-  "limits": {
-    "maxErrorRate": 0.01,
-    "maxP99Ms": 100,
-    "budgetPerMonth": 2600,
-    "maxPoints": 6
-  },
+  "limits": { "maxErrorRate": 0.01, "maxP99Ms": 100, "budgetPerMonth": 2600, "maxPoints": 6 },
   "start": {
     "schema": "loadsketch/design@1",
-    "name": "需求：簡訊通知",
+    "name": "Brief: SMS notifications",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
       {
         "id": "sms",
         "kind": "service",
-        "label": "簡訊供應商（外部）",
-        "pos": [
-          0,
-          380
-        ],
+        "label": "SMS provider (outside)",
+        "pos": [0, 380],
         "params": {
           "instances": 1,
           "concurrency": 400,
-          "serviceMs": {
-            "mean": 200,
-            "cv": 0.5
-          },
+          "serviceMs": { "mean": 200, "cv": 0.5 },
           "queueLimit": 2000
         }
       }
     ],
     "edges": []
   },
-  "fixed": [
-    "sms"
-  ],
+  "fixed": ["sms"],
   "needs": [
-    {
-      "kind": "reaches-node",
-      "node": "sms",
-      "text": "簡訊有送到供應商"
-    },
-    {
-      "kind": "finished"
-    },
-    {
-      "kind": "not-degraded"
-    }
+    { "kind": "reaches-node", "node": "sms", "text": "Messages reach the provider" },
+    { "kind": "finished" },
+    { "kind": "not-degraded" }
   ],
-  "floors": {
-    "worker": {
-      "serviceMs": 2
-    }
-  },
-  "hint": "API 直接呼叫供應商，每個請求就要等 200 ms，不可能在 100 ms 內回應。把「收下請求」和「送出簡訊」分開：API 把請求放進佇列就回應，背景工作再去呼叫供應商。每秒 500 則 × 200 ms = 同時有 100 則在送，背景工作的同時處理數加起來要超過 100。",
+  "floors": { "worker": { "serviceMs": 2 } },
+  "hint": "If the API calls the provider directly, each request waits 200 ms, so it cannot answer in 100 ms. Separate \"accept the request\" from \"send the message\": the API puts the request on a queue and answers, and workers call the provider. 500 a second × 200 ms = 100 messages in flight at a time, so the workers' concurrency must add up to more than 100.",
   "reference": {
     "schema": "loadsketch/design@1",
-    "name": "需求：簡訊通知",
+    "name": "Brief: SMS notifications",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
-      {
-        "id": "lb",
-        "kind": "load_balancer",
-        "label": "負載平衡器",
-        "pos": [
-          200,
-          200
-        ]
-      },
-      {
-        "id": "api",
-        "kind": "service",
-        "label": "通知 API",
-        "pos": [
-          400,
-          200
-        ]
-      },
-      {
-        "id": "outbox",
-        "kind": "queue",
-        "label": "待送佇列",
-        "pos": [
-          600,
-          200
-        ]
-      },
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
+      { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [200, 200] },
+      { "id": "api", "kind": "service", "label": "Notification API", "pos": [400, 200] },
+      { "id": "outbox", "kind": "queue", "label": "Outgoing queue", "pos": [600, 200] },
       {
         "id": "sender",
         "kind": "worker",
-        "label": "送簡訊的背景工作",
-        "pos": [
-          810,
-          200
-        ],
-        "params": {
-          "instances": 4,
-          "concurrency": 32,
-          "serviceMs": {
-            "mean": 2,
-            "cv": 1
-          }
-        }
+        "label": "SMS sender (worker)",
+        "pos": [810, 200],
+        "params": { "instances": 4, "concurrency": 32, "serviceMs": { "mean": 2, "cv": 1 } }
       },
       {
         "id": "sms",
         "kind": "service",
-        "label": "簡訊供應商（外部）",
-        "pos": [
-          1080,
-          200
-        ],
+        "label": "SMS provider (outside)",
+        "pos": [1080, 200],
         "params": {
           "instances": 1,
           "concurrency": 400,
-          "serviceMs": {
-            "mean": 200,
-            "cv": 0.5
-          },
+          "serviceMs": { "mean": 200, "cv": 0.5 },
           "queueLimit": 2000
         }
       }
     ],
     "edges": [
-      {
-        "from": "users",
-        "to": "lb"
-      },
-      {
-        "from": "lb",
-        "to": "api"
-      },
-      {
-        "from": "api",
-        "to": "outbox"
-      },
-      {
-        "from": "outbox",
-        "to": "sender"
-      },
-      {
-        "from": "sender",
-        "to": "sms"
-      }
+      { "from": "users", "to": "lb" },
+      { "from": "lb", "to": "api" },
+      { "from": "api", "to": "outbox" },
+      { "from": "outbox", "to": "sender" },
+      { "from": "sender", "to": "sms" }
     ]
   },
   "naive": {
     "schema": "loadsketch/design@1",
-    "name": "需求：簡訊通知",
+    "name": "Brief: SMS notifications",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
       {
         "id": "api",
         "kind": "service",
-        "label": "通知 API",
-        "pos": [
-          540,
-          200
-        ],
-        "params": {
-          "instances": 4
-        }
+        "label": "Notification API",
+        "pos": [540, 200],
+        "params": { "instances": 4 }
       },
       {
         "id": "sms",
         "kind": "service",
-        "label": "簡訊供應商（外部）",
-        "pos": [
-          1080,
-          200
-        ],
+        "label": "SMS provider (outside)",
+        "pos": [1080, 200],
         "params": {
           "instances": 1,
           "concurrency": 400,
-          "serviceMs": {
-            "mean": 200,
-            "cv": 0.5
-          },
+          "serviceMs": { "mean": 200, "cv": 0.5 },
           "queueLimit": 2000
         }
       }
     ],
-    "edges": [
-      {
-        "from": "users",
-        "to": "api"
-      },
-      {
-        "from": "api",
-        "to": "sms"
-      }
-    ]
+    "edges": [{ "from": "users", "to": "api" }, { "from": "api", "to": "sms" }]
   }
 }

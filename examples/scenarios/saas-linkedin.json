@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "負載測試：第 20–50 秒流量 1.25 倍，同時一台儲存節點變慢 10 倍",
+  "name": "Load test: traffic 1.25 times in seconds 20–50, and one storage node 10 times slower",
   "seed": 1,
   "durationS": 80,
   "warmupS": 10,

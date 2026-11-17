@@ -1,20 +1,20 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "重試風暴（metastable failure）",
-  "description": "三層式網站，每一跳都設逾時 150 ms、重試 3 次。第 20–30 秒流量變 3 倍。突波結束後流量回到正常，但系統再也沒有恢復：每個請求試 4 次，API 一直收到約 4 倍流量，全部逾時。試試把連線的「重試預算」設成 0.1，或把重試改成 0。",
+  "name": "Retry storm (metastable failure)",
+  "description": "A three-tier site sets a 150 ms timeout and 3 retries on every edge. Traffic goes 3× from second 20 to 30. After the spike traffic returns to normal, but the system never recovers: each request tries 4 times, the API keeps getting about 4× traffic, and everything times out. Try setting the edge retry budget to 0.1, or set retries to 0.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [300, 200],
       "params": { "policy": "least_conn" }
     },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [590, 200],
       "params": { "instances": 3, "concurrency": 4, "serviceMs": { "mean": 6, "cv": 1 } }
     },

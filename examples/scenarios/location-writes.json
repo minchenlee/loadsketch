@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "尖峰時段：第 10 秒起 30 秒內流量爬到 2.5 倍",
+  "name": "Peak hours: traffic climbs to 2.5× over 30 s starting at 10 s",
   "seed": 1,
   "durationS": 60,
   "traffic": { "rps": 1500, "readRatio": 0.2 },

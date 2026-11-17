@@ -125,7 +125,7 @@ function Zoom({ src, title, onClose }: { src: string; title: string; onClose: ()
   return createPortal(
     <div ref={box} className="site-zoom" role="dialog" aria-modal aria-label={title} onClick={onClose} data-testid="site-zoom">
       <img src={src} alt={title} />
-      <button className="btn site-round site-zoom-close" aria-label={t('關閉')} autoFocus>
+      <button className="btn site-round site-zoom-close" aria-label={t('Close')} autoFocus>
         <X size={16} />
       </button>
     </div>,
@@ -170,7 +170,7 @@ function Feature({ title, children, open, flip, live }: { title: string; childre
         <p className="site-lead mt-4">{children}</p>
         {open && (
           <a className="site-link mt-5" href={`${APP}?example=${open}`}>
-            {t('打開這個範例')}
+            {t('Open this example')}
             <ArrowRight size={16} />
           </a>
         )}
@@ -186,12 +186,12 @@ const MEDIA = import.meta.glob<string>('./media/*.webp', { eager: true, query: '
 const shot = (id: string, lang: Lang, theme: Theme) => MEDIA[`./media/${id}-${lang === 'en' ? 'en' : 'zh'}-${theme}.webp`];
 
 const SLIDES = [
-  { id: 'oncall', title: tx('值班練習'), text: tx('有東西壞了。你只看得到失敗率和延遲。找出來，修好它。') },
-  { id: 'brief', title: tx('從需求開始設計'), text: tx('只有需求和幾乎空白的畫布。自己組，跑一次，看撐不撐得住。') },
-  { id: 'why', title: tx('為什麼會這樣'), text: tx('每次跑完，告訴你發生了什麼。一步一步，照時間說。') },
-  { id: 'constraints', title: tx('預算有限的題目'), text: tx('失敗率和延遲要達標，預算不能超過。越省，分數越高。') },
-  { id: 'terraform', title: tx('匯入 Terraform'), text: tx('plan JSON 轉成設計。哪裡容量不夠，按一下就跑。') },
-  { id: 'examples', title: tx('47 個範例'), text: tx('快取擊穿、腦裂、壞設定推送。每一個都能跑，都能改。') },
+  { id: 'oncall', title: tx('On-call practice'), text: tx('Something is broken. You see only the error rate and the latency. Find it. Fix it.') },
+  { id: 'brief', title: tx('Design from requirements'), text: tx('Only the requirements and an almost empty canvas. Build it, run it, and see if it holds.') },
+  { id: 'why', title: tx('Why it happened'), text: tx('After every run, it tells you what happened. Step by step, in time order.') },
+  { id: 'constraints', title: tx('Design on a budget'), text: tx('Hit the error-rate and latency targets. Stay in budget. Spend less, score more.') },
+  { id: 'terraform', title: tx('Import Terraform'), text: tx('Turn plan JSON into a design. Run any capacity finding in one click.') },
+  { id: 'examples', title: tx('47 examples'), text: tx('Cache stampede. Split brain. A bad config push. Run them. Change them.') },
 ];
 
 function Carousel({ lang, theme }: { lang: Lang; theme: Theme }) {
@@ -236,7 +236,7 @@ function Carousel({ lang, theme }: { lang: Lang; theme: Theme }) {
         tabIndex={0}
         role="group"
         aria-roledescription="carousel"
-        aria-label={t('功能')}
+        aria-label={t('Features')}
         onKeyDown={(e) => {
           if (e.key === 'ArrowRight') go(at + 1);
           if (e.key === 'ArrowLeft') go(at - 1);
@@ -250,7 +250,7 @@ function Carousel({ lang, theme }: { lang: Lang; theme: Theme }) {
               <i />
               <span className="flex-1" />
               {i === at && (
-                <button className="site-bar-zoom" aria-label={t('放大')} title={t('放大')}>
+                <button className="site-bar-zoom" aria-label={t('Enlarge')} title={t('Enlarge')}>
                   <Maximize2 size={14} />
                 </button>
               )}
@@ -269,7 +269,7 @@ function Carousel({ lang, theme }: { lang: Lang; theme: Theme }) {
           <p className="site-lead mx-auto mt-2 max-w-[680px]">{t(s.text)}</p>
         </div>
         <div className="mt-5 flex items-center justify-center gap-3">
-          <button className="btn site-round" onClick={() => go(at - 1)} disabled={at === 0} aria-label={t('上一個')}>
+          <button className="btn site-round" onClick={() => go(at - 1)} disabled={at === 0} aria-label={t('Previous')}>
             <ArrowLeft size={16} />
           </button>
           <div className="flex gap-2.5">
@@ -277,7 +277,7 @@ function Carousel({ lang, theme }: { lang: Lang; theme: Theme }) {
               <button key={sl.id} className="site-dot" data-on={i === at || undefined} onClick={() => go(i)} aria-label={t(sl.title)} aria-current={i === at || undefined} />
             ))}
           </div>
-          <button className="btn site-round" onClick={() => go(at + 1)} disabled={at === SLIDES.length - 1} aria-label={t('下一個')}>
+          <button className="btn site-round" onClick={() => go(at + 1)} disabled={at === SLIDES.length - 1} aria-label={t('Next')}>
             <ArrowRight size={16} />
           </button>
         </div>
@@ -294,7 +294,7 @@ const EXAMPLES = [
 /** Two rows of example names that drift past; each opens that example. */
 function Marquee() {
   return (
-    <div className="site-marquee mt-12 sm:mt-14" aria-label={t('範例')}>
+    <div className="site-marquee mt-12 sm:mt-14" aria-label={t('Examples')}>
       {EXAMPLES.map((row, i) => (
         <div key={i} className="site-marquee-row" data-back={i === 1 || undefined}>
           {/* the row twice, so the loop has no seam; the copy is hidden from screen readers */}
@@ -315,9 +315,9 @@ function Marquee() {
 
 /** The ways the footer can break, in turn. Each has a name and the story of what happened (as the simulator tells a run). */
 const FAULTS = [
-  { id: 'drop', name: tx('連結掉線'), story: [tx('分隔線撐不住，鬆了一邊'), tx('三個連結一個接一個掉下去')] },
-  { id: 'storm', name: tx('重試風暴'), story: [tx('連結沒回應，開始重試'), tx('每次重試又多一份流量，越滾越大')] },
-  { id: 'partition', name: tx('網路分區'), story: [tx('左右兩邊連不上對方'), tx('兩邊都以為自己是對的')] },
+  { id: 'drop', name: tx('Links dropped'), story: [tx('The rule gave way at one end'), tx('Three links fell, one after another')] },
+  { id: 'storm', name: tx('Retry storm'), story: [tx('The links got no answer and tried again'), tx('Every retry added more load. It kept growing')] },
+  { id: 'partition', name: tx('Network partition'), story: [tx('The left side and the right side lost each other'), tx('Each side thinks it is the right one')] },
 ] as const;
 /** When each line of the story shows, in seconds after the break. */
 const STORY_AT = [0.4, 1.2];
@@ -381,16 +381,16 @@ function Footer() {
   const W = 96, H = 18;
   const line = hist.map((v, i) => `${i ? 'L' : 'M'}${((i / (SAMPLES - 1)) * W).toFixed(1)} ${v ? 3 : H - 3}`).join(' ');
   const log: [number, string][] = fault
-    ? [[0, t('有人按了「弄壞它」')], ...fault.story.map((x, i): [number, string] => [STORY_AT[i], t(x)]), [UNFIXED_AT, t('還沒有人來修')]]
+    ? [[0, t('Someone pressed “Break it”')], ...fault.story.map((x, i): [number, string] => [STORY_AT[i], t(x)]), [UNFIXED_AT, t('Nobody has come to fix it yet')]]
     : [];
   const seen = fixedS ?? downS;
   return (
     <footer className="site-wrap site-foot mt-20 sm:mt-32" data-broken={broken || undefined} data-fault={broken ? fault?.id : undefined} data-testid="site-footer">
       <div className="site-foot-status" role="status">
         <span className="site-foot-dot" aria-hidden />
-        <span className="font-medium">{broken && fault ? t('頁尾壞了：{fault}', { fault: t(fault.name) }) : t('頁尾運作正常')}</span>
+        <span className="font-medium">{broken && fault ? t('The footer is down: {fault}', { fault: t(fault.name) }) : t('The footer is up')}</span>
         <span className="faint num" data-testid="site-footer-availability">
-          {t('可用性 {p}%', { p: availability.toFixed(2) })}
+          {t('Availability {p}%', { p: availability.toFixed(2) })}
         </span>
         {count > 0 && (
           <svg className="site-foot-chart" width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden>
@@ -400,21 +400,21 @@ function Footer() {
         <span className="flex-1" />
         <button className="btn" onClick={toggle} data-testid="site-footer-break">
           {broken ? <Wrench size={14} /> : <Zap size={14} />}
-          {broken ? t('修好它') : count ? t('再弄壞一次') : t('弄壞它')}
+          {broken ? t('Fix it') : count ? t('Break it again') : t('Break it')}
         </button>
       </div>
       <div className="site-foot-row">
         <span {...part(-2, 10, -1)} className="site-foot-part faint">
-          {t('MIT 授權。範例是簡化的模型，不是任何公司真正的架構。')}
+          {t('MIT license. The examples are simplified models, not any company\'s real architecture.')}
         </span>
         <span className="flex-1" />
         {link('GitHub', REPO, 7, 18)}
-        {link(t('模型怎麼算'), `${REPO}/blob/main/docs/model.md`, -11, 34)}
-        {link(t('參與貢獻'), `${REPO}/blob/main/CONTRIBUTING.md`, 16, 24)}
+        {link(t('How the model works'), `${REPO}/blob/main/docs/model.md`, -11, 34)}
+        {link(t('Contribute'), `${REPO}/blob/main/CONTRIBUTING.md`, 16, 24)}
       </div>
       {fault && (
         <div className="site-foot-log" data-testid="site-footer-log">
-          <div className="faint">{t('事故 #{n}：{fault}', { n: count, fault: t(fault.name) })}</div>
+          <div className="faint">{t('Incident #{n}: {fault}', { n: count, fault: t(fault.name) })}</div>
           {log
             .filter(([at]) => at <= seen)
             .map(([at, text]) => (
@@ -426,7 +426,7 @@ function Footer() {
           {fixedS !== null && (
             <div className="site-foot-line" data-ok>
               <span className="faint num">{fixedS.toFixed(1)}s</span>
-              {t('修好了。停機 {s} 秒。', { s: fixedS.toFixed(1) })}
+              {t('Fixed. Down for {s} s.', { s: fixedS.toFixed(1) })}
             </div>
           )}
         </div>
@@ -472,11 +472,11 @@ function Site() {
           <img src={logoWhite} alt="" width={26} height={26} className="hidden shrink-0 dark:block" />
           <span className="text-[16px] font-semibold">loadsketch</span>
           <span className="flex-1" />
-          <button className="btn" onClick={flipLang} aria-label={t('語言')} title={t('語言')} data-testid="site-lang">
+          <button className="btn" onClick={flipLang} aria-label={t('Language')} title={t('Language')} data-testid="site-lang">
             <Languages size={16} />
             <span className="hidden sm:inline">{lang === 'en' ? '中文' : 'English'}</span>
           </button>
-          <button className="btn" onClick={flipTheme} aria-label={t('深色／淺色')} title={t('深色／淺色')} data-testid="site-theme">
+          <button className="btn" onClick={flipTheme} aria-label={t('Dark / light')} title={t('Dark / light')} data-testid="site-theme">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           <a className="btn site-wide" href={REPO}>
@@ -484,7 +484,7 @@ function Site() {
             GitHub
           </a>
           <a className="btn btn-primary" href={APP} data-testid="site-open">
-            {t('打開模擬器')}
+            {t('Open the simulator')}
           </a>
         </nav>
       </div>
@@ -492,56 +492,56 @@ function Site() {
       <header className="site-wrap mt-12 text-center sm:mt-24">
         {/* one line per sentence; each line comes in after the one before */}
         <h1 className="site-h1" key={lang}>
-          <span className="site-line">{t('畫出系統')}</span>{' '}
-          <span className="site-line">{t('灌流量')}</span>{' '}
+          <span className="site-line">{t('Sketch a system.')}</span>{' '}
+          <span className="site-line">{t('Send traffic.')}</span>{' '}
           <span className="site-line">
-            {t('看哪裡')}
-            <em>{t('先壞')}</em>
+            {t('See what ')}
+            <em>{t('breaks first.')}</em>
           </span>
         </h1>
-        <p className="site-lead site-rise mx-auto mt-7 max-w-[560px]">{t('系統設計模擬器。每個請求都真的走過每個元件。')}</p>
+        <p className="site-lead site-rise mx-auto mt-7 max-w-[560px]">{t('A system design simulator. Every request runs for real.')}</p>
         <div className="site-rise mt-8 flex flex-wrap justify-center gap-2.5" style={{ animationDelay: '520ms' }}>
           <a className="btn btn-primary site-cta" href={APP}>
-            {t('打開模擬器')}
+            {t('Open the simulator')}
             <ArrowRight size={18} />
           </a>
           <a className="btn site-cta" href={REPO}>
             <Code size={18} />
-            {t('看原始碼')}
+            {t('View the source')}
           </a>
         </div>
       </header>
 
       <div className="site-wrap site-wrap-wide site-rise mt-10 sm:mt-14" style={{ animationDelay: '640ms' }}>
         <Stage>
-          <Live {...live} height={640} open="three-tier" query="example=three-tier&autorun=1&loop=1&panels=bottom" title={t('三層式架構遇到流量突波')} />
+          <Live {...live} height={640} open="three-tier" query="example=three-tier&autorun=1&loop=1&panels=bottom" title={t('A three-tier design in a traffic spike')} />
         </Stage>
       </div>
 
       <Feature
-        title={t('看得見每一個請求')}
+        title={t('See every request.')}
         open="async-queue"
-        live={<Live {...live} height={420} open="async-queue" query="example=async-queue&speed=0.1&autorun=1&loop=1&bar=0" title={t('慢動作：單一請求走過整條路徑')} />}
+        live={<Live {...live} height={420} open="async-queue" query="example=async-queue&speed=0.1&autorun=1&loop=1&bar=0" title={t('Slow motion: single requests go along the whole path')} />}
       >
-        {t('放慢到 0.1 倍。藍是讀，橘是寫，紅是失敗。')}
+        {t('Slow to 0.1× speed. Blue reads. Orange writes. Red fails.')}
       </Feature>
 
       <Feature
         flip
-        title={t('流量退了，系統沒回來')}
+        title={t('Spike ends. Outage stays.')}
         open="retry-storm"
-        live={<Live {...live} height={620} open="retry-storm" drawer="metrics" query="example=retry-storm&speed=3&autorun=1&loop=1&panels=bottom" title={t('重試風暴')} />}
+        live={<Live {...live} height={620} open="retry-storm" drawer="metrics" query="example=retry-storm&speed=3&autorun=1&loop=1&panels=bottom" title={t('Retry storm')} />}
       >
-        {t('每一層都在重試，流量越滾越大。加上重試預算，幾秒就恢復。')}
+        {t('Every layer retries and multiplies the load. Add a retry budget. It recovers in seconds.')}
       </Feature>
 
       <Carousel {...live} />
 
       <Marquee />
-      <p className="site-wrap muted mt-8 text-center text-[16px]">{t('47 個範例，16 種元件。每個參數都能調。')}</p>
+      <p className="site-wrap muted mt-8 text-center text-[16px]">{t('47 examples. 16 kinds of component. Every parameter is yours to change.')}</p>
 
       <Feature
-        title={t('命令列，同一個引擎')}
+        title={t('The CLI. The same engine.')}
         live={
           <div className="site-window site-term">
             <WindowBar />
@@ -553,15 +553,15 @@ function Site() {
           </div>
         }
       >
-        {t('設計就是一個 JSON 檔。人能讀，AI agent 也能寫。')}
+        {t('A design is one JSON file. People can read it. AI agents can write it.')}
       </Feature>
 
       <section className="site-wrap mt-24 text-center sm:mt-36">
         <Reveal>
-          <h2 className="site-h1 site-h1-end">{t('去弄壞點什麼')}</h2>
+          <h2 className="site-h1 site-h1-end">{t('Go break something.')}</h2>
           <div className="mt-9 flex justify-center">
             <a className="btn btn-primary site-cta" href={APP}>
-              {t('打開模擬器')}
+              {t('Open the simulator')}
               <ArrowRight size={18} />
             </a>
           </div>

@@ -28,18 +28,18 @@ export function ImportChecks({ onRun }: { onRun?: () => void }) {
   const { findings, file } = imported;
   return (
     <div data-testid="import-checks">
-      <div className="font-semibold">{t('匯入檢查')}</div>
+      <div className="font-semibold">{t('Import checks')}</div>
       <p className="faint mt-1 text-[13px] leading-relaxed">
-        {t('{file} 匯入時的檢查。之後在畫布上改的值不會重新檢查；要重新檢查，用 CLI 加答案檔再匯入一次。', { file })}
+        {t('The checks made when {file} was imported. Values changed later on the canvas are not checked again; to check again, import once more with the CLI and an answer file.', { file })}
       </p>
-      {!findings.length && <p className="muted mt-3 text-[14px]">{t('沒有發現。')}</p>}
+      {!findings.length && <p className="muted mt-3 text-[14px]">{t('No findings.')}</p>}
       {findings.map((f, i) => (
         <div key={i} className="card mt-3 px-3 py-2.5 text-[14px] leading-relaxed" data-testid="import-finding" data-check={f.check} data-certainty={f.certainty}>
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="sd-pill" style={{ '--pill': SEVERITY_COLOR[f.severity] } as React.CSSProperties}>{t(SEVERITY[f.severity])}</span>
             <span className="faint text-[13px]">{f.check}</span>
             <span className="faint text-[13px]">· {t(CERTAINTY[f.certainty])}</span>
-            <button className="ml-auto text-[13px] hover:underline" onClick={() => focus({ type: 'node', id: f.node })} title={t('在畫布上選取這個元件')}>
+            <button className="ml-auto text-[13px] hover:underline" onClick={() => focus({ type: 'node', id: f.node })} title={t('Select this component on the canvas')}>
               <code>{f.node}</code>
             </button>
           </div>
@@ -51,7 +51,7 @@ export function ImportChecks({ onRun }: { onRun?: () => void }) {
               <div className="mt-2 border-t border-[var(--line)] pt-2">
                 <button className="inline-flex items-center gap-1 text-[13px] font-medium hover:underline" style={{ color: 'var(--accent)' }} onClick={() => simulate(sim.scenario)} data-testid="import-finding-simulate">
                   <Play size={12} aria-hidden />
-                  {t('模擬這個情況')}
+                  {t('Simulate this')}
                 </button>
                 <div className="faint mt-0.5 text-[13px] leading-relaxed">{importMessage(`sim.${sim.note}`, sim.args)}</div>
               </div>

@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "部署時第 30 秒重啟 3 台 Memcached，回來是冷的",
+  "name": "A deploy at second 30 restarts 3 Memcached servers, which come back cold",
   "seed": 1,
   "durationS": 90,
   "warmupS": 20,

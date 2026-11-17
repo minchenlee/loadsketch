@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "讀取 99%：20 萬個短網址，點擊很集中",
+  "name": "Reads 99%: 200k short links, clicks are very concentrated",
   "seed": 1,
   "durationS": 60,
   "traffic": { "rps": 3000, "readRatio": 0.99 },

@@ -83,8 +83,8 @@ function param(n: Design['nodes'][number], key: string): ParamValue | undefined 
 
 /** No new machines, slots, connections or faster parts; no original component or connection removed. */
 export const noMoreCapacity: Rule = {
-  short: tx('不能加機器'),
-  text: tx('台數、同時處理數、連線數不能變多，處理時間不能變短，快取命中率不能變高，也不能刪掉原本的元件或連線'),
+  short: tx('No more machines'),
+  text: tx('instances, concurrency and connections cannot grow, processing times cannot get shorter, the cache hit ratio cannot get higher, and no original component or connection can be removed'),
   check: (d, original) => {
     const out: string[] = [];
     const now = new Map(d.nodes.map((n) => [n.id, n]));
@@ -92,29 +92,29 @@ export const noMoreCapacity: Rule = {
       const n = now.get(o.id);
       const name = o.label ? t(o.label) : o.id;
       if (!n || n.kind !== o.kind) {
-        out.push(t('刪掉了「{name}」', { name }));
+        out.push(t('Removed "{name}"', { name }));
         continue;
       }
       const spec = KINDS[n.kind];
       for (const k of MORE) {
         const a = num(param(o, k));
         const b = num(param(n, k));
-        if (a !== undefined && b !== undefined && b > a) out.push(t('「{name}」的{what}從 {a} 變成 {b}', { name, what: t(spec.params[k]?.label ?? k), a, b }));
+        if (a !== undefined && b !== undefined && b > a) out.push(t('"{name}": {what} changed from {a} to {b}', { name, what: t(spec.params[k]?.label ?? k), a, b }));
       }
       for (const k of FASTER) {
         const a = mean(param(o, k));
         const b = mean(param(n, k));
-        if (a !== undefined && b !== undefined && b < a) out.push(t('「{name}」的{what}從 {a} 變成 {b}', { name, what: t(spec.params[k]?.label ?? k), a, b }));
+        if (a !== undefined && b !== undefined && b < a) out.push(t('"{name}": {what} changed from {a} to {b}', { name, what: t(spec.params[k]?.label ?? k), a, b }));
       }
       const ha = num(param(o, 'hitRatio'));
       const hb = num(param(n, 'hitRatio'));
-      if (ha !== undefined && hb !== undefined && hb > ha) out.push(t('「{name}」的{what}從 {a} 變成 {b}', { name, what: t(spec.params.hitRatio?.label ?? "hitRatio"), a: ha, b: hb }));
-      if (param(o, 'autoscale') !== 'on' && param(n, 'autoscale') === 'on') out.push(t('「{name}」開了自動擴充', { name }));
+      if (ha !== undefined && hb !== undefined && hb > ha) out.push(t('"{name}": {what} changed from {a} to {b}', { name, what: t(spec.params.hitRatio?.label ?? "hitRatio"), a: ha, b: hb }));
+      if (param(o, 'autoscale') !== 'on' && param(n, 'autoscale') === 'on') out.push(t('"{name}": autoscaling is on', { name }));
     }
     const was = new Set(original.nodes.map((n) => n.id));
-    for (const n of d.nodes) if (!was.has(n.id) && KINDS[n.kind]?.station) out.push(t('加了新的{kind}「{name}」', { kind: t(KINDS[n.kind].label), name: n.label ?? n.id }));
+    for (const n of d.nodes) if (!was.has(n.id) && KINDS[n.kind]?.station) out.push(t('Added a new {kind} "{name}"', { kind: t(KINDS[n.kind].label), name: n.label ?? n.id }));
     const edges = new Set(d.edges.map(edgeId));
-    for (const e of original.edges) if (!edges.has(edgeId(e))) out.push(t('刪掉了連線「{id}」', { id: edgeId(e) }));
+    for (const e of original.edges) if (!edges.has(edgeId(e))) out.push(t('Removed the connection "{id}"', { id: edgeId(e) }));
     return out;
   },
 };
@@ -125,8 +125,8 @@ export const noMoreCapacity: Rule = {
  * is not something to keep.
  */
 export const keepRetries: Rule = {
-  short: tx('重試照留'),
-  text: tx('原本有重試的連線，每條至少還要重試 1 次（通往快取的不算）'),
+  short: tx('Keep the retries'),
+  text: tx('Every connection that had retries must still retry at least once (a call into a cache does not count)'),
   check: (d, original) => {
     const now = new Map(d.edges.map((e) => [edgeId(e), e]));
     const caches = new Set(original.nodes.filter((n) => n.kind === 'cache').map((n) => n.id));
@@ -134,7 +134,7 @@ export const keepRetries: Rule = {
     for (const o of original.edges) {
       if (!o.retries || caches.has(o.to)) continue;
       const e = now.get(edgeId(o));
-      if (e && !(e.retries && e.retries >= 1)) out.push(t('連線「{id}」不重試了', { id: edgeId(o) }));
+      if (e && !(e.retries && e.retries >= 1)) out.push(t('The connection "{id}" no longer retries', { id: edgeId(o) }));
     }
     return out;
   },
@@ -154,7 +154,7 @@ export function judge(c: Challenge, run: RunData, original: Design): Verdict {
   const broken = [...customUsed(run.design).map((b) => t(b.text, b.vars)), ...c.rules.flatMap((r) => r.check(run.design, original))];
   // no way round the system: a component of the example that gets no request (e.g. behind a weight-0 connection)
   for (const o of original.nodes) {
-    if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('「{name}」沒有收到任何請求：不能繞過原本的元件', { name: o.label ? t(o.label) : o.id }));
+    if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('"{name}" got no requests: you cannot go round a component of the original design', { name: o.label ? t(o.label) : o.id }));
   }
   return { passed: broken.length === 0 && goals.every((g) => g.ok), goals, broken };
 }

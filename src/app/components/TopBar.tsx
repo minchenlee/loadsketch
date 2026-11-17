@@ -18,9 +18,9 @@ import { importMessage } from '../../i18n/importMessages.ts';
 import { importTerraform, PlanError, runChecks } from '../../import/terraform/index.ts';
 
 const PANEL_BUTTONS: { key: keyof Panels; label: string; Icon: typeof PanelLeft }[] = [
-  { key: 'left', label: tx('元件面板'), Icon: PanelLeft },
-  { key: 'bottom', label: tx('指標面板'), Icon: PanelBottom },
-  { key: 'right', label: tx('設定面板'), Icon: PanelRight },
+  { key: 'left', label: tx('Component panel'), Icon: PanelLeft },
+  { key: 'bottom', label: tx('Metrics panel'), Icon: PanelBottom },
+  { key: 'right', label: tx('Settings panel'), Icon: PanelRight },
 ];
 
 export function TopBar() {
@@ -52,12 +52,12 @@ export function TopBar() {
     const st = useApp.getState();
     const hash = await encodeShare({ design: st.design(), scenario: st.scenario });
     const url = `${location.origin}${location.pathname}#${hash}`;
-    if (url.length > SHARE_WARN_CHARS) useApp.setState({ error: t('分享連結很長（{n} 個字元），有些聊天軟體會截斷。大的設計建議用「存成 JSON」分享。', { n: url.length }) });
+    if (url.length > SHARE_WARN_CHARS) useApp.setState({ error: t('The share link is long ({n} characters); some chat apps cut it. For a big design, share the file from "Save as JSON".', { n: url.length }) });
     try {
       await navigator.clipboard.writeText(url);
     } catch {
       history.replaceState(null, '', url);
-      useApp.setState({ error: t('不能寫入剪貼簿：連結已放在網址列，從那裡複製。') });
+      useApp.setState({ error: t('Cannot write to the clipboard: the link is in the address bar, copy it from there.') });
     }
     setShared(true);
     setTimeout(() => setShared(false), 2000);
@@ -77,12 +77,12 @@ export function TopBar() {
     try {
       const r = parseDesign(JSON.parse(await f.text()));
       if (!r.ok) {
-        useApp.setState({ error: t('打不開 {file}：{why}', { file: f.name, why: r.issues[0]?.message ?? t('格式不對') }) });
+        useApp.setState({ error: t('Cannot open {file}: {why}', { file: f.name, why: r.issues[0]?.message ?? t('Bad format') }) });
         return;
       }
       load(r.value);
     } catch (e) {
-      useApp.setState({ error: t('打不開 {file}：{why}', { file: f.name, why: (e as Error).message }) });
+      useApp.setState({ error: t('Cannot open {file}: {why}', { file: f.name, why: (e as Error).message }) });
     }
   };
 
@@ -90,14 +90,14 @@ export function TopBar() {
   const importPlan = async (f: File) => {
     // a .tf file is the source, not the plan: say how to make the plan
     if (/\.tf$/i.test(f.name)) {
-      useApp.setState({ error: t('不能匯入 {file}：這是 Terraform 原始檔（.tf）。先執行 terraform plan -out plan.out，再執行 terraform show -json plan.out > plan.json，然後匯入 plan.json。', { file: f.name }) });
+      useApp.setState({ error: t('Cannot import {file}: this is a Terraform source file (.tf). Run terraform plan -out plan.out, then terraform show -json plan.out > plan.json, and import plan.json.', { file: f.name }) });
       return;
     }
     let plan: unknown;
     try {
       plan = JSON.parse(await f.text());
     } catch {
-      useApp.setState({ error: t('不能匯入 {file}：這不是 JSON。要匯入的是 terraform show -json 輸出的 plan JSON。', { file: f.name }) });
+      useApp.setState({ error: t('Cannot import {file}: this is not JSON. Import the plan JSON that terraform show -json writes.', { file: f.name }) });
       return;
     }
     importPlanJson(f.name, plan);
@@ -108,13 +108,13 @@ export function TopBar() {
       // the same validation as "open": a design the schema rejects is not loaded
       const v = parseDesign(r.design);
       if (!v.ok) {
-        useApp.setState({ error: t('不能匯入 {file}：{why}', { file: fileName, why: v.issues[0]?.message ?? t('格式不對') }) });
+        useApp.setState({ error: t('Cannot import {file}: {why}', { file: fileName, why: v.issues[0]?.message ?? t('Bad format') }) });
         return;
       }
       useApp.getState().loadImport(fileName, r.design, runChecks(r));
     } catch (e) {
       const why = e instanceof PlanError ? importMessage(e.id, e.args) : (e as Error).message;
-      useApp.setState({ error: t('不能匯入 {file}：{why}', { file: fileName, why }) });
+      useApp.setState({ error: t('Cannot import {file}: {why}', { file: fileName, why }) });
     }
   };
   const importExample = async (id: string) => {
@@ -125,25 +125,25 @@ export function TopBar() {
   };
 
   const fileItems: MenuItem[] = [
-    { label: t('新設計'), icon: <FilePlus2 size={14} />, onSelect: () => load({ schema: DESIGN_SCHEMA, name: t('未命名設計'), nodes: [], edges: [] }), 'data-testid': 'new-design' },
-    { label: t('開啟'), icon: <FolderOpen size={14} />, onSelect: () => file.current?.click() },
-    { label: t('貼上設計 JSON'), icon: <ClipboardPaste size={14} />, onSelect: () => setPasting(true), title: t('用 AI 改設計：複製給 AI 的提示，再把回答貼回來；也可以貼別人給你的設計 JSON'), 'data-testid': 'paste-design-open' },
-    { label: t('匯入 Terraform'), icon: <FileInput size={14} />, onSelect: () => setImporting(true), title: t('把 Terraform plan（terraform show -json 的輸出）轉成設計'), 'data-testid': 'import-terraform' },
-    { label: t('存成 JSON'), icon: <Download size={14} />, onSelect: save, sep: true, 'data-testid': 'save-json' },
+    { label: t('New design'), icon: <FilePlus2 size={14} />, onSelect: () => load({ schema: DESIGN_SCHEMA, name: t('Untitled design'), nodes: [], edges: [] }), 'data-testid': 'new-design' },
+    { label: t('Open'), icon: <FolderOpen size={14} />, onSelect: () => file.current?.click() },
+    { label: t('Paste design JSON'), icon: <ClipboardPaste size={14} />, onSelect: () => setPasting(true), title: t('Change the design with an AI: copy a prompt for it, then paste its answer back; or paste a design JSON someone gave you'), 'data-testid': 'paste-design-open' },
+    { label: t('Import Terraform'), icon: <FileInput size={14} />, onSelect: () => setImporting(true), title: t('Turn a Terraform plan (the output of terraform show -json) into a design'), 'data-testid': 'import-terraform' },
+    { label: t('Save as JSON'), icon: <Download size={14} />, onSelect: save, sep: true, 'data-testid': 'save-json' },
   ];
   const phone = usePhone();
   // a phone has no room for these in the bar: they are in the menu
   const phoneItems: MenuItem[] = [
-    { label: t('分享'), icon: <Link2 size={14} />, onSelect: () => void share(), 'data-testid': 'phone-share' },
-    { label: t('復原'), icon: <Undo2 size={14} />, onSelect: undo },
-    { label: t('重做'), icon: <Redo2 size={14} />, onSelect: redo },
+    { label: t('Share'), icon: <Link2 size={14} />, onSelect: () => void share(), 'data-testid': 'phone-share' },
+    { label: t('Undo'), icon: <Undo2 size={14} />, onSelect: undo },
+    { label: t('Redo'), icon: <Redo2 size={14} />, onSelect: redo },
   ];
   const moreItems: MenuItem[] = [
     ...(phone ? phoneItems : []),
     // a phone has no room for the GitHub button either (M16); the embedded app links nowhere
-    ...(phone && !EMBEDDED ? [{ label: 'GitHub', icon: <GithubMark />, onSelect: () => void window.open(REPO, '_blank', 'noopener,noreferrer'), title: t('在 GitHub 上看原始碼'), 'data-testid': 'github-item' }] : []),
+    ...(phone && !EMBEDDED ? [{ label: 'GitHub', icon: <GithubMark />, onSelect: () => void window.open(REPO, '_blank', 'noopener,noreferrer'), title: t('View the source on GitHub'), 'data-testid': 'github-item' }] : []),
     { label: lang === 'en' ? '切換成中文' : 'Switch to English', sep: phone, icon: <Languages size={14} />, onSelect: () => setLang(lang === 'en' ? 'zh-TW' : 'en'), 'data-testid': 'lang' },
-    { label: t('切換深淺色'), icon: theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />, onSelect: () => setTheme(theme === 'dark' ? 'light' : 'dark'), 'data-testid': 'theme' },
+    { label: t('Toggle light/dark'), icon: theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />, onSelect: () => setTheme(theme === 'dark' ? 'light' : 'dark'), 'data-testid': 'theme' },
   ];
 
   return (
@@ -153,25 +153,25 @@ export function TopBar() {
       <img src={logoWhite} alt="" width={28} height={28} className="hidden shrink-0 dark:block" />
       <span className="sd-desk shrink-0 whitespace-nowrap font-semibold tracking-tight">loadsketch</span>
       {/* the subtitle goes first when the bar is short of room, then the name field narrows */}
-      <span className="faint hidden shrink-0 whitespace-nowrap xl:inline">{t('系統設計模擬器')}</span>
+      <span className="faint hidden shrink-0 whitespace-nowrap xl:inline">{t('System design simulator')}</span>
       <div className="sd-desk mx-2 h-5 w-px shrink-0" style={{ background: 'var(--line)' }} />
       {/* the design: its name, and next to it what you do with the file */}
       <input
         className="field sd-name w-[340px] shrink font-medium"
         style={{ minWidth: 140 }}
         value={doc.name}
-        aria-label={t('設計名稱')}
+        aria-label={t('Design name')}
         onChange={(e) => useApp.getState().rename(e.target.value)}
       />
-      <Menu items={fileItems} className="btn shrink-0 px-1.5" aria-label={t('檔案')} title={t('檔案')} data-testid="file-menu">
+      <Menu items={fileItems} className="btn shrink-0 px-1.5" aria-label={t('File')} title={t('File')} data-testid="file-menu">
         <ChevronDown size={15} />
       </Menu>
-      {dirty && <span className="sd-pill sd-desk shrink-0 whitespace-nowrap" style={{ '--pill': 'var(--warn)' } as React.CSSProperties}>{t('未儲存')}</span>}
-      <div className="seg sd-desk ml-1 shrink-0" role="group" aria-label={t('編輯紀錄')}>
-        <button className="btn px-2" onClick={undo} disabled={!canUndo} aria-label={t('復原')} title={t('復原（{key}）', { key: IS_MAC ? '⌘Z' : 'Ctrl+Z' })} data-testid="undo">
+      {dirty && <span className="sd-pill sd-desk shrink-0 whitespace-nowrap" style={{ '--pill': 'var(--warn)' } as React.CSSProperties}>{t('Not saved')}</span>}
+      <div className="seg sd-desk ml-1 shrink-0" role="group" aria-label={t('Edit history')}>
+        <button className="btn px-2" onClick={undo} disabled={!canUndo} aria-label={t('Undo')} title={t('Undo ({key})', { key: IS_MAC ? '⌘Z' : 'Ctrl+Z' })} data-testid="undo">
           <Undo2 size={15} />
         </button>
-        <button className="btn px-2" onClick={redo} disabled={!canRedo} aria-label={t('重做')} title={t('重做（{key}）', { key: IS_MAC ? '⇧⌘Z' : 'Ctrl+Shift+Z' })} data-testid="redo">
+        <button className="btn px-2" onClick={redo} disabled={!canRedo} aria-label={t('Redo')} title={t('Redo ({key})', { key: IS_MAC ? '⇧⌘Z' : 'Ctrl+Shift+Z' })} data-testid="redo">
           <Redo2 size={15} />
         </button>
       </div>
@@ -200,38 +200,38 @@ export function TopBar() {
         }}
       />
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        <button className="btn" onClick={() => setBrowse(true)} aria-label={t('範例')} data-testid="open-examples">
-          <BookOpen size={14} /> <span className="sd-desk">{t('範例')}</span>
+        <button className="btn" onClick={() => setBrowse(true)} aria-label={t('Examples')} data-testid="open-examples">
+          <BookOpen size={14} /> <span className="sd-desk">{t('Examples')}</span>
         </button>
         {browse && <ExampleBrowser onClose={() => setBrowse(false)} />}
-        <button className="btn" onClick={() => setPractice(true)} title={t('從需求開始的設計題、限制條件題目、值班練習和先猜紀錄')} aria-label={t('練習')} data-testid="open-practice">
-          <Dumbbell size={14} /> <span className="sd-desk">{t('練習')}</span>
+        <button className="btn" onClick={() => setPractice(true)} title={t('Design briefs, constraint problems, on-call practice and your guess record')} aria-label={t('Practice')} data-testid="open-practice">
+          <Dumbbell size={14} /> <span className="sd-desk">{t('Practice')}</span>
         </button>
         {practice && <PracticeDialog onClose={() => setPractice(false)} />}
         <div className="sd-desk mx-1 h-5 w-px" style={{ background: 'var(--line)' }} />
-        <button className="btn sd-desk" onClick={() => void share()} title={t('把設計和情境放進一個網址，貼給別人就能打開')} data-testid="share">
-          {shared ? <Check size={14} /> : <Link2 size={14} />} {shared ? t('已複製連結') : t('分享')}
+        <button className="btn sd-desk" onClick={() => void share()} title={t('Put the design and the scenario into one URL: anyone who opens it gets both')} data-testid="share">
+          {shared ? <Check size={14} /> : <Link2 size={14} />} {shared ? t('Link copied') : t('Share')}
         </button>
-        <div className="seg sd-desk" role="group" aria-label={t('面板')}>
+        <div className="seg sd-desk" role="group" aria-label={t('Panel')}>
           {PANEL_BUTTONS.map(({ key, label, Icon }) => (
             <button
               key={key}
               className={`btn px-2 ${panels[key] ? 'btn-on' : ''}`}
               onClick={() => togglePanel(key)}
               aria-pressed={panels[key]}
-              aria-label={panels[key] ? t('隱藏{panel}', { panel: t(label) }) : t('顯示{panel}', { panel: t(label) })}
-              title={panels[key] ? t('隱藏{panel}（{key}）', { panel: t(label), key: SHORTCUT[key] }) : t('顯示{panel}（{key}）', { panel: t(label), key: SHORTCUT[key] })}
+              aria-label={panels[key] ? t('Hide {panel}', { panel: t(label) }) : t('Show {panel}', { panel: t(label) })}
+              title={panels[key] ? t('Hide {panel} ({key})', { panel: t(label), key: SHORTCUT[key] }) : t('Show {panel} ({key})', { panel: t(label), key: SHORTCUT[key] })}
             >
               <Icon size={15} />
             </button>
           ))}
         </div>
         {!EMBEDDED && (
-          <a className="btn sd-desk px-2" href={REPO} target="_blank" rel="noopener noreferrer" aria-label="GitHub" title={t('在 GitHub 上看原始碼')} data-testid="github-link">
+          <a className="btn sd-desk px-2" href={REPO} target="_blank" rel="noopener noreferrer" aria-label="GitHub" title={t('View the source on GitHub')} data-testid="github-link">
             <GithubMark />
           </a>
         )}
-        <Menu items={moreItems} className="btn px-2" align="end" aria-label={t('更多')} title={t('更多')} data-testid="more-menu">
+        <Menu items={moreItems} className="btn px-2" align="end" aria-label={t('More')} title={t('More')} data-testid="more-menu">
           <Ellipsis size={15} />
         </Menu>
       </div>

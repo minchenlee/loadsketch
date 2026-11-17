@@ -56,16 +56,16 @@ async function unpack(text: string): Promise<{ ok: true; value: unknown } | { ok
     const bytes = await pipe(fromBase64Url(text), new DecompressionStream('deflate-raw'));
     return { ok: true, value: JSON.parse(new TextDecoder().decode(bytes)) };
   } catch {
-    return { ok: false, why: t('連結被截斷或損壞（複製時少了一段？）') };
+    return { ok: false, why: t('The link is cut off or damaged (was part of it lost when copying?)') };
   }
 }
 
 /** The design and scenario of a link, with their shape checked. */
 function readShared(v: { design?: unknown; scenario?: unknown } | null): { ok: true; value: Shared } | { ok: false; why: string } {
   const d = DesignSchema.safeParse(v?.design);
-  if (!d.success) return { ok: false, why: t('設計格式不對：{path} {msg}', { path: d.error.issues[0]?.path.join('.') ?? '', msg: d.error.issues[0]?.message ?? '' }) };
+  if (!d.success) return { ok: false, why: t('The design has a wrong shape: {path} {msg}', { path: d.error.issues[0]?.path.join('.') ?? '', msg: d.error.issues[0]?.message ?? '' }) };
   const sc = ScenarioSchema.safeParse(v?.scenario);
-  if (!sc.success) return { ok: false, why: t('情境格式不對：{path} {msg}', { path: sc.error.issues[0]?.path.join('.') ?? '', msg: sc.error.issues[0]?.message ?? '' }) };
+  if (!sc.success) return { ok: false, why: t('The scenario has a wrong shape: {path} {msg}', { path: sc.error.issues[0]?.path.join('.') ?? '', msg: sc.error.issues[0]?.message ?? '' }) };
   // the input objects themselves: key order kept, as parseDesign does
   return { ok: true, value: { design: v!.design as Design, scenario: v!.scenario as Scenario } };
 }
@@ -96,11 +96,11 @@ export async function decodeLink(hash: string): Promise<({ ok: true } & SharedLi
     const r = await decodeShare(h);
     return r.ok ? { ok: true, kind: 'one', value: r.value } : r;
   }
-  if (!h.startsWith(COMPARE_PREFIX)) return { ok: false, why: t('這個連結的格式比這個版本新，或打錯了') };
+  if (!h.startsWith(COMPARE_PREFIX)) return { ok: false, why: t('The link uses a newer format than this version, or it is mistyped') };
   const u = await unpack(h.slice(COMPARE_PREFIX.length));
   if (!u.ok) return u;
   const list = (u.value as { compare?: unknown } | null)?.compare;
-  if (!Array.isArray(list) || list.length < 2 || list.length > MAX_SHARE_COMPARE) return { ok: false, why: t('比較的連結要有 2 個版本') };
+  if (!Array.isArray(list) || list.length < 2 || list.length > MAX_SHARE_COMPARE) return { ok: false, why: t('A comparison link must hold 2 versions') };
   const runs: SharedRun[] = [];
   for (const x of list as ({ name?: unknown; design?: unknown; scenario?: unknown } | null)[]) {
     const r = readShared(x);
@@ -116,8 +116,8 @@ export async function decodeLink(hash: string): Promise<({ ok: true } & SharedLi
  */
 export async function decodeShare(hash: string): Promise<{ ok: true; value: Shared } | { ok: false; why: string }> {
   const h = hash.replace(/^#/, '');
-  if (!h.startsWith('s=')) return { ok: false, why: t('網址裡沒有分享的設計') };
-  if (!h.startsWith(PREFIX)) return { ok: false, why: t('這個連結的格式比這個版本新，或打錯了') };
+  if (!h.startsWith('s=')) return { ok: false, why: t('The URL holds no shared design') };
+  if (!h.startsWith(PREFIX)) return { ok: false, why: t('The link uses a newer format than this version, or it is mistyped') };
   const u = await unpack(h.slice(PREFIX.length));
   if (!u.ok) return u;
   return readShared(u.value as { design?: unknown; scenario?: unknown } | null);
