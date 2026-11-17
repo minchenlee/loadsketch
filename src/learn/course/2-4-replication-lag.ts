@@ -62,7 +62,7 @@ const lesson: Lesson = {
     {
       id: 'primary-busy',
       topic: 'capacity',
-      text: tx('Set "Max replication lag" to 200 ms: a replica that is further behind stops taking reads, and the primary takes them. How busy does the primary get?'),
+      text: tx('Set “Max replication lag” to 200 ms: a replica that is further behind stops taking reads, and the primary takes them. How busy does the primary get?'),
       options: [
         { id: 'low', text: tx('Under 10%') },
         { id: 'mid', text: tx('10% to 30%') },
@@ -97,7 +97,7 @@ const lesson: Lesson = {
         { text: tx('Under 5% of replica reads stale'), check: (run) => ({ ok: staleShare(run) < 0.05, value: pct(staleShare(run)) }) },
       ],
       rules: [noMoreCapacity],
-      hint: tx('A lag limit cannot help: it moves the reads off the replicas. The lag itself has to shrink: replicas close to the primary, confirming writes quickly (semi-synchronous replication). Lower "Replication lag" and see how far it must go: the hottest keys are written every few ms.'),
+      hint: tx('A lag limit cannot help: it moves the reads off the replicas. The lag itself has to shrink: replicas close to the primary, confirming writes quickly (semi-synchronous replication). Lower “Replication lag” and see how far it must go: the hottest keys are written every few ms.'),
     },
   ],
   steps: [
@@ -105,8 +105,8 @@ const lesson: Lesson = {
     { kind: 'guess', questions: ['stale-share'] },
     { kind: 'run' },
     { kind: 'guess', questions: ['primary-busy'] },
-    { kind: 'try', text: tx('Set "Max replication lag" to 200 ms and run again: stale reads drop to zero, and the primary takes every read.'), patch: [{ node: 'db', params: { maxLagMs: 200 } }] },
-    { kind: 'try', text: tx('Put the lag limit back to 0 and set "Replication lag" to 50 ms: fewer reads are stale, but not few, because the hot keys are written more often than every 50 ms.'), patch: [{ node: 'db', params: { maxLagMs: 0, replicaDelayMs: 50 } }] },
+    { kind: 'try', text: tx('Set “Max replication lag” to 200 ms and run again: stale reads drop to zero, and the primary takes every read.'), patch: [{ node: 'db', params: { maxLagMs: 200 } }] },
+    { kind: 'try', text: tx('Put the lag limit back to 0 and set “Replication lag” to 50 ms: fewer reads are stale, but not few, because the hot keys are written more often than every 50 ms.'), patch: [{ node: 'db', params: { maxLagMs: 0, replicaDelayMs: 50 } }] },
     { kind: 'challenge', challenges: ['replicas/no-stale', 'replicas/keep-replicas'] },
   ],
 };

@@ -98,7 +98,7 @@ const lesson: Lesson = {
       id: 'shards/read-hot',
       scenario: 'hot-shard',
       title: tx('A hot channel'),
-      text: tx('Scenario "A large server posts an announcement": 80% reads, and a few keys are very hot. Keep 4 shards and bring every database machine under 35% busy.'),
+      text: tx('Scenario “A large server posts an announcement”: 80% reads, and a few keys are very hot. Keep 4 shards and bring every database machine under 35% busy.'),
       goals: [
         shardsAtMost(4),
         { text: tx('Every database machine under 35% busy'), check: (run) => ({ ok: hottest(run) < 0.35, value: pct(hottest(run)) }) },
@@ -113,7 +113,7 @@ const lesson: Lesson = {
     { kind: 'run' },
     { kind: 'guess', questions: ['more-shards'] },
     { kind: 'try', text: tx('Set the shards to 16 and run again: the average shard drops to a quarter, the busiest only to about half.'), patch: [{ node: 'db', params: { shards: 16 } }] },
-    { kind: 'run', scenario: 'hot-shard', text: tx('Open the scenario "A large server posts an announcement": now 80% of requests are reads, and one shard is again the busiest.') },
+    { kind: 'run', scenario: 'hot-shard', text: tx('Open the scenario “A large server posts an announcement”: now 80% of requests are reads, and one shard is again the busiest.') },
     { kind: 'challenge', challenges: ['shards/read-hot'] },
   ],
 };

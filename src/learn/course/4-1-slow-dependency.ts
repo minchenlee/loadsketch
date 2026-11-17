@@ -79,7 +79,7 @@ const slowDependency: Lesson = {
       text: tx('Fewer than 1% of requests fail over the whole run, without adding machines.'),
       goals: [failUnder1],
       rules: [noMoreCapacity],
-      hint: tx('Look at the connection from the API to recommendations. Two settings together: one stops the API from waiting long (a shorter timeout, or a bulkhead that limits how many calls wait), and one turns a failed call into a default answer (fallback). Either one alone is not enough: try each and see why.'),
+      hint: tx('Look at the edge from the API to recommendations. Two settings together: one stops the API from waiting long (a shorter timeout, or a bulkhead that limits how many calls wait), and one turns a failed call into a default answer (fallback). Either one alone is not enough: try each and see why.'),
     },
     {
       id: 'bulkhead-fallback/degrade-less',
@@ -95,7 +95,7 @@ const slowDependency: Lesson = {
     { kind: 'read', text: tx('A product page: 1500 requests a second into 4 API servers with 32 slots each. Every request reads Postgres, then asks the recommendation service for a list (timeout 1 s). Recommendations are only a nice extra. From second 20 to 60 they become 50 times slower: about 1 s a call. Guess what that does to the product page, then press Run.') },
     { kind: 'guess', questions: ['slow-fail'] },
     { kind: 'run' },
-    { kind: 'try', text: tx('Turn on only the fallback on the connection to recommendations, and run again. Almost as many requests fail: the calls still wait up to 1 s and hold the slots. Then turn the fallback off again and try only a bulkhead of 4: more fail, because a call the bulkhead turns away is an error.'), patch: [{ edge: 'api->recs', set: { fallback: 'on' } }] },
+    { kind: 'try', text: tx('Turn on only the fallback on the edge to recommendations, and run again. Almost as many requests fail: the calls still wait up to 1 s and hold the slots. Then turn the fallback off again and try only a bulkhead of 4: more fail, because a call the bulkhead turns away is an error.'), patch: [{ edge: 'api->recs', set: { fallback: 'on' } }] },
     { kind: 'challenge', challenges: ['slow-dependency/hold'] },
     { kind: 'guess', questions: ['degraded'] },
     { kind: 'run', example: 'bulkhead-fallback' },
