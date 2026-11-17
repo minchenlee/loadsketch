@@ -1,11 +1,13 @@
 // The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
-import { clampStep, ctxOf, pagesOf } from '../src/course/steps.ts';
+import { answerable, clampStep, ctxOf, feedbackOf, pagesOf } from '../src/course/steps.ts';
 import { parseProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
 import { stepsOf, type Lesson } from '../src/learn/lesson.ts';
+import { entriesForRun, lessonOfEntry, logFile, parseLog } from '../src/learn/guessLog.ts';
+import type { RunData } from '../src/learn/metrics.ts';
 
 describe('course table of contents', () => {
   it('has the 7 units of the course and the 33 lessons of the outline, in order', () => {
@@ -105,5 +107,75 @@ describe('answers of a run', () => {
     expect(q.answers).toEqual({ a: 'x', b: 'y' });
     expect(q.answered).toEqual(['a', 'b']);
     expect(scoreOf(['a', 'b'], q)).toEqual({ right: 2, unscored: 0 });
+  });
+});
+
+describe('questions by experiment', () => {
+  // the shape of 2.4 and 2.5: a guess, a run, a second guess on the same example, then a try
+  const base = LESSONS['retry-storm'];
+  const l: Lesson = {
+    ...base,
+    steps: [
+      { kind: 'read', text: 'x' },
+      { kind: 'guess', questions: ['recover'] },
+      { kind: 'run' },
+      { kind: 'guess', questions: ['amp'] },
+      { kind: 'try', text: 'y', patch: [{ edge: 'lb->api', set: { retries: 0 } }] },
+      { kind: 'try', text: 'z' },
+      { kind: 'challenge', challenges: [base.challenges[0].id] },
+    ],
+  };
+  const pages = pagesOf(l);
+  const ctx = ctxOf(l, pages, 2);
+
+  it('a run answers only the questions guessed on a page before it', () => {
+    expect(answerable(l, pages, 1, ctx)).toEqual([]);
+    expect(answerable(l, pages, 2, ctx)).toEqual(['recover']);
+    expect(answerable(l, pages, 3, ctx)).toEqual(['recover']);
+    expect(answerable(l, pages, 4, ctx)).toEqual(['recover', 'amp']);
+    expect(answerable(l, pages, 2, { example: 'other', scenario: ctx.scenario })).toEqual([]);
+  });
+
+  it('a run or try page shows the questions guessed since the last run or try page', () => {
+    expect(feedbackOf(l, pages, 2)).toEqual(['recover']);
+    expect(feedbackOf(l, pages, 4)).toEqual(['amp']);
+    expect(feedbackOf(l, pages, 5)).toEqual([]);
+    expect(feedbackOf(l, pages, 3)).toEqual([]);
+  });
+
+  it('without steps, the one run answers every question', () => {
+    const d = LESSONS['retry-storm'];
+    const p = pagesOf(d);
+    const run = p.findIndex((x) => x.kind === 'run');
+    expect(answerable(d, p, run, ctxOf(d, p, run))).toEqual(d.questions.map((q) => q.id));
+    expect(feedbackOf(d, p, run)).toEqual(d.questions.map((q) => q.id));
+  });
+});
+
+describe('guess log entries of a course lesson', () => {
+  // a lesson on an example another lesson also uses (6.1 and 2.1 both open url-shortener)
+  const l = {
+    ...LESSONS['retry-storm'],
+    id: '9.9',
+    example: 'url-shortener',
+    questions: [{ id: 'q', text: 'q', options: [{ id: 'a', text: 'a' }, { id: 'b', text: 'b' }], answer: () => 'b', measured: () => 'm', explain: 'e' }],
+  } as unknown as Lesson;
+  const run = {} as RunData;
+
+  it('carry the course lesson, and are read back with it', () => {
+    const e = entriesForRun(l, { q: 'a' }, run, new Date('2026-11-18T00:00:00Z'), '9.9');
+    expect(e).toHaveLength(1);
+    expect(e[0]).toMatchObject({ lesson: '9.9', example: 'url-shortener', question: 'q', guess: 'a', answer: 'b' });
+    const course = { '9.9': l };
+    expect(parseLog(logFile(e), LESSONS, course).ok).toBe(true);
+    expect(lessonOfEntry(e[0], LESSONS, course)).toBe(l);
+    // without the course lesson, the entry is not taken for the example's side-panel lesson
+    expect(lessonOfEntry(e[0], LESSONS, {})).toBeUndefined();
+  });
+
+  it('side-panel entries stay as they were', () => {
+    const e = entriesForRun(l, { q: 'a' }, run, new Date('2026-11-18T00:00:00Z'));
+    expect(e[0].lesson).toBeUndefined();
+    expect(e[0].id).toBe('2026-11-18T00:00:00.000Z/url-shortener/q');
   });
 });

@@ -20,7 +20,7 @@ import type { Design, Scenario } from '../schema/design.ts';
 import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
-import { clampStep, ctxKey, ctxOf, pagesOf, type Ctx, type Page } from './steps.ts';
+import { answerable, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 
 const APP = '../app/';
@@ -304,10 +304,14 @@ interface Ran {
 }
 
 /**
- * The guesses the simulator gets: not those a run already answered. A new frame (a reload, the
- * lesson opened again) would log them in its guess log a second time.
+ * The guesses the simulator gets on page `i`: those a run started there answers, not those a run
+ * already answered (a new frame, after a reload or the lesson opened again, would log them a
+ * second time).
  */
-const openGuesses = (p: LessonProgress): Record<string, string> => Object.fromEntries(Object.entries(p.guesses).filter(([q]) => !p.answered.includes(q)));
+const openGuesses = (lesson: Lesson, pages: Page[], i: number, p: LessonProgress): Record<string, string> => {
+  const ids = answerable(lesson, pages, i, ctxOf(lesson, pages, i));
+  return Object.fromEntries(Object.entries(p.guesses).filter(([q]) => ids.includes(q) && !p.answered.includes(q)));
+};
 
 function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, home }: {
   entry: CourseLesson;
@@ -328,15 +332,17 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
   const [reload, setReload] = useState(0);
-  /** Example and scenario of each run started in this visit: their questions' guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
+  /** Questions a run started in this visit answers: their guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
   const [started, setStarted] = useState<string[]>([]);
-  const begin = (key: string) => setStarted((s) => (s.includes(key) ? s : [...s, key]));
-  const isLocked = (q: Question) => progress.answered.includes(q.id) || started.includes(ctxKey(runOf(lesson, q)));
+  const begin = (ids: string[]) => setStarted((s) => [...new Set([...s, ...ids])]);
+  const isLocked = (q: Question) => progress.answered.includes(q.id) || started.includes(q.id);
+  /** The page the last run started on: its questions are the ones the run answers. */
+  const runPage = useRef(i);
   /** Example designs and scenarios as they ship, by name: challenges are judged against them. */
   const [designs, setDesigns] = useState<Record<string, Design>>({});
   const [scenarios, setScenarios] = useState<Record<string, Scenario>>({});
-  const latest = useRef({ progress, ctx, lang, theme });
-  latest.current = { progress, ctx, lang, theme };
+  const latest = useRef({ progress, ctx, lang, theme, i });
+  latest.current = { progress, ctx, lang, theme, i };
 
   useEffect(() => {
     let live = true;
@@ -367,13 +373,14 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     update({ ...p, step: k, reached: Math.max(p.reached, k), done: p.done || pages[k].kind === 'done' });
   };
 
-  // a finished run answers the questions on its example and scenario, and is judged
+  // a finished run answers the questions guessed before the page it started on, and is judged
   const onRun = (r: Ran) => {
     const key = ctxKey(r.ctx);
     const all = { ...runs, [key]: r.run };
     setRuns(all);
     const p = latest.current.progress;
-    const answered = lesson.questions.filter((q) => ctxKey(runOf(lesson, q)) === key);
+    const ids = answerable(lesson, pages, runPage.current, r.ctx);
+    const answered = lesson.questions.filter((q) => ids.includes(q.id));
     // the right answers are kept with the progress (the score survives a reload, which has no
     // runs); the first run's answer stays
     update(withAnswers(p, Object.fromEntries(answered.map((q) => [q.id, q.answer(r.run)]))));
@@ -389,6 +396,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   });
 
   const send = (msg: FromCourse) => frame.current?.contentWindow?.postMessage(msg, location.origin);
+  /** The guesses a run started on the current page answers, with the course lesson (the simulator's guess log records them under it). */
+  const sendGuesses = () => send({ source: 'loadsketch-course', kind: 'guesses', lesson: entry.id, guesses: openGuesses(lesson, pages, latest.current.i, latest.current.progress) });
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== location.origin || e.source !== frame.current?.contentWindow) return;
@@ -400,10 +409,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       if (msg.kind === 'ready') {
         setStatus('idle');
         send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
-        send({ source: 'loadsketch-course', kind: 'guesses', guesses: openGuesses(latest.current.progress) });
+        sendGuesses();
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') setStatus(msg.status);
-        if (msg.status === 'running') begin(ctxKey(here));
+        if (msg.status === 'running') {
+          runPage.current = latest.current.i;
+          begin(answerable(lesson, pages, latest.current.i, here));
+        }
       } else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run });
     };
     addEventListener('message', onMessage);
@@ -413,15 +425,17 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   // the guesses lock when the simulator says the run started (status 'running'), not here: it
   // refuses a design that does not pass its checks, and then no run starts
   const startRun = () => {
-    send({ source: 'loadsketch-course', kind: 'guesses', guesses: openGuesses(latest.current.progress) });
+    sendGuesses();
     send({ source: 'loadsketch-course', kind: 'run' });
   };
+  // a page's guesses go to the simulator when the page opens: a run started there answers them
+  useEffect(() => sendGuesses(), [i]);
   const guess = (q: string, o: string) => {
     const qq = lesson.questions.find((x) => x.id === q);
     if (!qq || isLocked(qq)) return;
     const guesses = { ...progress.guesses, [q]: o };
     update({ ...progress, guesses });
-    send({ source: 'loadsketch-course', kind: 'guesses', guesses: openGuesses({ ...progress, guesses }) });
+    send({ source: 'loadsketch-course', kind: 'guesses', lesson: entry.id, guesses: openGuesses(lesson, pages, i, { ...progress, guesses }) });
   };
   const restart = () => {
     update({ ...EMPTY });
@@ -456,8 +470,19 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const next = nextReady(entry.id);
   const qs = (ids: string[]) => ids.flatMap((id) => lesson.questions.filter((x) => x.id === id));
   const cs = (ids: string[]) => ids.flatMap((id) => lesson.challenges.filter((x) => x.id === id));
-  /** Questions guessed on the pages up to this one that read this page's run. */
-  const askedHere = pages.slice(0, i + 1).flatMap((p) => (p.kind === 'guess' ? qs(p.questions) : [])).filter((x) => ctxKey(runOf(lesson, x)) === ctxKey(ctx));
+  /** Questions whose answers this run or try page shows (guessed since the last run or try page). */
+  const askedHere = qs(feedbackOf(lesson, pages, i));
+  const answers = (run: RunData | undefined) =>
+    run && askedHere.length > 0 ? (
+      <div className="mt-5 space-y-4" data-testid="course-answers">
+        {askedHere.map((x) => (
+          <Answer key={x.id} q={x} run={run} mine={progress.guesses[x.id]} scored={progress.answers[x.id]} />
+        ))}
+        <div className="faint text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</div>
+      </div>
+    ) : (
+      run && <p className="faint mt-2 text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</p>
+    );
   const score = scoreOf(
     lesson.questions.map((x) => x.id),
     progress,
@@ -512,14 +537,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           <p className="text-[16px] leading-relaxed">{page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')}</p>
           {!run && askedHere.some((x) => !progress.guesses[x.id]) && <p className="muted mt-2 text-[14px]">{t('Some questions have no guess yet. Go back to guess, or run without one.')}</p>}
           <RunButton status={status} onRun={startRun} />
-          {run && askedHere.length > 0 && (
-            <div className="mt-5 space-y-4" data-testid="course-answers">
-              {askedHere.map((x) => (
-                <Answer key={x.id} q={x} run={run} mine={progress.guesses[x.id]} scored={progress.answers[x.id]} />
-              ))}
-              <div className="faint text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</div>
-            </div>
-          )}
+          {answers(run)}
         </>
       );
       break;
@@ -535,7 +553,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
             </button>
           )}
           <RunButton status={status} onRun={startRun} />
-          {runs[ctxKey(ctx)] && <p className="faint mt-2 text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</p>}
+          {answers(runs[ctxKey(ctx)])}
         </>
       );
       break;

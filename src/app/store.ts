@@ -26,6 +26,7 @@ import { localizeDesign } from '../i18n/content.ts';
 import { DEFAULT_SLO, type Slo } from '../learn/sla.ts';
 import { GUESS_LOG_KEY, addEntries, entriesForRun, logFile, parseLog, type GuessEntry } from '../learn/guessLog.ts';
 import { LESSONS } from '../learn/lessons.ts';
+import { COURSE_BY_ID } from '../learn/course.ts';
 import type { Finding } from '../import/terraform/index.ts';
 import { editedSources } from './sources.ts';
 import { markNew, planEntrance } from './motion.ts';
@@ -163,6 +164,9 @@ export interface AppState {
   guessLog: GuessEntry[];
   /** The current guesses are in the log already (logged after the first run that follows them). */
   guessesLogged: boolean;
+  /** In the course page's frame: the course lesson the guesses belong to (src/app/courseBridge.ts), and the questions logged since the design loaded. Guesses come step by step there. */
+  courseLesson: string | null;
+  loggedGuesses: string[];
   /** Ids of the challenges passed in this browser (kept in localStorage). */
   passed: string[];
   /** The service level objective the runs are measured against (kept in localStorage). */
@@ -365,6 +369,8 @@ export const useApp = create<AppState>((set, get) => {
   guesses: {},
   guessLog: loadGuessLog(),
   guessesLogged: false,
+  courseLesson: null,
+  loggedGuesses: [],
   passed: loadPassed(),
   slo: loadSlo(),
   past: [],
@@ -390,7 +396,7 @@ export const useApp = create<AppState>((set, get) => {
     // A loaded design ends the last error; a scenario made for the old design (an event on a node this
     // one does not have) would stop every run, so it goes back to the default.
     const fits = (() => { const v = parseDesign(d); return !v.ok || parseScenario(get().scenario, v.value).ok; })();
-    set({ past: [], future: [], doc: d, nodes, edges, selected: null, throughHint: null, dirty: false, example: null, origin: origin ?? null, loads: get().loads + 1, result: null, windows: [], timeline: [], tView: 0, ran: null, guesses: {}, guessesLogged: false, error: null, ...(fits ? {} : { scenario: defaultScenario() }), ...withIssues(d, nodes, edges) });
+    set({ past: [], future: [], doc: d, nodes, edges, selected: null, throughHint: null, dirty: false, example: null, origin: origin ?? null, loads: get().loads + 1, result: null, windows: [], timeline: [], tView: 0, ran: null, guesses: {}, guessesLogged: false, loggedGuesses: [], error: null, ...(fits ? {} : { scenario: defaultScenario() }), ...withIssues(d, nodes, edges) });
   },
   loadImport: (file, d, findings) => {
     get().load(d);
@@ -775,6 +781,7 @@ window.addEventListener('storage', (e) => {
 /** After the first run that follows the guesses of a lesson, add them to the guess log. */
 function logGuesses(): void {
   const s = useApp.getState();
+  if (s.courseLesson !== null) return logCourseGuesses();
   const lesson = s.example ? LESSONS[s.example] : undefined;
   if (!lesson || s.guessesLogged || !s.ran || !s.result || !Object.keys(s.guesses).length) return;
   const add = entriesForRun(lesson, s.guesses, { design: s.ran.design, scenario: s.ran.scenario, result: s.result, windows: s.windows }, new Date());
@@ -782,6 +789,20 @@ function logGuesses(): void {
   const log = addEntries(s.guessLog, add);
   saveGuessLog(log);
   useApp.setState({ guessLog: log, guessesLogged: true });
+}
+
+/** The course page's frame: each guess once, under its course lesson (LESSONS is the side panel's only). */
+function logCourseGuesses(): void {
+  const s = useApp.getState();
+  // a lesson the course shows before it has a course file is the side panel's lesson of its example
+  const own = s.courseLesson !== null && Object.hasOwn(COURSE_BY_ID, s.courseLesson);
+  const lesson = own ? COURSE_BY_ID[s.courseLesson!] : s.example ? LESSONS[s.example] : undefined;
+  const open = Object.fromEntries(Object.entries(s.guesses).filter(([q]) => !s.loggedGuesses.includes(q)));
+  if (!lesson || !s.ran || !s.result || !Object.keys(open).length) return;
+  const add = entriesForRun(lesson, open, { design: s.ran.design, scenario: s.ran.scenario, result: s.result, windows: s.windows }, new Date(), own ? s.courseLesson! : undefined);
+  const log = addEntries(s.guessLog, add);
+  saveGuessLog(log);
+  useApp.setState({ guessLog: log, loggedGuesses: [...s.loggedGuesses, ...Object.keys(open)] });
 }
 
 // Worker → store. Charts and lists refresh at most ~4 times a second.

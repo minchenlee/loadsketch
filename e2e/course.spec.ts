@@ -292,3 +292,50 @@ test('course: two tabs do not erase each other\'s progress', async ({ page }) =>
   await page.getByTestId('course-home').click();
   await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'started');
 });
+
+test('course: the guess log records course guesses once, with the lesson', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answer-hit')).toBeVisible({ timeout: 60_000 });
+  await page.waitForTimeout(500);
+  const log = () => page.evaluate(() => (JSON.parse(localStorage.getItem('loadsketch-guess-log') ?? '{"entries":[]}').entries as { lesson?: string; question: string }[]).map((e) => `${e.lesson}:${e.question}`).sort());
+  expect(await log()).toEqual(['2.1:db-share', '2.1:hit']);
+  // a second run does not log them again
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await page.waitForTimeout(500);
+  expect(await log()).toEqual(['2.1:db-share', '2.1:hit']);
+});
+
+test('course: a second guess on the same example waits for its own run (2.4)', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300');
+  test.skip((await page.getByTestId('course-lesson-2.4').getAttribute('data-state')) === 'soon', 'lesson 2.4 is not written on this branch');
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.4');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-stale-share-some').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answer-stale-share')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('course-answer-primary-busy')).toHaveCount(0);
+  // the second guess is still open after the first run
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:guess');
+  await expect(page.getByTestId('course-option-primary-busy-high')).toBeEnabled();
+  await page.getByTestId('course-option-primary-busy-high').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'idle', { timeout: 30_000 });
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-run').click();
+  // the try step shows the answer to the second guess, from the run with the change
+  await expect(page.getByTestId('course-answer-primary-busy')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('course-answer-primary-busy')).toHaveAttribute('data-right', 'true');
+});
