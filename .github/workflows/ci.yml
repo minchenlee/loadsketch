@@ -41,12 +41,24 @@ jobs:
       - name: AGENTS.md check
         run: node scripts/check-agents-md.ts
 
+      - name: Accuracy report is up to date (docs/accuracy.md)
+        run: node scripts/accuracy.ts --check
+
+      - name: AI guide is up to date
+        run: node scripts/ai-guide.ts --check
+
       - name: Build
         run: npm run build
 
   e2e:
     runs-on: ubuntu-latest
+    # The Playwright image has Chromium and its system libraries, so there is no apt step that can
+    # fail. Its version must be the same as @playwright/test in package-lock.json; the first step
+    # after the install checks this. Change both together.
+    container: mcr.microsoft.com/playwright:v1.61.0-noble
     timeout-minutes: 30
+    env:
+      PLAYWRIGHT_IMAGE_VERSION: 1.61.0
     steps:
       - uses: actions/checkout@v4
 
@@ -59,16 +71,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: The container and @playwright/test are the same version
+        run: |
+          installed=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
+          if [ "$installed" != "$PLAYWRIGHT_IMAGE_VERSION" ]; then
+            echo "::error::@playwright/test is $installed but the container is $PLAYWRIGHT_IMAGE_VERSION. Change the container tag and PLAYWRIGHT_IMAGE_VERSION in .github/workflows/ci.yml."
+            exit 1
+          fi
 
+      # A test that fails is run again, up to 2 times. One that then passes is reported as flaky,
+      # with a trace of the retry in the uploaded results.
       - name: End-to-end tests (headless)
-        run: npx playwright test
+        run: npx playwright test --retries=2 --trace=on-first-retry --reporter=list,github
 
-      - name: Upload the report of a failed run
-        if: failure()
+      - name: Upload the results (traces of failed and retried tests)
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-results
           path: test-results/
+          if-no-files-found: ignore
           retention-days: 7

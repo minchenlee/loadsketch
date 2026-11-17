@@ -1,0 +1,52 @@
+name: Nightly slow tests
+
+# The slow, time-sensitive unit tests. They do not run on a pull request and do not block one.
+# ci.yml runs the quick tests, the golden test and the design briefs on every pull request.
+#
+# A scheduled run uses the default branch. To run another branch, start the workflow by hand
+# ("Run workflow") and pick the branch.
+
+on:
+  schedule:
+    - cron: '0 19 * * *' # 03:00 in Taipei (UTC+8)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  slow:
+    name: slow (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # one group that fails does not stop the others
+      fail-fast: false
+      matrix:
+        include:
+          # Each group has its own runner, so the tests with a time budget do not compete for CPU.
+          - name: format
+            files: tests/format.test.ts
+          - name: timing
+            files: tests/timescale.test.ts tests/import/limit.test.ts
+          - name: examples
+            files: tests/learn.test.ts tests/constraints.test.ts tests/components.test.ts tests/oncall.test.ts tests/queueing.test.ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A test that fails is run once more; vitest lists the ones that passed only on the retry.
+      - name: Slow tests (${{ matrix.name }})
+        run: npx vitest run --retry=1 ${{ matrix.files }}
