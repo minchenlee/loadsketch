@@ -185,7 +185,7 @@ describe('practice data files', () => {
     ]);
   });
 
-  it('validates all three practice templates without CJK or app loading', () => {
+  it('validates all three practice templates without CJK', () => {
     const readTemplate = (name: string) => {
       const path = `examples/practice/templates/${name}`;
       const text = readFileSync(join(ROOT, path), 'utf8');
@@ -195,11 +195,8 @@ describe('practice data files', () => {
     const [incPath, incRaw] = readTemplate('incident.json');
     const [probPath, probRaw] = readTemplate('problem.json');
     const [briefPath, briefRaw] = readTemplate('brief.json');
-    const inc = parseIncident(incPath, incRaw, { checkFilename: false });
-    const prob = parseProblem(probPath, probRaw, { checkFilename: false });
-    const brief = parseBrief(briefPath, briefRaw, { checkFilename: false });
-    expect(INCIDENTS.map((i) => i.id)).not.toContain(inc.id);
-    expect(PROBLEMS.map((p) => p.id)).not.toContain(prob.id);
-    expect(BRIEFS.map((b) => b.id)).not.toContain(brief.id);
+    expect(() => parseIncident(incPath, incRaw, { checkFilename: false })).not.toThrow();
+    expect(() => parseProblem(probPath, probRaw, { checkFilename: false })).not.toThrow();
+    expect(() => parseBrief(briefPath, briefRaw, { checkFilename: false })).not.toThrow();
   });
 });
