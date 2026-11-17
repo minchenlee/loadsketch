@@ -4,7 +4,6 @@
 // its file lands. A lesson file not in the outline is shown too, in its unit.
 import { tx } from '../i18n/index.ts';
 import { COURSE, COURSE_BY_ID, UNITS as UNIT_TITLES } from '../learn/course.ts';
-import { LESSONS } from '../learn/lessons.ts';
 import type { Lesson } from '../learn/lesson.ts';
 
 export interface CourseLesson {
@@ -60,21 +59,11 @@ const OUTLINE: [string, string, string | undefined, number, 1 | 2][] = [
   ['6.5', tx('Architect track: import Terraform, find the limit'), undefined, 30, 2],
 ];
 
-/**
- * The lesson for an outline entry: its course file, else the side-panel lesson of the planned
- * example when no course file uses that example (the retry storm, 3.1, before it moves to a file).
- */
-function textOf(id: string, example: string | undefined): Lesson | undefined {
-  if (COURSE_BY_ID[id]) return COURSE_BY_ID[id];
-  if (!example || COURSE.some((l) => l.example === example)) return undefined;
-  return LESSONS[example];
-}
-
 const order = (id: string) => id.split('.').map(Number);
 const byId = (a: { id: string }, b: { id: string }) => order(a.id)[0] - order(b.id)[0] || order(a.id)[1] - order(b.id)[1];
 
-const outlined: CourseLesson[] = OUTLINE.map(([id, title, example, minutes, wave]) => {
-  const lesson = textOf(id, example);
+const outlined: CourseLesson[] = OUTLINE.map(([id, title, , minutes, wave]) => {
+  const lesson = COURSE_BY_ID[id];
   return { id, title: lesson?.title ?? title, minutes: lesson?.minutes ?? minutes, wave: lesson?.wave ?? wave, lesson };
 });
 const extra: CourseLesson[] = COURSE.filter((l) => !OUTLINE.some(([id]) => id === l.id)).map((l) => ({ id: l.id!, title: l.title ?? l.id!, minutes: l.minutes ?? 0, wave: l.wave ?? 2, lesson: l }));

@@ -18,14 +18,14 @@ test('course: the table of contents lists 7 units and 33 lessons, unwritten ones
   await page.goto('/learn/?lang=en');
   await expect(page.getByTestId('course-unit')).toHaveCount(7);
   await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
-  // lessons with text are links: 2.1 (a course file) and 3.1 (the retry storm)
+  // lessons with a course file are links
   await expect(page.getByTestId('course-lesson-2.1')).toHaveAttribute('data-state', 'ready');
-  // the retry storm lesson is written: a link; 1.1 is not yet: grey, no link
+  // 3.1 is written: a link; 1.4 is not yet: grey, no link
   await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'ready');
   await expect(page.getByTestId('course-lesson-3.1').locator('a')).toHaveCount(1);
-  await expect(page.getByTestId('course-lesson-1.1')).toHaveAttribute('data-state', 'soon');
-  await expect(page.getByTestId('course-lesson-1.1').locator('a')).toHaveCount(0);
-  await expect(page.getByTestId('course-lesson-1.1')).toContainText('Coming soon');
+  await expect(page.getByTestId('course-lesson-1.4')).toHaveAttribute('data-state', 'soon');
+  await expect(page.getByTestId('course-lesson-1.4').locator('a')).toHaveCount(0);
+  await expect(page.getByTestId('course-lesson-1.4')).toContainText('Coming soon');
   // the Chinese page translates the titles
   await page.getByTestId('course-lang').click();
   await expect(page.getByTestId('course-lesson-3.1')).toContainText('重試風暴');
@@ -67,9 +67,17 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   expect(guesses).toEqual({ recover: 'never', amp: 'x3' });
   await page.screenshot({ path: join(SHOTS, 'course-lesson-answers.png') });
 
-  // the challenges: the original design passes none
+  // the try step sends its change to the frame
   await page.getByTestId('course-next').click();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:challenge');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:try');
+  await page.getByTestId('course-patch').click();
+  await expect
+    .poll(() => frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { edges: { id: string; data?: { edge: { retries?: number } } }[] } } }).__loadsketch.getState().edges.find((e) => e.id === 'lb->api')?.data?.edge.retries))
+    .toBe(0);
+
+  // the challenges: the original design (the run before the change) passes none
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:challenge');
   await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible();
   await expect(page.getByTestId('course-passed')).toHaveCount(0);
 
@@ -84,17 +92,14 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
 
   // the progress is kept: after a reload the lesson opens on the same step, guesses locked
   await page.reload();
-  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:challenge');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:challenge');
   await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-passed')).toBeVisible();
-  await page.getByTestId('course-back').click();
-  await page.getByTestId('course-back').click();
+  for (let k = 0; k < 3; k++) await page.getByTestId('course-back').click();
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '1:guess');
   await expect(page.getByTestId('course-option-amp-x6')).toBeDisabled();
 
   // the last page; the table of contents shows the lesson as done
-  await page.getByTestId('course-next').click();
-  await page.getByTestId('course-next').click();
-  await page.getByTestId('course-next').click();
+  for (let k = 0; k < 5; k++) await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-finish')).toBeVisible();
   await page.getByTestId('course-home').click();
   await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'done');

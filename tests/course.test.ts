@@ -25,9 +25,8 @@ describe('course table of contents', () => {
     expect(ALL_LESSONS.find((l) => l.id === '2.1')?.lesson).toBe(COURSE_BY_ID['2.1']);
   });
 
-  it('the retry storm shows as 3.1 until it has a course file', () => {
-    const e = ALL_LESSONS.find((l) => l.id === '3.1')!;
-    expect(e.lesson).toBe(COURSE_BY_ID['3.1'] ?? LESSONS['retry-storm']);
+  it('a lesson of the outline with no course file is coming soon', () => {
+    for (const e of ALL_LESSONS) expect(e.lesson).toBe(COURSE_BY_ID[e.id]);
   });
 
   it('the next lesson skips the ones not written yet', () => {
