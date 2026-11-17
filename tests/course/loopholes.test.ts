@@ -33,6 +33,21 @@ describe('2.1: the database-share answer agrees with its option text', () => {
   }, SLOW);
 });
 
+describe('autoscaling does not get round a machine limit', () => {
+  it('1.1: one server as the floor, autoscaling to 4 (review of 6873782)', () => {
+    const { run, passed } = L('1.1');
+    const r = run(
+      setParam('api', 'serviceMs', { mean: 4.5, cv: 1 }),
+      setParam('api', 'autoscale', 'on'),
+      setParam('api', 'scaleEveryS', 1),
+      setParam('api', 'bootS', 0),
+      setParam('api', 'coldFactor', 1),
+      setParam('api', 'targetUtil', 0.3),
+    );
+    expect(passed(r)).toEqual([]);
+  }, SLOW);
+});
+
 describe('turning requests away does not buy latency', () => {
   const slow: Change[] = [setParam('api', 'serviceMs', { mean: 4.5, cv: 1 })];
   it('1.1: a tiny queue on the slow release', () => {

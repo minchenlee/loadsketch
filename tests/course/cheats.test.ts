@@ -47,6 +47,15 @@ const dropMessages: Change = {
   },
 };
 
+/** Every component that can autoscale does, as fast as it can (instances is then only the floor). */
+const autoscaleAll: Change = {
+  key: 'cheat:autoscale',
+  apply: (d) => {
+    for (const n of d.nodes)
+      if (KINDS[n.kind]?.params.autoscale && n.params?.autoscale !== 'on') n.params = { ...n.params, autoscale: 'on', maxInstances: 12, scaleEveryS: 1, bootS: 0, coldFactor: 1, targetUtil: 0.3 };
+  },
+};
+
 function cheatsFor(d: Design, c: Challenge): { name: string; change: Change }[] {
   const out: { name: string; change: Change }[] = [];
   for (const n of d.nodes) {
@@ -55,6 +64,7 @@ function cheatsFor(d: Design, c: Challenge): { name: string; change: Change }[] 
     out.push({ name: `rename ${n.id}`, change: renameNode(n.id) });
   }
   out.push({ name: 'processing takes forever', change: forever });
+  if (d.nodes.some((n) => KINDS[n.kind]?.params.autoscale && n.params?.autoscale !== 'on')) out.push({ name: 'autoscale past the machine limit', change: autoscaleAll });
   if (d.nodes.some((n) => KINDS[n.kind]?.params.messageTtlS)) out.push({ name: 'messages expire at once', change: dropMessages });
   return out;
 }

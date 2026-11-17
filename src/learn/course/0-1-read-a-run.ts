@@ -2,7 +2,8 @@
 import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
-import { failUnder1, p99Under, paramOf } from '../lessonKit.ts';
+import { failUnder1, p99Under } from '../lessonKit.ts';
+import { mostMachines } from '../courseMachines.ts';
 
 const INTRO = tx('A three-tier site: a load balancer, 3 API servers (4 requests at a time each), a Redis cache and a Postgres database. Traffic is 600 requests a second, and from second 20 to 35 it is 3 times higher. Each card on the canvas shows how busy that component is; the Results tab shows p99 (the time 99% of requests finish within), the bottleneck note, and a theory row that predicts queueing from the average load. Guess, then press Run.');
 
@@ -30,8 +31,8 @@ const fmtMs = (x: number) => (x < 10 ? x.toFixed(2) : Math.round(x).toString());
 const apiAtMost5: Goal = {
   text: tx('At most 5 API servers'),
   check: (run) => {
-    const n = paramOf(run.design, 'api', 'instances');
-    return { ok: typeof n === 'number' && n <= 5, value: String(n ?? '—') };
+    const n = mostMachines(run, 'api');
+    return { ok: n > 0 && n <= 5, value: String(n) };
   },
 };
 
