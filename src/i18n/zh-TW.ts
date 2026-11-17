@@ -1188,7 +1188,7 @@ export const ZH: Record<string, string> = {
   "Link copied": "已複製連結",
   "LinkedIn style: the feed's retry death spiral (2018 load test)": "LinkedIn 風格：Feed 的重試死亡螺旋（2018 負載測試）",
   "Links dropped": "連結掉線",
-  "Little's law and one server": "Little 定律和一台伺服器",
+  "Little’s law and one server": "Little 定律和一台伺服器",
   "Little’s law: requests inside = arrivals per second × seconds each one spends inside. On average, how many requests are inside the server at once (being worked on or waiting)?": "Little 定律：裡面的請求數 = 每秒到達數 × 每個請求在裡面的秒數。平均同時有幾個請求在伺服器裡（正在處理或在等）？",
   "Liveness (is the process up?)": "存活檢查（只看程序在不在）",
   "Load balancer": "負載平衡器",

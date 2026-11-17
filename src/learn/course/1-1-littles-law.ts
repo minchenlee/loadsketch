@@ -45,7 +45,7 @@ const busy80: Goal = {
 
 const lesson: Lesson = {
   id: '1.1',
-  title: tx("Little's law and one server"),
+  title: tx('Little’s law and one server'),
   unit: 1,
   order: 1,
   minutes: 20,
