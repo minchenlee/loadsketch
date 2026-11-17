@@ -3,7 +3,7 @@
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
-import { p99Under, paramOf, pct } from '../lessonKit.ts';
+import { failUnder1, p99Under, paramOf, pct } from '../lessonKit.ts';
 
 const INTRO = tx('One API server, called directly, with the network left out. It works on 4 requests at a time; each takes 2.5 ms on average. Users send 800 requests a second, so it can do 4 × 1000 ÷ 2.5 = 1600 a second and is busy half the time (utilisation ρ = 800 ÷ 1600). Guess how much requests wait, then press Run.');
 
@@ -101,8 +101,8 @@ const lesson: Lesson = {
     {
       id: 'littles/slower-release',
       title: tx('A slower release'),
-      text: tx('A new release makes each request take 4.5 ms (set the processing time to 4.5 ms or more). The server is now 90% busy and p99 grows about 4 times. Bring p99 under 25 ms, still with one server.'),
-      goals: [slower, oneServer, p99Under(25, tx('p99 of successful requests under 25 ms'))],
+      text: tx('A new release makes each request take 4.5 ms (set the processing time to 4.5 ms or more). The server is now 90% busy and p99 grows about 4 times. Bring p99 under 25 ms, still with one server, and do not turn requests away (under 1% fail).'),
+      goals: [slower, oneServer, failUnder1, p99Under(25, tx('p99 of successful requests under 25 ms'))],
       rules: [],
       hint: tx('ρ = λ ÷ (c × μ). λ is fixed and each request is slower, so the only lever left on one server is c: how many requests it works on at a time.'),
     },

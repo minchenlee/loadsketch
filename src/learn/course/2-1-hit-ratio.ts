@@ -45,18 +45,18 @@ const cacheHitRatio: Lesson = {
       text: tx('Of every 100 requests into the redirect API, how many reach the database?'),
       options: [
         { id: 'tenth', text: tx('Fewer than 10') },
-        { id: 'quarter', text: tx('About 25') },
-        { id: 'half', text: tx('About 50 or more') },
+        { id: 'quarter', text: tx('10 to 40') },
+        { id: 'half', text: tx('More than 40') },
       ],
       answer: (run) => {
         const s = shareReaching(run, 'db', 'api');
-        return s < 0.17 ? 'tenth' : s < 0.4 ? 'quarter' : 'half';
+        return s < 0.1 ? 'tenth' : s <= 0.4 ? 'quarter' : 'half';
       },
       measured: (run) => t('{n} of every 100 requests reach the database', { n: Math.round(shareReaching(run, 'db', 'api') * 100) }),
       explain: tx('Database load = reads × (1 − hit ratio) + writes. The hit ratio decides how much the database carries: from 50% to 75%, the database reads halve. With 8 connections and 5 ms per read, the database serves at most about 1600 reads a second (8 × 1000 ÷ 5); once the hit ratio falls under a half, 3000 clicks a second fill it up.'),
       explainFor: {
         tenth: tx('Under a tenth reach the database: the cache caught more than 90%. This design has a high hit ratio (or uses a fixed one).'),
-        half: tx('More than half reach the database: the hit ratio is under a half, and the reads the database receives are close to its ceiling (8 connections × one read per 5 ms ≈ 1600/s). A little lower and it starts to queue and time out. See how many a second the database card receives.'),
+        half: tx('More than 40 in 100 reach the database: the hit ratio is about a half or lower, and the reads the database receives are close to its ceiling (8 connections × one read per 5 ms ≈ 1600/s). A little lower and it starts to queue and time out. See how many a second the database card receives.'),
       },
     },
   ],
