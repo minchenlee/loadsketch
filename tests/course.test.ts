@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
 import { clampStep, ctxOf, pagesOf } from '../src/course/steps.ts';
-import { parseProgress, scoreOf } from '../src/course/progress.ts';
+import { parseProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
 import { stepsOf, type Lesson } from '../src/learn/lesson.ts';
@@ -96,5 +96,15 @@ describe('the score of the guesses', () => {
   it('counts the saved answers, not this visit\'s runs, and says which are not scored yet', () => {
     const p = { step: 0, reached: 0, guesses: { a: 'x', b: 'y', c: 'z' }, answered: ['a', 'b', 'c'], answers: { a: 'x', b: 'n' }, passed: [], done: true };
     expect(scoreOf(['a', 'b', 'c', 'd'], p)).toEqual({ right: 1, unscored: 1 });
+  });
+});
+
+describe('answers of a run', () => {
+  it('a later run does not change the answers already scored; it adds the new ones', () => {
+    const p = { step: 2, reached: 2, guesses: { a: 'x', b: 'y' }, answered: ['a'], answers: { a: 'x' }, passed: [], done: false };
+    const q = withAnswers(p, { a: 'other', b: 'y' });
+    expect(q.answers).toEqual({ a: 'x', b: 'y' });
+    expect(q.answered).toEqual(['a', 'b']);
+    expect(scoreOf(['a', 'b'], q)).toEqual({ right: 2, unscored: 0 });
   });
 });

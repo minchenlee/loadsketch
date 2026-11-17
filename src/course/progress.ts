@@ -83,3 +83,12 @@ export function scoreOf(questions: string[], p: LessonProgress): { right: number
     unscored: questions.filter((q) => p.answered.includes(q) && p.answers[q] === undefined).length,
   };
 }
+
+/**
+ * The progress after a run that answered these questions (id → right option). An answer already
+ * scored stays: the guess log recorded the first run, and a later run (a changed design for a
+ * challenge) only updates the measurements and the challenges, not the score.
+ */
+export function withAnswers(p: LessonProgress, fresh: Record<string, string>): LessonProgress {
+  return { ...p, answered: [...new Set([...p.answered, ...Object.keys(fresh)])], answers: { ...fresh, ...p.answers } };
+}

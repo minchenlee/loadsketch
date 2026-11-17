@@ -272,3 +272,18 @@ test('course: reopening an answered lesson does not log its guesses again', asyn
   await page.waitForTimeout(500);
   expect(await logged()).toBe(n);
 });
+
+test('course: two tabs do not erase each other\'s progress', async ({ page }) => {
+  const b = await page.context().newPage();
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  await b.goto('/learn/?lang=en&lesson=3.1');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', /^0:/);
+  await expect(b.getByTestId('course-step')).toHaveAttribute('data-step', /^0:/);
+  await page.getByTestId('course-next').click();
+  await b.getByTestId('course-next').click();
+  const saved = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('loadsketch-course') ?? '{}').lessons ?? {}).sort());
+  expect(saved).toEqual(['2.1', '3.1']);
+  // and the other tab shows it
+  await page.getByTestId('course-home').click();
+  await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'started');
+});

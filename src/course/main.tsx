@@ -19,7 +19,7 @@ import type { RunData } from '../learn/metrics.ts';
 import type { Design, Scenario } from '../schema/design.ts';
 import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
-import { EMPTY, loadProgress, saveProgress, type LessonProgress, type Progress, scoreOf } from './progress.ts';
+import { EMPTY, PROGRESS_KEY, loadProgress, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { clampStep, ctxKey, ctxOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 
@@ -224,8 +224,9 @@ function RunButton({ status, onRun }: { status: Status; onRun: () => void }) {
   );
 }
 
-function Answer({ q, run, mine }: { q: Question; run: RunData; mine: string | undefined }) {
-  const answer = q.answer(run);
+/** One question's answer. `scored`: the answer saved from the first run that answered it; the score keeps it, a later run only measures again. */
+function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: string | undefined; scored: string | undefined }) {
+  const answer = scored ?? q.answer(run);
   const right = q.options.find((o) => o.id === answer);
   const guess = q.options.find((o) => o.id === mine);
   return (
@@ -373,9 +374,9 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     setRuns(all);
     const p = latest.current.progress;
     const answered = lesson.questions.filter((q) => ctxKey(runOf(lesson, q)) === key);
-    // the right answers are kept with the progress: the score survives a reload, which has no runs
-    const answers = { ...p.answers, ...Object.fromEntries(answered.map((q) => [q.id, q.answer(r.run)])) };
-    update({ ...p, answered: [...new Set([...p.answered, ...answered.map((q) => q.id)])], answers });
+    // the right answers are kept with the progress (the score survives a reload, which has no
+    // runs); the first run's answer stays
+    update(withAnswers(p, Object.fromEntries(answered.map((q) => [q.id, q.answer(r.run)]))));
   };
   const onRunRef = useRef(onRun);
   onRunRef.current = onRun;
@@ -514,7 +515,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           {run && askedHere.length > 0 && (
             <div className="mt-5 space-y-4" data-testid="course-answers">
               {askedHere.map((x) => (
-                <Answer key={x.id} q={x} run={run} mine={progress.guesses[x.id]} />
+                <Answer key={x.id} q={x} run={run} mine={progress.guesses[x.id]} scored={progress.answers[x.id]} />
               ))}
               <div className="faint text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</div>
             </div>
@@ -680,12 +681,21 @@ function Course() {
     save('loadsketch-theme', th);
     setTheme(th);
   };
+  // Another tab may have saved since this one loaded: read the saved progress before writing, and
+  // follow what other tabs save (the storage event), so no tab erases another's lessons.
   const update = useCallback((lessonId: string, p: LessonProgress) => {
     setProgress((all) => {
-      const next = { ...all, [lessonId]: p };
+      const next = { ...all, ...loadProgress(), [lessonId]: p };
       saveProgress(next);
       return next;
     });
+  }, []);
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === PROGRESS_KEY) setProgress((all) => ({ ...all, ...loadProgress() }));
+    };
+    addEventListener('storage', onStorage);
+    return () => removeEventListener('storage', onStorage);
   }, []);
   return (
     <div className="course-page">
