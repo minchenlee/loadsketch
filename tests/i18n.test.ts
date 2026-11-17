@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { EN } from '../src/i18n/en.ts';
-import { setLang, t } from '../src/i18n/index.ts';
+import { ZH } from '../src/i18n/zh-TW.ts';
+import { setLang, stripContext, t } from '../src/i18n/index.ts';
 import { localizeDesign, localizeScenario } from '../src/i18n/content.ts';
 import { simulate } from '../src/engine/index.ts';
 import { checkDesign, type Design, type Scenario } from '../src/schema/design.ts';
@@ -20,32 +20,45 @@ describe('i18n catalog', () => {
     execFileSync('node', ['scripts/i18n-extract.ts', '--check'], { cwd: root, stdio: 'pipe' });
   });
 
-  it('every message has an English text with the same placeholders and no Chinese', () => {
-    const bad = Object.entries(EN).filter(([zh, en]) => !en || CJK.test(en) || holes(zh).join() !== holes(en).join());
+  // An empty value is allowed: i18n:check lists it and the nightly --strict run fails on it.
+  it('English ids have no Chinese; every Traditional Chinese text is Chinese and has the same placeholders', () => {
+    const bad = Object.entries(ZH).filter(([en, zh]) => CJK.test(en) || (zh !== '' && (!CJK.test(zh) || holes(stripContext(en)).join() !== holes(zh).join())));
     expect(bad).toEqual([]);
   });
 
-  it('t() fills placeholders and falls back to the Chinese text', () => {
-    expect(t('第 {at} 秒流量變 {m} 倍{span}', { at: 20, m: 3, span: '' })).toBe('第 20 秒流量變 3 倍');
+  it('t() fills placeholders, strips @@context, falls back to English, and translates legacy Chinese ids in en mode', () => {
+    expect(t('Second {at}: traffic {m}×{span}', { at: 20, m: 3, span: '' })).toBe('第 20 秒流量變 3 倍');
+    expect(t('Missing message {x}@@ctx', { x: 1 })).toBe('Missing message 1');
     setLang('en');
-    expect(t('沒有這則訊息 {x}', { x: 1 })).toBe('沒有這則訊息 1');
-    expect(t('主庫')).not.toMatch(CJK);
+    expect(t('Missing message {x}@@ctx', { x: 1 })).toBe('Missing message 1');
+    expect(t('Off@@not-used')).toBe('Off');
+    expect(t('primary')).toBe('primary');
+    // legacy Chinese id in an old design file still translates in English mode
+    expect(t('主庫')).toBe('Primary');
   });
 });
 
-describe('English output', () => {
+describe('English and Traditional Chinese output', () => {
   const examples = readdirSync(join(root, 'examples/designs')).filter((f) => f.endsWith('.json'));
 
-  it.each(examples)('%s: events, bottleneck and warnings have no Chinese in English', (f) => {
+  it.each(examples)('%s: events, bottleneck and warnings have no Chinese in English, and translate in zh-TW', (f) => {
+    const rawD = read<Design>(`examples/designs/${f}`);
+    const rawSc = read<Scenario>('examples/scenarios/spike.json');
+
     setLang('en');
-    const d = localizeDesign(read<Design>(`examples/designs/${f}`));
-    const sc = localizeScenario(read<Scenario>('examples/scenarios/spike.json'));
+    const d = localizeDesign(rawD);
+    const sc = localizeScenario(rawSc);
     expect(JSON.stringify([d.name, d.description, d.nodes.map((n) => n.label), d.notes])).not.toMatch(CJK);
     const r = simulate(d, { ...sc, durationS: 20 });
     const text = [r.bottleneck?.why ?? '', ...r.timeline.map((e) => e.text), ...Object.values(r.nodes).map((n) => n.label), ...checkDesign(d).map((i) => i.message)];
     expect(text.filter((s) => CJK.test(s))).toEqual([]);
     // sentences joined without a space ("64%.Most")
     expect(r.bottleneck?.why ?? '').not.toMatch(/[.;:][A-Z]/);
+
+    setLang('zh-TW');
+    const zhD = localizeDesign(rawD);
+    expect(zhD.name).toMatch(CJK);
+    if (zhD.description) expect(zhD.description).toMatch(CJK);
   });
 
   it('the CLI prints English with --lang en', () => {

@@ -7,6 +7,7 @@ import { Simulation } from '../src/engine/index.ts';
 import { parseScenario, type Design, type Scenario } from '../src/schema/design.ts';
 import { FAULTS, INCIDENTS, POINTS, applyPatches, judgeFix, nodeSamples, openCost, score, symptoms, type Incident } from '../src/learn/oncall.ts';
 import { parseIncident } from '../src/learn/practiceData.ts';
+import { t } from '../src/i18n/index.ts';
 
 const root = join(import.meta.dirname, '..');
 const example = (name: string) => JSON.parse(readFileSync(join(root, 'examples/designs', `${name}.json`), 'utf8')) as Design;
@@ -47,7 +48,10 @@ describe('incidents (Q7=A: a hand-written set of 8–10)', () => {
     const node = d.nodes.find((n) => n.id === inc.answer.node)!;
     expect(inc.title).not.toContain(inc.answer.node);
     if (node.label) expect(inc.title).not.toContain(node.label);
-    for (const w of ['故障', '變慢', 'GC', '停頓', '暴增', '快取', '資料庫']) expect(inc.title).not.toContain(w);
+    // the source is English; the words below are checked in the Traditional Chinese title
+    const zh = t(inc.title);
+    if (node.label) expect(zh).not.toContain(t(node.label));
+    for (const w of ['故障', '變慢', 'GC', '停頓', '暴增', '快取', '資料庫']) expect(zh).not.toContain(w);
   });
 
   it.each(allIncidents.map((i) => [i.id, i] as const))('%s: users see it (error rate or p99 gets worse after the fault)', (_, inc) => {

@@ -7,9 +7,11 @@ import { ApiSchema, DesignSchema, EdgeSchema, NodeSchema, ScenarioSchema, type D
 import { EDGE_PARAMS, KINDS, type ParamSpec } from '../src/schema/kinds.ts';
 import { describeChange, describeScenarioChange, diffDesigns, diffScenarios, IGNORED, type Change } from '../src/app/designDiff.ts';
 import { setLang } from '../src/i18n/index.ts';
+import { localizeDesign } from '../src/i18n/content.ts';
 
 const root = join(import.meta.dirname, '..', 'examples');
-const design = (n: string) => JSON.parse(readFileSync(join(root, 'designs', `${n}.json`), 'utf8')) as Design;
+// the app shows a built-in example localized (src/i18n/content.ts)
+const design = (n: string) => localizeDesign(JSON.parse(readFileSync(join(root, 'designs', `${n}.json`), 'utf8')) as Design);
 const scenario = (n: string) => JSON.parse(readFileSync(join(root, 'scenarios', `${n}.json`), 'utf8')) as Scenario;
 const clone = <T,>(x: T): T => structuredClone(x);
 const texts = (cs: Change[]) => cs.map(describeChange);
@@ -100,7 +102,7 @@ describe('design diff', () => {
       const a = design('three-tier');
       const b = clone(a);
       b.nodes.find((n) => n.id === 'api')!.params!.instances = 4;
-      expect(texts(diffDesigns(a, b))).toEqual(['"API 伺服器" Instances: 3 → 4']);
+      expect(texts(diffDesigns(a, b))).toEqual(['"API server" Instances: 3 → 4']);
     } finally {
       setLang('zh-TW');
     }

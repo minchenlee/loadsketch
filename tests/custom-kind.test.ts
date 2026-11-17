@@ -114,7 +114,7 @@ describe('custom service: not in practice problems (Q20)', () => {
     const b = BRIEFS[0];
     const from = b.reference.nodes.find((n) => n.kind === 'service')!.id;
     expect(brokenGivens(b, b.reference)).toEqual([]);
-    expect(brokenGivens(b, withCustom(b.reference, from)).map((x) => x.text)).toContain('練習題不能用自訂服務：「{name}」');
+    expect(brokenGivens(b, withCustom(b.reference, from)).map((x) => x.text)).toContain('Practice problems do not allow a custom service: "{name}"');
   });
 
   it('a problem with limits', () => {

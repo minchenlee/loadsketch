@@ -58,8 +58,9 @@ test('jump to the end explains the bottleneck and compares with theory', async (
 
 test('a loaded example saves back to the same bytes', async ({ page }) => {
   const dir = join(import.meta.dirname, '..', 'examples', 'designs');
+  // the examples are written in English; a zh-TW page saves the Traditional Chinese text it shows
   for (const name of readdirSync(dir).map((f) => f.replace(/\.json$/, ''))) {
-    await page.goto(`/app/?example=${name}`);
+    await page.goto(`/app/?example=${name}&lang=en`);
     await expect(page.locator('[data-node]').first()).toBeVisible();
     const text = await page.evaluate(() => (window as unknown as { __loadsketch: { getState: () => { exportText: () => string } } }).__loadsketch.getState().exportText());
     expect(text).toBe(readFileSync(join(import.meta.dirname, '..', 'examples', 'designs', `${name}.json`), 'utf8'));
@@ -1027,7 +1028,7 @@ test('scenario editor: traffic, user patience, key heat, and events added, chang
   const s1 = await sc();
   expect(s1.traffic.clientTimeoutMs).toBe(1500);
   expect(s1.keys?.zipf).toBe(1.2);
-  expect(s1.name).toBe('自訂');
+  expect(s1.name).toBe('Custom');
   // read-your-writes traffic: the follow-up delay shows once follow-up reads are on
   await expect(ed.getByRole('textbox', { name: '寫完多久後讀' })).toHaveCount(0);
   await ed.getByRole('textbox', { name: '寫後讀' }).fill('20');
@@ -1236,7 +1237,7 @@ test('on-call: a hidden fault, paid metrics, an answer with a score, then a fix 
   expect(await store((s) => (s as unknown as { doc: { name: string; description?: string } }).doc.name)).toBe('值班中的系統');
   expect(await store((s) => (s as unknown as { doc: { description?: string } }).doc.description)).toBeUndefined();
   // the scenario has the fault (a canvas run shows the same incident), hidden until the answer
-  expect(await store((s) => s.scenario.name)).toBe('值班中的情境');
+  expect(await store((s) => s.scenario.name)).toBe('The incident on call');
   expect(((await store((s) => s.scenario.events)) as unknown[]).length).toBeGreaterThan(0);
   await expect(page.locator('[data-node="lb"]')).toBeVisible();
   await page.getByTestId('tab-scenario').click();
@@ -1275,7 +1276,7 @@ test('on-call: a hidden fault, paid metrics, an answer with a score, then a fix 
   await page.screenshot({ path: join(SHOTS, 'oncall-reveal.png') });
   // fix it on the canvas: the incident's design and scenario load; a run that meets the goal adds 30
   await page.getByTestId('oncall-fix').click();
-  expect(await store((s) => s.scenario.name)).toBe('值班：失敗三分之一');
+  expect(await store((s) => s.scenario.name)).toBe('On-call: a third fail');
   await store((s) => s.updateNode('lb', { params: { outlier: 'on' } }));
   await page.getByRole('button', { name: '執行' }).click();
   await page.getByRole('button', { name: '跳到結尾' }).click();
@@ -1318,7 +1319,7 @@ test('constraints: cost of a run, then a problem judged on limits; a passed run 
   await expect(page.getByTestId('practice')).toHaveCount(0);
   await expect(page.getByTestId('practice-overlay').getByTestId('problem-solo-shortener')).toBeVisible();
   await expect(page.getByTestId('check-errors')).not.toHaveAttribute('data-ok');
-  expect(await store((s) => s.scenario.name)).toBe('限制：每秒 4000');
+  expect(await store((s) => s.scenario.name)).toBe('Constraints: 4000 per second');
   expect(await store((s) => s.doc.name)).toBe('一個人顧的短網址');
   await runToEnd();
   await page.getByTestId('tab-learn').click();
@@ -1519,7 +1520,7 @@ test('design brief: starts from the requirements and the given nodes; a design b
   for (const part of ['功能需求', '流量', '已知條件', '不在範圍內']) await expect(box.getByTestId('brief-text')).toContainText(part);
   expect(await store((s) => s.nodes.map((n) => n.id).sort())).toEqual(['sms', 'users']);
   expect(await store((s) => s.edges.length)).toBe(0);
-  expect(await store((s) => s.scenario.name)).toBe('需求：簡訊通知');
+  expect(await store((s) => s.scenario.name)).toBe('Brief: SMS notifications');
   await expect(box.getByTestId('need-finished')).not.toHaveAttribute('data-ok');
   // build it: an API, a queue and a worker that calls the provider. The worker is too small.
   const add = async (kind: string, x: number) => {
