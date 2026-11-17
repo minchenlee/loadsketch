@@ -57,8 +57,9 @@ describe('English and Traditional Chinese output', () => {
 
     setLang('zh-TW');
     const zhD = localizeDesign(rawD);
-    expect(zhD.name).toMatch(CJK);
-    if (zhD.description) expect(zhD.description).toMatch(CJK);
+    // An English-only contribution leaves its Chinese empty: then zh-TW shows the English.
+    if (ZH[rawD.name]) expect(zhD.name).toMatch(CJK);
+    if (rawD.description && ZH[rawD.description]) expect(zhD.description).toMatch(CJK);
   });
 
   it('the CLI prints English with --lang en', () => {
