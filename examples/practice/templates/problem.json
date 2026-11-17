@@ -1,33 +1,60 @@
 {
   "schema": "loadsketch/problem@1",
   "id": "example-problem",
-  "title": "Short title of the constraint problem",
-  "text": "Describe the team, deadline, workload, and the four limits to satisfy.",
-  "example": "three-tier",
+  "title": "Traffic spike under a budget and complexity limit",
+  "text": "2-person team, two weeks. 600 rps baseline with a 10 s 3x spike at 20 s; every hop retries 3 times. Keep error rate <= 1%, p99 <= 300 ms, cost <= $850/month, and complexity <= 7 points.",
+  "example": "retry-storm",
   "scenario": {
     "schema": "loadsketch/scenario@1",
     "name": "Constraint: example",
-    "seed": 1,
-    "durationS": 60,
-    "warmupS": 5,
+    "seed": 3,
+    "durationS": 90,
+    "warmupS": 0,
     "traffic": {
-      "rps": 500,
-      "readRatio": 0.9
-    }
+      "rps": 600,
+      "readRatio": 0.9,
+      "clientTimeoutMs": 1000
+    },
+    "events": [
+      {
+        "type": "spike",
+        "atS": 20,
+        "forS": 10,
+        "multiplier": 3
+      }
+    ]
   },
   "start": [],
   "limits": {
     "maxErrorRate": 0.01,
     "maxP99Ms": 300,
-    "budgetPerMonth": 1000,
-    "maxPoints": 6
+    "budgetPerMonth": 850,
+    "maxPoints": 7
   },
-  "hint": "Explain the capacity math or complexity trade-off.",
+  "hint": "Remove the amplifying retries across hops and raise API server concurrency.",
   "solution": [
+    {
+      "edge": "lb->api",
+      "set": {
+        "retries": 0
+      }
+    },
+    {
+      "edge": "api->cache",
+      "set": {
+        "retries": 0
+      }
+    },
+    {
+      "edge": "api->db",
+      "set": {
+        "retries": 0
+      }
+    },
     {
       "node": "api",
       "params": {
-        "instances": 3
+        "concurrency": 8
       }
     }
   ],
@@ -35,7 +62,7 @@
     {
       "node": "api",
       "params": {
-        "instances": 12
+        "instances": 6
       }
     }
   ]

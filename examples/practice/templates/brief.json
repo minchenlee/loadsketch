@@ -1,20 +1,24 @@
 {
   "schema": "loadsketch/brief@1",
   "id": "example-brief",
-  "title": "Brief: short title",
-  "text": "Describe the team, timeline, and problem context.",
+  "title": "Brief: async notification service",
+  "text": "2-person team, three weeks. Accept notification requests and deliver them through an external SMS provider already on the canvas.",
   "functional": [
-    "Users can read and write items"
+    "Callers can submit an SMS via the API",
+    "Every submitted message is delivered to the external SMS provider"
   ],
   "load": [
-    "1,000 requests per second, 90% reads, 10% writes"
+    "500 requests per second, all writes",
+    "Callers wait at most 100 ms for the API response"
   ],
   "given": [
-    "Your API processes one request in 5 ms",
-    "The database takes 3 ms per read and 10 ms per write"
+    "The external SMS provider takes 200 ms on average and cannot be changed",
+    "Your API takes 5 ms per request on average",
+    "Workers take 2 ms per message plus provider wait time"
   ],
   "outOfScope": [
-    "Authentication and user accounts"
+    "Message templates and formatting",
+    "Delivery receipts"
   ],
   "scenario": {
     "schema": "loadsketch/scenario@1",
@@ -23,14 +27,14 @@
     "durationS": 60,
     "warmupS": 5,
     "traffic": {
-      "rps": 1000,
-      "readRatio": 0.9
+      "rps": 500,
+      "readRatio": 0
     }
   },
   "limits": {
     "maxErrorRate": 0.01,
-    "maxP99Ms": 200,
-    "budgetPerMonth": 1500,
+    "maxP99Ms": 100,
+    "budgetPerMonth": 2600,
     "maxPoints": 6
   },
   "start": {
@@ -42,23 +46,47 @@
         "kind": "client",
         "label": "Users",
         "pos": [0, 200]
+      },
+      {
+        "id": "sms",
+        "kind": "service",
+        "label": "SMS provider (external)",
+        "pos": [0, 380],
+        "params": {
+          "instances": 1,
+          "concurrency": 400,
+          "serviceMs": {
+            "mean": 200,
+            "cv": 0.5
+          },
+          "queueLimit": 2000
+        }
       }
     ],
     "edges": []
   },
-  "fixed": [],
+  "fixed": [
+    "sms"
+  ],
   "needs": [
     {
-      "kind": "stored"
+      "kind": "reaches-node",
+      "node": "sms",
+      "text": "Messages reach the SMS provider"
     },
     {
-      "kind": "looked"
+      "kind": "finished"
     },
     {
       "kind": "not-degraded"
     }
   ],
-  "hint": "Explain how to size the API and database.",
+  "floors": {
+    "worker": {
+      "serviceMs": 2
+    }
+  },
+  "hint": "Decouple API ingestion from delivery with a queue and workers sized above 500/s * 0.2 s = 100 concurrent calls.",
   "reference": {
     "schema": "loadsketch/design@1",
     "name": "Brief: example",
@@ -73,28 +101,56 @@
         "id": "lb",
         "kind": "load_balancer",
         "label": "Load Balancer",
-        "pos": [270, 200]
+        "pos": [200, 200]
       },
       {
         "id": "api",
         "kind": "service",
-        "label": "API Server",
-        "pos": [540, 200],
+        "label": "Notification API",
+        "pos": [400, 200]
+      },
+      {
+        "id": "outbox",
+        "kind": "queue",
+        "label": "Outbox Queue",
+        "pos": [600, 200]
+      },
+      {
+        "id": "sender",
+        "kind": "worker",
+        "label": "SMS Worker",
+        "pos": [810, 200],
         "params": {
-          "instances": 2
+          "instances": 4,
+          "concurrency": 32,
+          "serviceMs": {
+            "mean": 2,
+            "cv": 1
+          }
         }
       },
       {
-        "id": "db",
-        "kind": "database",
-        "label": "Database",
-        "pos": [810, 200]
+        "id": "sms",
+        "kind": "service",
+        "label": "SMS provider (external)",
+        "pos": [1080, 200],
+        "params": {
+          "instances": 1,
+          "concurrency": 400,
+          "serviceMs": {
+            "mean": 200,
+            "cv": 0.5
+          },
+          "queueLimit": 2000
+        }
       }
     ],
     "edges": [
       { "from": "users", "to": "lb" },
       { "from": "lb", "to": "api" },
-      { "from": "api", "to": "db" }
+      { "from": "api", "to": "outbox" },
+      { "from": "outbox", "to": "sender" },
+      { "from": "sender", "to": "sms" }
     ]
   },
   "naive": {
@@ -110,23 +166,31 @@
       {
         "id": "api",
         "kind": "service",
-        "label": "API Server",
-        "pos": [400, 200],
+        "label": "Notification API",
+        "pos": [540, 200],
         "params": {
-          "instances": 1,
-          "concurrency": 2
+          "instances": 4
         }
       },
       {
-        "id": "db",
-        "kind": "database",
-        "label": "Database",
-        "pos": [800, 200]
+        "id": "sms",
+        "kind": "service",
+        "label": "SMS provider (external)",
+        "pos": [1080, 200],
+        "params": {
+          "instances": 1,
+          "concurrency": 400,
+          "serviceMs": {
+            "mean": 200,
+            "cv": 0.5
+          },
+          "queueLimit": 2000
+        }
       }
     ],
     "edges": [
       { "from": "users", "to": "api" },
-      { "from": "api", "to": "db" }
+      { "from": "api", "to": "sms" }
     ]
   }
 }

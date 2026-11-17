@@ -7,9 +7,16 @@ import { Simulation } from '../src/engine/index.ts';
 import { parseScenario, type Design } from '../src/schema/design.ts';
 import { MULTI_REGION_POINTS, PROBLEMS, complexity, judgeProblem, type Problem } from '../src/learn/constraints.ts';
 import { applyPatches, type Patch } from '../src/learn/oncall.ts';
+import { parseProblem } from '../src/learn/practiceData.ts';
 import { design } from './helpers.ts';
 
 const example = (name: string) => JSON.parse(readFileSync(join(import.meta.dirname, '..', 'examples/designs', `${name}.json`), 'utf8')) as Design;
+const templateProblem = parseProblem(
+  'examples/practice/templates/problem.json',
+  JSON.parse(readFileSync(join(import.meta.dirname, '..', 'examples/practice/templates/problem.json'), 'utf8')),
+  { checkFilename: false },
+);
+const allProblems = [...PROBLEMS, templateProblem];
 
 function verdict(p: Problem, patches: Patch[]) {
   const d = applyPatches(applyPatches(example(p.example), p.start), patches);
@@ -45,10 +52,10 @@ describe('complexity points', () => {
 describe('problems', () => {
   it('there are some, with valid scenarios', () => {
     expect(PROBLEMS.length).toBeGreaterThanOrEqual(3);
-    for (const p of PROBLEMS) expect(parseScenario(p.scenario, example(p.example)).ok).toBe(true);
+    for (const p of allProblems) expect(parseScenario(p.scenario, example(p.example)).ok).toBe(true);
   });
 
-  it.each(PROBLEMS.map((p) => [p.id, p] as const))('%s: the start fails, the obvious fix breaks a limit, and the known solution passes', (_, p) => {
+  it.each(allProblems.map((p) => [p.id, p] as const))('%s: the start fails, the obvious fix breaks a limit, and the known solution passes', (_, p) => {
     const start = verdict(p, []);
     expect(start.passed).toBe(false);
     expect(start.score).toBe(0);
@@ -91,6 +98,6 @@ describe('what a problem gives cannot be changed', () => {
   });
 
   it('the known solutions change nothing that is given', () => {
-    for (const q of PROBLEMS) expect(verdict(q, q.solution).broken).toEqual([]);
+    for (const q of allProblems) expect(verdict(q, q.solution).broken).toEqual([]);
   });
 });

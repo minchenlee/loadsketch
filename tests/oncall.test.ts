@@ -6,9 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { Simulation } from '../src/engine/index.ts';
 import { parseScenario, type Design, type Scenario } from '../src/schema/design.ts';
 import { FAULTS, INCIDENTS, POINTS, applyPatches, judgeFix, nodeSamples, openCost, score, symptoms, type Incident } from '../src/learn/oncall.ts';
+import { parseIncident } from '../src/learn/practiceData.ts';
 
 const root = join(import.meta.dirname, '..');
 const example = (name: string) => JSON.parse(readFileSync(join(root, 'examples/designs', `${name}.json`), 'utf8')) as Design;
+const templateIncident = parseIncident(
+  'examples/practice/templates/incident.json',
+  JSON.parse(readFileSync(join(root, 'examples/practice/templates/incident.json'), 'utf8')),
+  { checkFilename: false },
+);
+const allIncidents = [...INCIDENTS, templateIncident];
 
 function run(d: Design, s: Scenario) {
   const sim = new Simulation(d, s);
@@ -32,7 +39,7 @@ describe('incidents (Q7=A: a hand-written set of 8–10)', () => {
     expect(new Set(INCIDENTS.map((i) => i.answer.fault))).toEqual(new Set(FAULTS.map((f) => f.id)));
   });
 
-  it.each(INCIDENTS.map((i) => [i.id, i] as const))('%s: the scenario is valid and the answer is a component of the design', (_, inc) => {
+  it.each(allIncidents.map((i) => [i.id, i] as const))('%s: the scenario is valid and the answer is a component of the design', (_, inc) => {
     const d = example(inc.example);
     expect(parseScenario(inc.scenario, d).ok).toBe(true);
     expect(d.nodes.map((n) => n.id)).toContain(inc.answer.node);
@@ -43,7 +50,7 @@ describe('incidents (Q7=A: a hand-written set of 8–10)', () => {
     for (const w of ['故障', '變慢', 'GC', '停頓', '暴增', '快取', '資料庫']) expect(inc.title).not.toContain(w);
   });
 
-  it.each(INCIDENTS.map((i) => [i.id, i] as const))('%s: users see it (error rate or p99 gets worse after the fault)', (_, inc) => {
+  it.each(allIncidents.map((i) => [i.id, i] as const))('%s: users see it (error rate or p99 gets worse after the fault)', (_, inc) => {
     const s = symptoms(base(inc).windows);
     const before = s.filter((x) => x.t > 6 && x.t <= 20);
     const after = s.filter((x) => x.t > 22 && x.t <= 60);
@@ -54,7 +61,7 @@ describe('incidents (Q7=A: a hand-written set of 8–10)', () => {
     expect(judgeFix(inc, example(inc.example), example(inc.example), base(inc).result).ok).toBe(false);
   });
 
-  it.each(INCIDENTS.map((i) => [i.id, i] as const))('%s: the known fix meets the goal with the fault still on', (_, inc) => {
+  it.each(allIncidents.map((i) => [i.id, i] as const))('%s: the known fix meets the goal with the fault still on', (_, inc) => {
     const d = example(inc.example);
     const fixed = applyPatches(d, inc.solution);
     expect(fixed).not.toEqual(d);
@@ -146,7 +153,7 @@ describe('score (Q9=A)', () => {
     expect(v.missing).toEqual(['cache']);
   });
 
-  it.each(INCIDENTS.map((i) => [i.id, i] as const))('%s: a weight-0 edge out of the client (no traffic reaches the system) is not a fix', (_, inc) => {
+  it.each(allIncidents.map((i) => [i.id, i] as const))('%s: a weight-0 edge out of the client (no traffic reaches the system) is not a fix', (_, inc) => {
     const d = example(inc.example);
     const bypass = structuredClone(d);
     for (const e of bypass.edges) if (e.from === 'users') e.weight = 0;

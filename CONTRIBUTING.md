@@ -361,7 +361,7 @@ Each practice question is a single JSON file — no TypeScript changes are neede
 | Constraint problem | `examples/practice/templates/problem.json` | `examples/practice/constraints/` | `loadsketch/problem@1` |
 | Design brief | `examples/practice/templates/brief.json` | `examples/practice/briefs/` | `loadsketch/brief@1` |
 
-Name the new file `NN-<id>.json` (for example `09-my-case.json`). The two-digit `NN` prefix sets list order, and `<id>` must match the `id` field inside the JSON (unique within its folder).
+Name the new file `NN-<id>.json` (for example `09-my-case.json`). The two-digit `NN` prefix sets list order, and `<id>` must match the `id` field inside the JSON (unique within its folder). Each template is already a minimal passing exercise — after copying it, run its test command once to confirm it is green before editing.
 
 ### 2. Fields
 

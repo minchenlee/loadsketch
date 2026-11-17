@@ -1,8 +1,17 @@
 // Design briefs: a problem that starts from requirements and an almost empty canvas.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Simulation } from '../src/engine/index.ts';
 import { parseDesign, parseScenario, type Design } from '../src/schema/design.ts';
-import { BRIEFS, BRIEF_BY_ID, brokenGivens, judgeBrief, reachable, type Brief } from '../src/learn/briefs.ts';
+import { BRIEFS, BRIEF_BY_ID, brokenGivens, judgeBrief, parseBrief, reachable, type Brief } from '../src/learn/briefs.ts';
+
+const templateBrief = parseBrief(
+  'examples/practice/templates/brief.json',
+  JSON.parse(readFileSync(join(import.meta.dirname, '..', 'examples/practice/templates/brief.json'), 'utf8')),
+  { checkFilename: false },
+);
+const allBriefs = [...BRIEFS, templateBrief];
 
 function verdict(b: Brief, d: Design) {
   const sim = new Simulation(d, b.scenario);
@@ -16,7 +25,7 @@ const edit = (d: Design, id: string, params: Record<string, unknown>): Design =>
 describe('briefs', () => {
   it('there are some; each starts from the given nodes only, with valid designs and a valid scenario', () => {
     expect(BRIEFS.length).toBeGreaterThanOrEqual(6);
-    for (const b of BRIEFS) {
+    for (const b of allBriefs) {
       for (const d of [b.reference, b.naive]) {
         expect(parseDesign(d).ok).toBe(true);
         expect(parseScenario(b.scenario, d).ok).toBe(true);
@@ -38,7 +47,7 @@ describe('briefs', () => {
     }
   });
 
-  it.each(BRIEFS.map((b) => [b.id, b] as const))('%s: the first design most people draw fails, the reference passes', (_, b) => {
+  it.each(allBriefs.map((b) => [b.id, b] as const))('%s: the first design most people draw fails, the reference passes', (_, b) => {
     const naive = verdict(b, b.naive);
     expect(naive.passed).toBe(false);
     expect(naive.score).toBe(0);
@@ -196,7 +205,7 @@ describe('needs', () => {
 
 describe('review findings', () => {
   it('no reference design has a design warning', () => {
-    for (const b of BRIEFS) {
+    for (const b of allBriefs) {
       const r = parseDesign(b.reference);
       expect(r.ok && r.issues.map((w) => w.code)).toEqual([]);
     }

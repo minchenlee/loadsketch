@@ -1,7 +1,7 @@
 {
   "schema": "loadsketch/incident@1",
   "id": "example-incident",
-  "title": "On-call alert: starting at 20 s, describe the symptoms users see without naming the component or cause.",
+  "title": "On-call alert: starting at 20 s, about one third of user requests fail with unchanged latency.",
   "example": "three-tier",
   "scenario": {
     "schema": "loadsketch/scenario@1",
@@ -15,24 +15,25 @@
     },
     "events": [
       {
-        "type": "slow",
+        "type": "errors",
         "atS": 20,
         "node": "api",
-        "multiplier": 20
+        "instance": 1,
+        "rate": 0.9
       }
     ]
   },
   "answer": {
     "node": "api",
-    "fault": "slow"
+    "fault": "gray"
   },
-  "explain": "Explain what failed or slowed down and why user metrics behaved that way.",
-  "hint": "Explain how to fix the design.",
+  "explain": "One of the three server instances fails 90% of its requests while the other two remain healthy; the load balancer keeps sending a third of the traffic to it.",
+  "hint": "Enable outlier detection on the load balancer so failing instances are ejected automatically.",
   "solution": [
     {
-      "node": "api",
+      "node": "lb",
       "params": {
-        "instances": 4
+        "outlier": "on"
       }
     }
   ],
