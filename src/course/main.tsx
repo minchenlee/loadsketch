@@ -438,7 +438,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         d({ kind: 'ready' });
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') d({ kind: 'status', status: msg.status, page: latest.current.i });
-      } else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run, answers: d({ kind: 'finished', page: latest.current.i }).answer ?? [] });
+      } else if (msg.kind === 'loaded') d({ kind: 'loaded' });
+      else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run, answers: d({ kind: 'finished', page: latest.current.i }).answer ?? [] });
     };
     addEventListener('message', onMessage);
     return () => removeEventListener('message', onMessage);

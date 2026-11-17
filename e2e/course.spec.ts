@@ -455,11 +455,19 @@ test('phone: closing the drawer ends the find-limit search', async ({ page }) =>
   // the panel is gone at once, and the search stops: no more steps mark the canvas
   await expect(frame.getByTestId('find-limit')).toHaveCount(0);
   const app = () => frame.locator('body').evaluate(() => { const s = (window as unknown as { __loadsketch: LS }).__loadsketch.getState(); return { open: s.limitOpen, limit: JSON.stringify(s.limit) }; });
-  await page.waitForTimeout(500);
-  const a = await app();
-  expect(a.open).toBe(false);
+  // as the panel's own close: an unfinished search leaves no marks, now or later
+  await expect.poll(async () => (await app()).limit).toBe('null');
+  expect((await app()).open).toBe(false);
   await page.waitForTimeout(3000);
-  expect((await app()).limit).toBe(a.limit);
+  expect((await app()).limit).toBe('null');
+  // a tab ends it the same way
+  await frame.getByTestId('find-limit-open').click();
+  await expect(frame.getByTestId('find-limit-steps').locator('li').first()).toBeVisible({ timeout: 60_000 });
+  await frame.getByTestId('phone-tab-inspector').click();
+  await expect(frame.getByTestId('find-limit')).toHaveCount(0);
+  await expect.poll(async () => (await app()).limit).toBe('null');
+  await page.waitForTimeout(3000);
+  expect((await app()).limit).toBe('null');
 });
 
 test('phone: a find-limit panel opened on a wide window shows in the drawer when the window gets narrow', async ({ page }) => {
@@ -502,4 +510,22 @@ test('course: a guess made while a run goes reaches the simulator when it ends (
   await expect.poll(async () => (await app()).status, { timeout: 60_000 }).toBe('done');
   await expect.poll(async () => (await app()).log, { timeout: 10_000 }).toContain('2.4:primary-busy');
   await expect(page.getByTestId('course-answer-primary-busy')).toBeVisible();
+});
+
+test('course: guesses reach the simulator again after it loads another design', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  // the learner loads a design in the frame (it drops the guesses), then runs it there
+  await frame.locator('body').evaluate(() => { const s = (window as unknown as { __loadsketch: { getState: () => { doc: unknown; load: (d: unknown) => void } } }).__loadsketch.getState(); s.load(structuredClone(s.doc)); });
+  await page.waitForTimeout(300);
+  await frame.getByTestId('run').click();
+  await expect(page.getByTestId('course-answer-hit')).toBeVisible({ timeout: 60_000 });
+  await page.waitForTimeout(500);
+  const log = () => page.evaluate(() => (JSON.parse(localStorage.getItem('loadsketch-guess-log') ?? '{"entries":[]}').entries as { lesson?: string; question: string }[]).map((e) => `${e.lesson}:${e.question}`).sort());
+  expect(await log()).toEqual(['2.1:db-share', '2.1:hit']);
 });
