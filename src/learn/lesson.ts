@@ -145,8 +145,9 @@ const MORE = ['instances', 'concurrency', 'connections', 'replicas', 'shards', '
 const FASTER = ['serviceMs', 'readMs', 'writeMs'];
 
 const num = (v: ParamValue | undefined): number | undefined => (typeof v === 'number' ? v : undefined);
+/** The mean of a time: a number is the mean itself; a distribution has its mean. */
 const mean = (v: ParamValue | undefined): number | undefined =>
-  v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined;
+  typeof v === 'number' ? v : v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined;
 
 function param(n: Design['nodes'][number], key: string): ParamValue | undefined {
   return n.params?.[key] ?? (KINDS[n.kind]?.params[key]?.default as ParamValue | undefined);

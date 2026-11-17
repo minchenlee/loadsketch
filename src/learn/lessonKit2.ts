@@ -109,8 +109,8 @@ export const paramAtMost = (id: string, key: string, max: number, text: string):
 });
 
 /**
- * Total slots of every consumer of a queue stay at most max: instances (the maximum when it
- * autoscales) × concurrency per instance, summed over each node the queue delivers to. A missing
+ * Total slots of every consumer of a queue stay at most max: instances (when it autoscales, the
+ * larger of the initial count and the maximum) × concurrency per instance, summed over each node the queue delivers to. A missing
  * queue, or a consumer without a slot count, fails.
  */
 export const slotsAtMost = (queue: string, max: number, text: string): Goal => ({
@@ -121,7 +121,10 @@ export const slotsAtMost = (queue: string, max: number, text: string): Goal => (
     let n = 0;
     for (const id of new Set(d.edges.filter((e) => e.from === queue).map((e) => e.to))) {
       const auto = paramOf(d, id, 'autoscale') === 'on';
-      const i = paramOf(d, id, auto ? 'maxInstances' : 'instances');
+      // autoscaled: the engine keeps the initial instances when the maximum is below them
+      const base = paramOf(d, id, 'instances');
+      const top = paramOf(d, id, 'maxInstances');
+      const i = !auto ? base : typeof base === 'number' && typeof top === 'number' ? Math.max(base, top) : undefined;
       const c = paramOf(d, id, 'concurrency');
       n += typeof i === 'number' && typeof c === 'number' ? i * c : Infinity;
     }
