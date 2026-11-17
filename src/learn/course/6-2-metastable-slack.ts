@@ -92,7 +92,7 @@ const metastable: Lesson = {
     { kind: 'guess', questions: ['db-hold', 'after-trigger'] },
     { kind: 'run' },
     { kind: 'try', text: tx('Set the per-second limit of “Boot rate limit” to 300 and run again. After second 70 the p99 is back to about 100 ms, and far fewer started clients fail. The price: most boot queries are turned away. Rate limiting chooses who waits.'), patch: [{ node: 'bootlimit', params: { ratePerSec: 300, burst: 300 } }] },
-    { kind: 'try', text: tx('Undo that, and set the cache’s stampede protection to lease instead. It helps only a little here: the database is short of capacity, not flooded by many reads of the same key.'), patch: [{ node: 'mcrouter', params: { stampede: 'lease' } }] },
+    { kind: 'try', text: tx('Set the per-second limit of “Boot rate limit (added during the incident)” back to 100000, and set the cache’s stampede protection to lease instead. Run again. It helps only a little here: the database is short of capacity, not flooded by many reads of the same key.'), patch: [{ node: 'bootlimit', params: { ratePerSec: 100000, burst: 100000 } }, { node: 'mcrouter', params: { stampede: 'lease' } }] },
     { kind: 'challenge', challenges: ['saas-slack/break-the-loop'] },
     { kind: 'practice', items: [{ kind: 'oncall', id: 'cache-down' }, { kind: 'oncall', id: 'traffic-spike' }, { kind: 'constraint', id: 'retry-budget' }] },
   ],

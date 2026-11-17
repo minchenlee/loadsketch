@@ -117,7 +117,7 @@ const atLeastOnce: Lesson = {
     { kind: 'guess', questions: ['crash-wait', 'dlq-share', 'duplicates'] },
     { kind: 'run' },
     { kind: 'try', text: tx('Set “Visibility timeout” to 100 ms and run again. Some jobs take longer than that: their message appears again while the first worker is still busy, and about 170 messages are processed twice.'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 100 } }] },
-    { kind: 'try', text: tx('Now set “Max receive count (DLQ)” to 0 (no DLQ, retry forever) and run again. Nothing goes to the DLQ, but the poison messages come back again and again: the worker fails about seven times as many jobs, and the async p99 gets worse.'), patch: [{ node: 'jobs', params: { maxReceives: 0 } }] },
+    { kind: 'try', text: tx('Set “Visibility timeout” back to 2 s, and set “Max receive count (DLQ)” to 0 (no DLQ, retry forever). Run again. Nothing goes to the DLQ, but the poison messages come back again and again: the worker fails about seven times as many jobs, and the async p99 gets worse.'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 2000, maxReceives: 0 } }] },
     { kind: 'challenge', challenges: ['async-reliable/crash-safe'] },
     { kind: 'practice', items: [{ kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },
   ],
