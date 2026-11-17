@@ -69,15 +69,15 @@ const lesson: Lesson = {
     {
       id: 'overshoot',
       topic: 'capacity',
-      text: tx('At 900 a second, about 4 instances are enough to be 60% busy. How many instances run at the peak?'),
+      text: tx('At 900 a second, about 5 instances keep them near 60% busy. How many instances run at the peak?'),
       options: [
-        { id: 'short', text: tx('Fewer than 4') },
-        { id: 'right', text: tx('4 or 5') },
-        { id: 'over', text: tx('6 or more') },
+        { id: 'short', text: tx('Fewer than 5') },
+        { id: 'right', text: tx('5 or 6') },
+        { id: 'over', text: tx('7 or more') },
       ],
       answer: (run) => {
         const p = scaling(run)?.peakActive ?? 0;
-        return p < 4 ? 'short' : p <= 5 ? 'right' : 'over';
+        return p < 5 ? 'short' : p <= 6 ? 'right' : 'over';
       },
       measured: (run) => {
         const a = scaling(run);
