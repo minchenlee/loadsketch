@@ -4,7 +4,7 @@ import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
 import { failUnder1, p99Under, paramOf, pct } from '../lessonKit.ts';
-import { mostMachines } from '../courseMachines.ts';
+import { meanOf, mostMachines } from '../courseMachines.ts';
 
 const INTRO = tx('One API server, called directly, with the network left out. It works on 4 requests at a time; each takes 2.5 ms on average. Users send 800 requests a second, so it can do 4 × 1000 ÷ 2.5 = 1600 a second and is busy half the time (utilisation ρ = 800 ÷ 1600). Guess how much requests wait, then press Run.');
 
@@ -21,7 +21,7 @@ const inside = (run: RunData) => {
 };
 const serviceMean = (run: RunData) => {
   const v = paramOf(run.design, 'api', 'serviceMs');
-  return v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined;
+  return meanOf(v);
 };
 
 const slower: Goal = {

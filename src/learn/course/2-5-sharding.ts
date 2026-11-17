@@ -5,6 +5,7 @@ import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson, Rule } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
 import { paramOf, pct } from '../lessonKit.ts';
+import { meanOf } from '../courseMachines.ts';
 
 const INTRO = tx('Writes are too many for one database, so the data is split by the hash of the key over 4 shards, 8 connections each. Users send 3500 requests a second, 70% of them writes, and some keys are much more popular than others (Zipf). Each shard gets about a quarter of the keys. Guess whether it also gets a quarter of the load, then press Run.');
 
@@ -20,15 +21,13 @@ const sameMachines: Rule = {
   check: (d, original) => {
     const out: string[] = [];
     const conn = (x: typeof d) => paramOf(x, 'db', 'connections');
-    const mean = (x: typeof d, k: string) => {
-      const v = paramOf(x, 'db', k);
-      return typeof v === 'object' && v && 'mean' in v ? Number(v.mean) : undefined;
-    };
+    const mean = (x: typeof d, k: string) => meanOf(paramOf(x, 'db', k));
     const [a, b] = [conn(original), conn(d)];
     if (typeof a === 'number' && typeof b === 'number' && b > a) out.push(t('Connections changed from {a} to {b}', { a, b }));
     for (const k of ['readMs', 'writeMs']) {
       const [x, y] = [mean(original, k), mean(d, k)];
-      if (x !== undefined && y !== undefined && y < x) out.push(t('{what} changed from {a} to {b} ms', { what: k === 'readMs' ? t('Read time') : t('Write time'), a: x, b: y }));
+      // a value that cannot be read as a time does not get past the rule either
+      if (x !== undefined && (y === undefined || y < x)) out.push(t('{what} changed from {a} to {b} ms', { what: k === 'readMs' ? t('Read time') : t('Write time'), a: x, b: y ?? '—' }));
     }
     return out;
   },

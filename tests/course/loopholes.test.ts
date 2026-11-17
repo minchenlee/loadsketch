@@ -1,7 +1,7 @@
 // Ways round a challenge that must not pass (review of bddad6f). Each one was found to pass before the fix.
 import { describe, expect, it } from 'vitest';
 import { COURSE_BY_ID } from '../../src/learn/course.ts';
-import { lessonRuns, removeNode, setParam, SLOW, type Change } from './run.ts';
+import { lessonRuns, removeNode, runOf, setParam, SLOW, type Change } from './run.ts';
 
 const L = (id: string) => lessonRuns(COURSE_BY_ID[id]);
 
@@ -57,5 +57,26 @@ describe('turning requests away does not buy latency', () => {
   it('1.1: a tiny queue at the knee', () => {
     const { run, passed } = L('1.1');
     expect(passed(run(setParam('api', 'serviceMs', { mean: 4.4, cv: 1 }), setParam('api', 'queueLimit', 1)))).toEqual([]);
+  }, SLOW);
+});
+
+describe('a processing time may be a number or a distribution (review of 8ebb38d)', () => {
+  it('1.1 "a slower release": serviceMs 4.5 as a number counts the same as { mean: 4.5 }', () => {
+    const { run, passed } = L('1.1');
+    const wide = setParam('api', 'concurrency', 8);
+    expect(passed(run(setParam('api', 'serviceMs', { mean: 4.5, cv: 1 }), wide))).toEqual(['littles/slower-release']);
+    expect(passed(run(setParam('api', 'serviceMs', 4.5), wide))).toEqual(['littles/slower-release']);
+  }, SLOW);
+
+  it('1.1 "a slower release": a faster number does not count as slower', () => {
+    const { run, passed } = L('1.1');
+    expect(passed(run(setParam('api', 'serviceMs', 2), setParam('api', 'concurrency', 8)))).toEqual([]);
+  }, SLOW);
+
+  it('2.5 "a hot channel": faster database reads and writes break "same machines", as numbers or distributions', () => {
+    const { passed } = L('2.5');
+    const hot = (...c: Change[]) => runOf('sharded', 'hot-shard', ...c);
+    expect(passed(hot(setParam('db', 'readMs', 0), setParam('db', 'writeMs', 0)))).toEqual([]);
+    expect(passed(hot(setParam('db', 'readMs', { mean: 0.01, cv: 1 }), setParam('db', 'writeMs', { mean: 0.01, cv: 1 })))).toEqual([]);
   }, SLOW);
 });
