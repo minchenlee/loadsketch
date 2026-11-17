@@ -3,7 +3,7 @@
 // message finishes, and messages that expire at once. An empty latency histogram is not p99 = 0.
 import { describe, expect, it } from 'vitest';
 import type { Design } from '../../src/schema/design.ts';
-import { judge, runOf as runOfLesson, type Challenge, type Lesson } from '../../src/learn/lesson.ts';
+import { judge, runOf as runOfLesson, stepsOf, type Challenge, type Lesson } from '../../src/learn/lesson.ts';
 import { COURSE } from '../../src/learn/course.ts';
 import type { RunData } from '../../src/learn/metrics.ts';
 import { design, runOf, setParam, SLOW, type Change } from './run.ts';
@@ -79,6 +79,16 @@ describe('async work that never finishes or expires fails', () => {
       }
       expect(bites).toBeGreaterThan(0);
     }, 4 * SLOW);
+  }
+});
+
+it('the questions or challenges of one step share one example and scenario (the page opens one)', () => {
+  for (const l of COURSE) {
+    for (const s of stepsOf(l)) {
+      const xs = s.kind === 'guess' ? s.questions.map((id) => l.questions.find((q) => q.id === id)!) : s.kind === 'challenge' ? s.challenges.map((id) => l.challenges.find((c) => c.id === id)!) : [];
+      const ctx = new Set(xs.map((x) => { const r = runOfLesson(l, x); return r.example + '|' + r.scenario; }));
+      expect(ctx.size, `${l.id} ${s.kind}`).toBeLessThanOrEqual(1);
+    }
   }
 });
 

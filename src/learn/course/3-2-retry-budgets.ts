@@ -101,7 +101,8 @@ const retryBudgets: Lesson = {
       text: tx('Deadlines: on the retry storm, set the users to propagate their 1 s deadline and run again. Nothing changes. A deadline drops work that nobody waits for any more, but here every hop gives up after 150 ms, long before the 1 s deadline.'),
       patch: [{ node: 'users', params: { deadline: 'propagate' } }],
     },
-    { kind: 'challenge', challenges: ['retry-budget/one-edge', 'adaptive-throttle/let-go'] },
+    { kind: 'challenge', challenges: ['retry-budget/one-edge'] },
+    { kind: 'challenge', challenges: ['adaptive-throttle/let-go'] },
     { kind: 'practice', items: [{ kind: 'constraint', id: 'retry-budget' }] },
   ],
 };
