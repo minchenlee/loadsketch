@@ -15,7 +15,7 @@ import { importMessage } from '../../i18n/importMessages.ts';
 import { getLang, t, tx } from '../../i18n/index.ts';
 import type { LimitReply, LimitRequest } from '../../worker/limit.worker.ts';
 
-const VERDICT = { pass: tx('Holds'), fail: tx('Does not hold'), insufficient: tx('Not enough result') } as const;
+const VERDICT = { pass: tx('Holds'), fail: tx('Does not hold'), insufficient: tx('Insufficient data') } as const;
 
 type State = LimitState;
 /** Why a search was cancelled by something else than its Cancel button. */

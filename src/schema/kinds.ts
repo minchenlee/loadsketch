@@ -100,7 +100,7 @@ const dist = (mean: number, cv: number, label: string, help: string, max = 60000
 });
 
 const dbParams = (): Record<string, ParamSpec> => ({
-  replicas: { type: 'int', default: 0, min: 0, max: 15, label: 'Replica reads', help: 'A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary.' },
+  replicas: { type: 'int', default: 0, min: 0, max: 15, label: 'Read replica count', help: 'A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary.' },
   connections: concurrency(50, 'queries'),
   readMs: dist(3, 1, 'Read time', 'Processing time for one read query.'),
   writeMs: dist(10, 1, 'Write time', 'Processing time for one write.'),
@@ -116,7 +116,7 @@ const dbParams = (): Record<string, ParamSpec> => ({
     help: 'Where read queries go.',
   },
   replicaApplyRatio: {
-    type: 'ratio', default: 0.3, label: 'Replica applies write cost',
+    type: 'ratio', default: 0.3, label: 'Replica write-apply cost',
     help: 'For each write to the primary, every replica also spends "write time × this ratio" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed).',
   },
   replicaDelayMs: {

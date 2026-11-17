@@ -14,7 +14,7 @@ const LINE: Record<string, string> = { definite: tx('definite line'), presumed: 
 /** `|` and new lines would break a Markdown table cell. */
 const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
-const VERDICT: Record<Verdict, string> = { pass: tx('Holds'), fail: tx('Does not hold'), insufficient: tx('Not enough result') };
+const VERDICT: Record<Verdict, string> = { pass: tx('Holds'), fail: tx('Does not hold'), insufficient: tx('Insufficient data') };
 
 /** The --simulate section: the verdict, each limit, and the timing. Every result is an assumption. */
 export function simulateSection(s: SimulateResult): string[] {

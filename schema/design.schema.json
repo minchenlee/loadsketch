@@ -1445,7 +1445,7 @@
                 "type": "object",
                 "properties": {
                   "replicas": {
-                    "description": "Replica reads. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary. (default 0)",
+                    "description": "Read replica count. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary. (default 0)",
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 15
@@ -1522,7 +1522,7 @@
                     "enum": ["replicas", "primary", "any"]
                   },
                   "replicaApplyRatio": {
-                    "description": "Replica applies write cost. For each write to the primary, every replica also spends \"write time × this ratio\" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed). (0–1, default 0.3)",
+                    "description": "Replica write-apply cost. For each write to the primary, every replica also spends \"write time × this ratio\" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed). (0–1, default 0.3)",
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1
@@ -1686,7 +1686,7 @@
                     "maximum": 256
                   },
                   "replicas": {
-                    "description": "Replica reads. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary. (default 0)",
+                    "description": "Read replica count. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary. (default 0)",
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 15
@@ -1763,7 +1763,7 @@
                     "enum": ["replicas", "primary", "any"]
                   },
                   "replicaApplyRatio": {
-                    "description": "Replica applies write cost. For each write to the primary, every replica also spends \"write time × this ratio\" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed). (0–1, default 0.3)",
+                    "description": "Replica write-apply cost. For each write to the primary, every replica also spends \"write time × this ratio\" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed). (0–1, default 0.3)",
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1

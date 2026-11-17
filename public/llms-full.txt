@@ -240,14 +240,14 @@ Category: Data. Outgoing edges: Ends the request: no outgoing edges.
 
 Parameters (in `params`):
 
-- `replicas` — Replica reads: integer 0–15, default 0. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary.
+- `replicas` — Read replica count: integer 0–15, default 0. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary.
 - `connections` — Concurrency per instance: integer 1–100000, default 50. How many queries each instance handles at once (threads, connections or workers). When full, they queue.
 - `readMs` — Read time: ms: a number (the mean) or {"mean": ms, "cv": 0–4} (cv 0 fixed, 1 exponential), mean up to 600000, default {"mean": 3, "cv": 1}. Processing time for one read query.
 - `writeMs` — Write time: ms: a number (the mean) or {"mean": ms, "cv": 0–4} (cv 0 fixed, 1 exponential), mean up to 600000, default {"mean": 10, "cv": 1}. Processing time for one write.
 - `queueLimit` — Max queue: integer 0–10000000, default 500. How many requests each instance queues. When full, reject right away (queue_full). 0 means no queueing.
 - `errorRate` — Error rate: ratio 0–1, default 0. Share of messages that fail at random after processing.
 - `readFrom` — Read source: one of "replicas" (Replica only (read the primary if there is no replica)), "primary" (Primary only), "any" (Round-robin primary and replica); default "replicas". Where read queries go.
-- `replicaApplyRatio` — Replica applies write cost: ratio 0–1, default 0.3. For each write to the primary, every replica also spends "write time × this ratio" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed).
+- `replicaApplyRatio` — Replica write-apply cost: ratio 0–1, default 0.3. For each write to the primary, every replica also spends "write time × this ratio" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed).
 - `replicaDelayMs` — Replication lag: number 0–600000 ms, default 0. After the primary writes, how long the write takes to reach a replica (network, batched sends). This time plus the replica queue and apply time is the replication lag. Reading a replica during this window gives a stale read.
 - `maxLagMs` — Max replication lag: integer 0–3600000 ms, default 0. Reads skip a replica that lags more than this (like a proxy max replication lag check). If all replicas lag too much, read the primary. 0 means no check.
 - `localReplicas` — Replicas in the primary's region: integer 0–15, default 0. With a replica region, the first replicas stay in the primary's region and the others go to the replica region. A read goes to a replica in the caller's region first.
@@ -268,14 +268,14 @@ Category: Data. Outgoing edges: Ends the request: no outgoing edges.
 Parameters (in `params`):
 
 - `shards` — Shards: integer 1–256, default 4. How many shards the data is split into.
-- `replicas` — Replica reads: integer 0–15, default 0. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary.
+- `replicas` — Read replica count: integer 0–15, default 0. A read-only replica outside the primary. Reads can go to replicas; writes only go to the primary.
 - `connections` — Concurrency per instance: integer 1–100000, default 50. How many queries each instance handles at once (threads, connections or workers). When full, they queue.
 - `readMs` — Read time: ms: a number (the mean) or {"mean": ms, "cv": 0–4} (cv 0 fixed, 1 exponential), mean up to 600000, default {"mean": 3, "cv": 1}. Processing time for one read query.
 - `writeMs` — Write time: ms: a number (the mean) or {"mean": ms, "cv": 0–4} (cv 0 fixed, 1 exponential), mean up to 600000, default {"mean": 10, "cv": 1}. Processing time for one write.
 - `queueLimit` — Max queue: integer 0–10000000, default 500. How many requests each instance queues. When full, reject right away (queue_full). 0 means no queueing.
 - `errorRate` — Error rate: ratio 0–1, default 0. Share of messages that fail at random after processing.
 - `readFrom` — Read source: one of "replicas" (Replica only (read the primary if there is no replica)), "primary" (Primary only), "any" (Round-robin primary and replica); default "replicas". Where read queries go.
-- `replicaApplyRatio` — Replica applies write cost: ratio 0–1, default 0.3. For each write to the primary, every replica also spends "write time × this ratio" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed).
+- `replicaApplyRatio` — Replica write-apply cost: ratio 0–1, default 0.3. For each write to the primary, every replica also spends "write time × this ratio" applying it. So replicas cannot save write volume. 0 means not counted (and stale reads are not computed).
 - `replicaDelayMs` — Replication lag: number 0–600000 ms, default 0. After the primary writes, how long the write takes to reach a replica (network, batched sends). This time plus the replica queue and apply time is the replication lag. Reading a replica during this window gives a stale read.
 - `maxLagMs` — Max replication lag: integer 0–3600000 ms, default 0. Reads skip a replica that lags more than this (like a proxy max replication lag check). If all replicas lag too much, read the primary. 0 means no check.
 - `localReplicas` — Replicas in the primary's region: integer 0–15, default 0. With a replica region, the first replicas stay in the primary's region and the others go to the replica region. A read goes to a replica in the caller's region first.
