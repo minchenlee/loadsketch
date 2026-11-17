@@ -6,9 +6,10 @@ import { useApp, type Drawer } from '../store.ts';
 import { Inspector } from './Inspector.tsx';
 import { Metrics } from './Metrics.tsx';
 import { Palette } from './Palette.tsx';
+import { FindLimitPanel } from './FindLimit.tsx';
 import { t, tx } from '../../i18n/index.ts';
 
-const TABS: { key: Exclude<Drawer, null>; label: string; Icon: typeof Shapes }[] = [
+const TABS: { key: Exclude<Drawer, null | 'limit'>; label: string; Icon: typeof Shapes }[] = [
   { key: 'palette', label: tx('Component'), Icon: Shapes },
   { key: 'inspector', label: tx('Settings'), Icon: SlidersHorizontal },
   { key: 'metrics', label: tx('Charts'), Icon: ChartLine },
@@ -42,7 +43,18 @@ export function PhoneDrawer() {
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
   }, [drawer, setDrawer]);
-  const label = TABS.find((x) => x.key === which)?.label;
+  const label = which === 'limit' ? tx('Find limit') : TABS.find((x) => x.key === which)?.label;
+  // Find limit (the run bar) opens its panel here; closing the drawer or opening another one ends the search
+  const limitOpen = useApp((s) => s.limitOpen);
+  const closeLimit = useApp((s) => s.closeLimit);
+  const was = useRef({ drawer, limitOpen });
+  useEffect(() => {
+    const prev = was.current;
+    was.current = { drawer, limitOpen };
+    if (limitOpen && !prev.limitOpen) setDrawer('limit');
+    else if (!limitOpen && prev.limitOpen && drawer === 'limit') setDrawer(null);
+    else if (prev.drawer === 'limit' && drawer !== 'limit' && limitOpen) closeLimit();
+  }, [drawer, limitOpen, setDrawer, closeLimit]);
   const el = useRef<HTMLDivElement>(null);
   // a drag down on the top edge closes it. The offset is a CSS variable on the parent, so the run
   // card above the drawer moves with it.
@@ -77,7 +89,7 @@ export function PhoneDrawer() {
       </div>
       {/* a component picked from the list goes on the canvas: the drawer closes to show it */}
       <div key={which} className="sd-drawer-body" onClick={(e) => which === 'palette' && (e.target as HTMLElement).closest('[data-kind], [data-adds]') && setDrawer(null)}>
-        {which === 'palette' ? <Palette /> : which === 'inspector' ? <Inspector /> : which === 'metrics' ? <Metrics /> : null}
+        {which === 'palette' ? <Palette /> : which === 'inspector' ? <Inspector /> : which === 'metrics' ? <Metrics /> : which === 'limit' ? <FindLimitPanel /> : null}
       </div>
     </div>
   );

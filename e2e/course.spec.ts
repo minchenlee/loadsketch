@@ -391,3 +391,48 @@ test('course: pause, go back, resume: the run still answers the guesses it start
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '2:run');
   await expect(page.getByTestId('course-answer-recover')).toBeVisible({ timeout: 120_000 });
 });
+
+test('course: a run paused before the next example does not keep the new simulator from answering (3.3)', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=100');
+  test.skip((await page.getByTestId('course-lesson-3.3').getAttribute('data-state')) === 'soon', 'lesson 3.3 is not written on this branch');
+  await page.goto('/learn/?lang=en&speed=100&lesson=3.3');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-sale-limited-some').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  type S = { getState: () => { pause: (p: boolean) => void; status: string } };
+  const app = () => frame.locator('body');
+  await expect.poll(() => app().evaluate(() => (window as unknown as { __loadsketch: S }).__loadsketch.getState().status)).toBe('running');
+  await app().evaluate(() => (window as unknown as { __loadsketch: S }).__loadsketch.getState().pause(true));
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'paused');
+  // on to the second experiment: another example, so a new simulator
+  while ((await page.getByTestId('course-step').getAttribute('data-step')) !== '5:guess') await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-tenant-small-some').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'idle', { timeout: 30_000 });
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answer-tenant-small')).toBeVisible({ timeout: 60_000 });
+});
+
+test('course: on a phone, Find limit runs and shows its result (1.2)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en');
+  // 1.2 needs Find limit; on a branch without it, any written lesson's simulator has the same run bar
+  const id = (await page.getByTestId('course-lesson-1.2').getAttribute('data-state')) === 'soon' ? '2.1' : '1.2';
+  await page.goto(`/learn/?lang=en&lesson=${id}`);
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await frame.getByTestId('find-limit-open').click();
+  const panel = frame.getByTestId('find-limit');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('find-limit-result')).toBeVisible({ timeout: 200_000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await frame.locator('body').evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  // the panel is inside the simulator's width
+  const box = await panel.boundingBox();
+  const frameBox = await page.getByTestId('course-frame').boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(frameBox!.x + frameBox!.width + 1);
+});

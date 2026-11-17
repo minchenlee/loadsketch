@@ -986,6 +986,7 @@ kbd {
 /* the desktop panels inside a drawer: full width, no frame of their own */
 .sd-drawer-body > aside.panel { flex: 1; width: 100% !important; min-height: 0; border: 0; background: transparent; }
 .sd-drawer-body [data-testid='right-resize'] { display: none; }
+.sd-drawer-body > aside[data-testid='find-limit'] { flex: 1; width: 100% !important; height: auto; min-height: 0; border: 0; background: transparent; }
 .sd-drawer-body > section.panel { flex-direction: column; height: auto; border: 0; background: transparent !important; }
 .sd-drawer-body [data-testid='metrics-side'] { width: 100%; overflow: visible; }
 .sd-drawer-body .sd-charts { flex: none; flex-direction: column; overflow: visible; }
