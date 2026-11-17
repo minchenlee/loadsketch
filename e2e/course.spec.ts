@@ -1,0 +1,133 @@
+// The course page (/learn/): the table of contents, one lesson step by step with the simulator in
+// an iframe (?embed=1&course=1), progress kept in localStorage, and phone widths.
+import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { expect, test, type Page } from '@playwright/test';
+
+const SHOTS = join(import.meta.dirname, '..', 'test-results', 'shots');
+mkdirSync(SHOTS, { recursive: true });
+
+const noSideways = async (page: Page) => {
+  const [sw, w] = await page.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
+  expect(sw).toBeLessThanOrEqual(w);
+};
+
+test('course: the table of contents lists 7 units and 33 lessons, unwritten ones as coming soon', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/learn/?lang=en');
+  await expect(page.getByTestId('course-unit')).toHaveCount(7);
+  await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
+  // the retry storm lesson is written: a link; 1.1 is not yet: grey, no link
+  await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'ready');
+  await expect(page.getByTestId('course-lesson-3.1').locator('a')).toHaveCount(1);
+  await expect(page.getByTestId('course-lesson-1.1')).toHaveAttribute('data-state', 'soon');
+  await expect(page.getByTestId('course-lesson-1.1').locator('a')).toHaveCount(0);
+  await expect(page.getByTestId('course-lesson-1.1')).toContainText('Coming soon');
+  // the Chinese page translates the titles
+  await page.getByTestId('course-lang').click();
+  await expect(page.getByTestId('course-lesson-3.1')).toContainText('重試風暴');
+  expect(errors).toEqual([]);
+});
+
+test('course: a lesson step by step — guess, run in the simulator, see the answers, pass a challenge, keep the progress', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  // speed=300: the run in the frame ends in a few seconds
+  await page.goto('/learn/?lang=en&theme=light&speed=300');
+  await page.getByTestId('course-lesson-3.1').locator('a').click();
+  await expect(page.getByTestId('course-lesson')).toBeVisible();
+  await expect(page).toHaveURL(/lesson=3\.1/);
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'intro');
+
+  // two guesses, one at a time
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'guess:recover');
+  await page.getByTestId('course-option-recover-never').click();
+  await expect(page.getByTestId('course-option-recover-never')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-amp-x3').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'run');
+  await page.screenshot({ path: join(SHOTS, 'course-lesson-run.png') });
+
+  // the run happens in the frame; when it ends the page moves on to the answers, read from that run
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'answers', { timeout: 60_000 });
+  await expect(page.getByTestId('course-answer-recover')).toContainText('Measured:');
+  await expect(page.getByTestId('course-answer-recover')).toHaveAttribute('data-right', 'true');
+  await expect(page.getByTestId('course-answer-amp')).toContainText('Measured:');
+  // the frame's guess log got the guesses too, as in the simulator
+  const guesses = await frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { guesses: Record<string, string> } } }).__loadsketch.getState().guesses);
+  expect(guesses).toEqual({ recover: 'never', amp: 'x3' });
+  await page.screenshot({ path: join(SHOTS, 'course-lesson-answers.png') });
+
+  // the first challenge: the original design fails it
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'challenge:retry-storm/recover');
+  await expect(page.getByTestId('course-verdict')).toBeVisible();
+  await expect(page.getByTestId('course-passed')).toHaveCount(0);
+
+  // change the design in the frame (a retry budget on every connection), run again: passed
+  await frame.locator('body').evaluate(() => {
+    type E = { id: string; data?: { edge: { retries?: number } } };
+    const s = (window as unknown as { __loadsketch: { getState: () => { edges: E[]; updateEdge: (id: string, p: Record<string, number>) => void } } }).__loadsketch.getState();
+    for (const e of s.edges) if (e.data?.edge.retries) s.updateEdge(e.id, { retryBudget: 0.1 });
+  });
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-passed')).toBeVisible({ timeout: 60_000 });
+
+  // the progress is kept: after a reload the lesson opens on the same step, guesses locked
+  await page.reload();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'challenge:retry-storm/recover');
+  await expect(page.getByTestId('course-passed')).toBeVisible();
+  await page.getByTestId('course-back').click();
+  await page.getByTestId('course-back').click();
+  await page.getByTestId('course-back').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'guess:amp');
+  await expect(page.getByTestId('course-option-amp-x6')).toBeDisabled();
+
+  // the table of contents shows the lesson in progress
+  await page.getByTestId('course-home').click();
+  await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'started');
+  expect(errors).toEqual([]);
+});
+
+test('course: broken saved progress or no storage still opens the course', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('loadsketch-course', '{not json'));
+  await page.goto('/learn/?lang=en&lesson=3.1');
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'intro');
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', 'guess:recover');
+
+  const page2 = await page.context().newPage();
+  await page2.addInitScript(() => {
+    const no = () => {
+      throw new Error('storage is off');
+    };
+    Object.defineProperty(window, 'localStorage', { get: no });
+  });
+  await page2.goto('/learn/?lang=en');
+  await expect(page2.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
+});
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`course: no sideways scroll at phone width (${theme})`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/learn/?lang=en&theme=${theme}`);
+    await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
+    await noSideways(page);
+    await page.screenshot({ path: join(SHOTS, `course-catalog-phone-${theme}.png`) });
+    await page.getByTestId('course-lesson-3.1').locator('a').click();
+    await expect(page.frameLocator('[data-testid="course-frame"]').locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+    await noSideways(page);
+    await page.getByTestId('course-next').click();
+    await noSideways(page);
+    await page.screenshot({ path: join(SHOTS, `course-lesson-phone-${theme}.png`) });
+    // Chinese text is wider in places
+    await page.getByTestId('course-lang').click();
+    await noSideways(page);
+  });
+}

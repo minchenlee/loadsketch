@@ -19,6 +19,7 @@ import { PracticeOverlay } from './components/Practice.tsx';
 import { PhoneDrawer, PhoneTabs } from './components/Phone.tsx';
 import { CompareHost } from './components/Compare.tsx';
 import { isPhone, usePhone } from './phone.ts';
+import { useCourseBridge } from './courseBridge.ts';
 
 /**
  * Open the design and scenario of a share link (#s=…). A comparison link (#c=…) puts the baseline
@@ -150,6 +151,7 @@ export function App() {
   usePanelKeys();
   useUndoKeys();
   useLoop();
+  useCourseBridge();
   // Remounted when the language changes, so every text is made again; the hooks above stay.
   const lang = useApp((s) => s.lang);
   return <Shell key={lang} />;

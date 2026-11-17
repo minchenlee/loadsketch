@@ -8,10 +8,11 @@ export default defineConfig({
   server: { host: '127.0.0.1', port: 5317, strictPort: true },
   preview: { host: '127.0.0.1', port: 5318, strictPort: true },
   worker: { format: 'es' },
-  // Two pages: the intro site at / (index.html) and the simulator at /app/ (app/index.html).
+  // Three pages: the intro site at / (index.html), the simulator at /app/ (app/index.html) and the
+  // course at /learn/ (learn/index.html).
   // base './' keeps every asset path relative, so the build works at any URL.
   base: './',
-  build: { rollupOptions: { input: { site: 'index.html', app: 'app/index.html' } } },
+  build: { rollupOptions: { input: { site: 'index.html', app: 'app/index.html', learn: 'learn/index.html' } } },
   // Vitest runs the engine tests only; e2e/ belongs to Playwright.
   // testTimeout: the default 5 s fails heavy runs on a busy machine; speed budgets check CPU time
   // instead (tests/helpers.ts cpuMs). pool forks: one process per file, so CPU time is the file's own.

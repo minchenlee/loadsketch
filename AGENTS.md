@@ -12,6 +12,7 @@
 - `src/schema/aiGuide.ts`：給 AI 讀的格式說明（英文），從 `KINDS`、`EDGE_PARAMS` 和英文翻譯產生。`npm run ai-guide`（`scripts/ai-guide.ts` 的 `aiGuideFiles()`）寫：完整說明 `aiGuide()` 到 `public/llms-full.txt`，短索引 `llmsIndex()` 到 `public/llms.txt`，Agent Skill 的 `skillMd()` 和 `referenceMd()` 到 `skills/loadsketch/`、`public/skills/loadsketch/`，以及 `public/skills/loadsketch.zip`（`scripts/zip.ts`，不壓縮、固定時間）；貼上設計的對話框（`src/app/components/PasteDesign.tsx`）用 `aiPrompt()` 複製給 AI 的提示。
 - `src/learn/`：課程、值班題、限制題、需求題、成本、診斷。讀模擬結果，不改引擎。
 - `src/site/main.tsx`：介紹頁（網址 `/`）。模擬器在 `/app/`（`app/index.html`）；介紹頁上會動的畫面是 iframe 裡的模擬器，用 `?embed=1`（`src/app/App.tsx` 的 `EMBED`）。
+- `src/course/main.tsx`：課程頁（網址 `/learn/`，`learn/index.html`）。左邊一步一步（`src/course/steps.ts` 的 `stepsOf()`），右邊是 iframe 裡的模擬器（`?embed=1&course=1`）；模擬器每次執行完用 postMessage 把結果傳給課程頁（`src/app/courseBridge.ts` 的 `useCourseBridge()`），猜題答案和挑戰判定都讀這次執行。目錄在 `src/course/catalog.ts` 的 `UNITS`（7 單元、33 課；`LESSONS` 裡沒有的課顯示「即將推出」）。進度存在 localStorage（`src/course/progress.ts` 的 `PROGRESS_KEY`，讀寫都包 try/catch）。
 - `src/app/`：React 介面。狀態在 `store.ts`（zustand）；模擬在 Web Worker 跑（`src/worker/sim.worker.ts`）。
 - `cli/loadsketch.ts`：命令列（run、validate、fmt、schema、import），用 schema、engine 和 `src/import/`。
 - `src/import/terraform/`：Terraform plan JSON 轉成設計檔（`plan.ts` 解析、`graph.ts` 資源圖、`rules.ts` 對應規則、`fill.ts` 補值（`instances.ts` 機型表、`answers.ts` 答案檔）、`checks.ts` 靜態檢查、`index.ts` 組裝）。報告文字在 `src/i18n/importReport.ts`。匯入的設計檔在 node 和 edge 帶選填的 `source`；手寫的設計檔不會有。只回傳訊息 id；文字在 `src/i18n/importMessages.ts`。fixture 在 `tests/import/fixtures/`。

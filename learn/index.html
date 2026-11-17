@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" class="course">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/src/app/assets/favicon.svg" />
+    <title>loadsketch course: guess, run, and see why</title>
+    <meta name="description" content="A system design course where every number comes from a simulation: guess what happens, run it, then change the design." />
+    <script>
+      // Pick the theme before first paint: ?theme=, then the saved choice, then the system setting.
+      (function () {
+        var q = new URLSearchParams(location.search).get('theme');
+        var saved = null;
+        try { saved = localStorage.getItem('loadsketch-theme'); } catch (e) {}
+        var t = q || saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/course/main.tsx"></script>
+  </body>
+</html>
