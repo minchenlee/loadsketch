@@ -16,9 +16,16 @@ const duplicates = (run: RunData) => jobs(run).duplicates ?? 0;
 const lost = (run: RunData) => Math.max(0, (jobs(run).asyncFail ?? 0) - (jobs(run).dlq ?? 0));
 const asyncP99 = (run: RunData) => run.result.summary.asyncLatencyMs.p99;
 
-const count = (n: number): Goal['check'] => () => ({ ok: n === 0, value: String(n) });
-const noDuplicates: Goal = { text: tx('No message is processed twice'), check: (run) => count(duplicates(run))(run) };
-const nothingLost: Goal = { text: tx('No message is lost'), check: (run) => count(lost(run))(run) };
+/** Zero of something counted at the work queue; a missing queue fails (nothing was counted). */
+const noneAt = (text: string, n: (run: RunData) => number): Goal => ({
+  text,
+  check: (run) => {
+    if (!run.result.nodes.jobs || !run.design.nodes.some((x) => x.id === 'jobs')) return { ok: false, value: '—' };
+    return { ok: n(run) === 0, value: String(n(run)) };
+  },
+});
+const noDuplicates = noneAt(tx('No message is processed twice'), duplicates);
+const nothingLost = noneAt(tx('No message is lost'), lost);
 
 const atLeastOnce: Lesson = {
   id: '5.2',
@@ -96,7 +103,7 @@ const atLeastOnce: Lesson = {
         { text: tx('Async p99 (queued to done) under 1000 ms'), check: (run) => ({ ok: asyncP99(run) < 1000, value: ms(asyncP99(run)) }) },
         nothingLost,
         noDuplicates,
-        slotsAtMost('thumb', 12, tx('Worker slots (machines × slots) ≤ 12')),
+        slotsAtMost('jobs', 12, tx('Worker slots (machines × slots) ≤ 12')),
       ],
       rules: [
         keepParam('jobs', 'delivery', tx('At-least-once delivery'), tx('The queue’s delivery stays at-least-once')),

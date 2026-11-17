@@ -39,7 +39,12 @@ export function originCount(run: RunData, reason: string): number {
   return s;
 }
 
-const strip = (x: object) => JSON.stringify(x, Object.keys(x).filter((k) => k !== 'pos' && k !== 'label').sort());
+/** JSON with object keys sorted at every level, so equal values give the same text. */
+const canon = (v: unknown): string =>
+  Array.isArray(v) ? '[' + v.map(canon).join(',') + ']'
+  : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon((v as Record<string, unknown>)[k])).join(',') + '}'
+  : JSON.stringify(v);
+const strip = (x: Record<string, unknown>) => canon(Object.fromEntries(Object.entries(x).filter(([k]) => k !== 'pos' && k !== 'label')));
 
 /** At most one connection changes; no component changes, and none is added or removed. */
 export const oneEdgeOnly: Rule = {
@@ -73,7 +78,8 @@ export const keepThrottle = (maxK: number): Rule => ({
       if (!o.throttleK) continue;
       const e = now.get(edgeId(o));
       const k = e?.throttleK ?? 0;
-      if (e && !(k >= 1 && k <= maxK)) out.push(t('Connection “{id}”: K is {k}', { id: edgeId(o), k }));
+      if (!e) out.push(t('Connection “{id}” was removed', { id: edgeId(o) }));
+      else if (!(k >= 1 && k <= maxK)) out.push(t('Connection “{id}”: K is {k}', { id: edgeId(o), k }));
     }
     return out;
   },
@@ -84,7 +90,7 @@ export const keepParam = (id: string, key: string, short: string, text: string):
   short,
   text,
   check: (d, original) => {
-    if (!d.nodes.some((n) => n.id === id)) return [];
+    if (!d.nodes.some((n) => n.id === id)) return [t('“{name}” was removed', { name: labelOf(original, id) })];
     const a = paramOf(original, id, key);
     const b = paramOf(d, id, key);
     const kind = d.nodes.find((n) => n.id === id)!.kind;
@@ -102,14 +108,24 @@ export const paramAtMost = (id: string, key: string, max: number, text: string):
   },
 });
 
-/** Total worker slots of one node (instances × concurrency per instance) stay at most max. */
-export const slotsAtMost = (id: string, max: number, text: string): Goal => ({
+/**
+ * Total slots of every consumer of a queue stay at most max: instances (the maximum when it
+ * autoscales) × concurrency per instance, summed over each node the queue delivers to. A missing
+ * queue, or a consumer without a slot count, fails.
+ */
+export const slotsAtMost = (queue: string, max: number, text: string): Goal => ({
   text,
   check: (run) => {
-    const i = paramOf(run.design, id, 'instances');
-    const c = paramOf(run.design, id, 'concurrency');
-    const n = typeof i === 'number' && typeof c === 'number' ? i * c : Infinity;
-    return { ok: n <= max, value: Number.isFinite(n) ? t('{i} × {c} = {n}', { i: String(i), c: String(c), n }) : '—' };
+    const d = run.design;
+    if (!d.nodes.some((n) => n.id === queue)) return { ok: false, value: t('“{name}” was removed', { name: queue }) };
+    let n = 0;
+    for (const id of new Set(d.edges.filter((e) => e.from === queue).map((e) => e.to))) {
+      const auto = paramOf(d, id, 'autoscale') === 'on';
+      const i = paramOf(d, id, auto ? 'maxInstances' : 'instances');
+      const c = paramOf(d, id, 'concurrency');
+      n += typeof i === 'number' && typeof c === 'number' ? i * c : Infinity;
+    }
+    return { ok: n <= max, value: Number.isFinite(n) ? t('{n} slots', { n }) : '—' };
   },
 });
 
@@ -127,18 +143,26 @@ export const limitGoals = (l: { maxErrorRate: number; maxP99Ms: number; budgetPe
 const GIVEN = ['serviceMs', 'readMs', 'writeMs'];
 const meanOf = (v: unknown) => (typeof v === 'number' ? v : v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined);
 
-/** The speed of the parts is given: no time shorter than in the original design, and no custom service. */
+/**
+ * The speed of the parts is given: no node is faster than the original node with its id. A node
+ * under a new id is not faster than the fastest original node of its kind (the kind's default
+ * when the original has none), so renaming a part does not lift the floor. No custom service.
+ */
 export const givenParts: Rule = {
   short: tx('Same speed of parts'),
   text: tx('The time each part takes stays as given, and no custom service'),
   check: (d, original) => {
     const out = customUsed(d).map((b) => t(b.text, b.vars));
-    for (const o of original.nodes) {
-      if (!d.nodes.some((n) => n.id === o.id && n.kind === o.kind)) continue;
+    for (const n of d.nodes) {
+      const same = original.nodes.find((o) => o.id === n.id && o.kind === n.kind);
+      const kin = same ? [same] : original.nodes.filter((o) => o.kind === n.kind);
       for (const k of GIVEN) {
-        const was = meanOf(paramOf(original, o.id, k));
-        const now = meanOf(paramOf(d, o.id, k));
-        if (was !== undefined && now !== undefined && now < was) out.push(t('{name}: {what} is shorter than given', { name: labelOf(original, o.id), what: KINDS[o.kind]?.params[k]?.label ? t(KINDS[o.kind].params[k].label) : k }));
+        const spec = KINDS[n.kind]?.params[k];
+        if (!spec) continue;
+        const floors = kin.map((o) => meanOf(paramOf(original, o.id, k))).filter((x): x is number => x !== undefined);
+        const floor = floors.length ? Math.min(...floors) : meanOf(spec.default);
+        const now = meanOf(paramOf(d, n.id, k));
+        if (floor !== undefined && now !== undefined && now < floor) out.push(t('{name}: {what} is shorter than given', { name: labelOf(d, n.id), what: spec.label ? t(spec.label) : k }));
       }
     }
     return out;
