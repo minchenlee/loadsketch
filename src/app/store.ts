@@ -283,7 +283,8 @@ function loadSlo(): Slo {
 /** At most this many edits can be undone. */
 const HISTORY = 100;
 
-export type Drawer = 'palette' | 'inspector' | 'metrics' | null;
+/** 'limit': the find-limit panel (no tab: Find limit in the run bar opens it). */
+export type Drawer = 'palette' | 'inspector' | 'metrics' | 'limit' | null;
 export interface Panels {
   left: boolean;
   right: boolean;

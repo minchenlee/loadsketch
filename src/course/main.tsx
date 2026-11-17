@@ -422,6 +422,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       // pastes another design there
       if (!msg || msg.source !== 'loadsketch-app' || msg.ctx?.example !== here.example || msg.ctx.scenario !== here.scenario) return;
       if (msg.kind === 'ready') {
+        // a new simulator: its first running is a new run, whatever the last one did
+        frameStatus.current = '';
         setStatus('idle');
         send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
         sendGuesses();
