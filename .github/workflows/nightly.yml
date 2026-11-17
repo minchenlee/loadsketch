@@ -50,3 +50,23 @@ jobs:
       # A test that fails is run once more; vitest lists the ones that passed only on the retry.
       - name: Slow tests (${{ matrix.name }})
         run: npx vitest run --retry=1 ${{ matrix.files }}
+
+  # A pull request may leave a Chinese translation empty (npm run i18n:check only warns).
+  # This job fails until every message has Traditional Chinese.
+  zh-complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Every message has Traditional Chinese
+        run: npm run i18n:strict
