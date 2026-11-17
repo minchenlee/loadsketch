@@ -9,6 +9,7 @@ import { NumberField, Select, type Option } from './Select.tsx';
 import { t, tx } from '../../i18n/index.ts';
 import { LONG_RUN_S, fmtClock } from '../ui.ts';
 import { useCauseHidden } from './OnCall.tsx';
+import { presetOf } from '../presetName.ts';
 
 function Clock() {
   useTick();
@@ -103,7 +104,7 @@ export function RunBar() {
 
   const patch = (p: Partial<Scenario['traffic']>, top: Partial<Scenario> = {}) =>
     setScenario({ ...scenario, ...top, traffic: { ...scenario.traffic, ...p } });
-  const presetName = Object.entries(SCENARIOS).find(([, s]) => s.name === scenario.name)?.[0];
+  const presetName = presetOf(SCENARIOS, scenario.name);
   const nodes = useApp((s) => s.nodes);
   const edges = useApp((s) => s.edges);
   const doc = useApp((s) => s.doc);
