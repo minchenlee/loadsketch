@@ -62,6 +62,20 @@ describe('course run state', () => {
     expect(FRAMES.filter((f) => takesGuesses(st(f)))).toEqual(['idle', 'done']);
   });
 
+  it('loaded (the frame loaded another design and dropped its guesses): sent again when it takes guesses', () => {
+    for (const f of FRAMES) {
+      const r = runStep(st(f, 2, ['a']), { kind: 'loaded' }, at);
+      expect(r.send, f).toBe(f === 'idle' || f === 'done');
+      expect(r.state).toEqual(st(f, 2, ['a']));
+    }
+  });
+
+  it('a run that ends without a result keeps its locks (the guess log has its guesses)', () => {
+    const s = go(st('idle'), { kind: 'status', status: 'running', page: 2 }, { kind: 'gone' });
+    expect(s.locked).toEqual(['a']);
+    expect(go(st('idle'), { kind: 'status', status: 'running', page: 2 }, { kind: 'status', status: 'idle', page: 2 }).locked).toEqual(['a']);
+  });
+
   it('restart: nothing run, nothing locked', () => {
     for (const f of FRAMES) expect(runStep(st(f, 2, ['a', 'b']), { kind: 'restart' }, at).state).toEqual(INITIAL);
   });

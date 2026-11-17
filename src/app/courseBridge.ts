@@ -30,6 +30,8 @@ const CTX: CourseCtx = (() => {
 export type ToCourse =
   | { source: 'loadsketch-app'; kind: 'ready'; ctx: CourseCtx }
   | { source: 'loadsketch-app'; kind: 'status'; ctx: CourseCtx; status: string }
+  /** Another design loaded (it drops the guesses): the page sends them again. */
+  | { source: 'loadsketch-app'; kind: 'loaded'; ctx: CourseCtx }
   | { source: 'loadsketch-app'; kind: 'run'; ctx: CourseCtx; run: RunData };
 
 /** From the course page to this frame. */
@@ -74,6 +76,7 @@ export function useCourseBridge(): void {
     window.addEventListener('message', onMessage);
     post({ source: 'loadsketch-app', kind: 'ready', ctx: CTX });
     const off = useApp.subscribe((s, prev) => {
+      if (s.loads !== prev.loads) post({ source: 'loadsketch-app', kind: 'loaded', ctx: CTX });
       if (s.status === prev.status) return;
       post({ source: 'loadsketch-app', kind: 'status', ctx: CTX, status: s.status });
       if (s.status === 'done' && s.result && s.ran) post({ source: 'loadsketch-app', kind: 'run', ctx: CTX, run: { design: s.ran.design, scenario: s.ran.scenario, result: s.result, windows: s.windows } });

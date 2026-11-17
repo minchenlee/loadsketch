@@ -22,10 +22,18 @@
 //                           |                     |             | a run started with)
 // finished (a run's result) | any                 | unchanged   | answer the questions of the run's page (or
 //                           |                     |             | this page, if its start was not seen)
+// loaded (another design   | idle / done         | unchanged   | send the guesses (load() in the frame drops
+//   in the frame)           |                     |             | them, with no status change)
+// loaded                    | loading/running/    | unchanged   | nothing now: the end of the run sends them
+//                           | paused              |             |
 // page / guess              | idle / done         | unchanged   | send the guesses
 // page / guess              | loading/running/    | unchanged   | nothing now: ready or the end of the run
 //                           | paused              |             | sends them
 // restart                   | any                 | loading     | no run, nothing locked
+//
+// Locks stay when a run ends without a result (gone, or stopped: idle). The simulator logged the
+// guesses when the run started, so the guess log already has them; unlocking would let the page
+// show a guess the log does not have.
 
 export type Frame = 'loading' | 'idle' | 'running' | 'paused' | 'done';
 
@@ -42,6 +50,7 @@ export type RunEvent =
   | { kind: 'ready' }
   | { kind: 'status'; status: 'idle' | 'running' | 'paused' | 'done'; page: number }
   | { kind: 'finished'; page: number }
+  | { kind: 'loaded' }
   | { kind: 'page' }
   | { kind: 'guess' }
   | { kind: 'restart' };
@@ -76,6 +85,7 @@ export function runStep(s: RunState, e: RunEvent, answerable: (page: number) => 
       return out({ ...s, frame: e.status }, true);
     case 'finished':
       return out(s, false, answerable(s.runPage ?? e.page));
+    case 'loaded':
     case 'page':
     case 'guess':
       return out(s, takesGuesses(s));

@@ -49,7 +49,7 @@ export function FindLimit() {
 
   // closing ends the search at once: a completed search whose playback did not catch up yet puts its
   // final mark on the canvas (with Clear); a search that did not end leaves no marks
-  const close = () => {
+  const close = (focus = true) => {
     if (closedRef.current) return;
     closedRef.current = true;
     const wasStopped = stoppedRef.current;
@@ -64,8 +64,14 @@ export function FindLimit() {
       st.setLimit(finalMark(cur.result, cur.steps, !!cur.noWork));
     }
     st.closeLimit();
-    document.querySelector<HTMLElement>('[data-testid="find-limit-open"]')?.focus({ preventScroll: true });
+    if (focus) document.querySelector<HTMLElement>('[data-testid="find-limit-open"]')?.focus({ preventScroll: true });
   };
+  // closed from outside (the phone sheet's X or a tab sets limitOpen false and unmounts the panel):
+  // the same close, so the marks are the same. An unmount with the panel still open (the layout
+  // changed) only stops the worker; the new panel searches again.
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => () => void (useApp.getState().limitOpen || closeRef.current(false)), []);
 
   useEffect(() => {
     if (problems.length) return;
@@ -164,7 +170,7 @@ export function FindLimit() {
       <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-3">
         <TrendingUp size={18} className="muted" />
         <div className="text-[16px] font-semibold">{t('Find limit')}</div>
-        <button ref={first} className="btn ml-auto" onClick={close} aria-label={t('Close')}>
+        <button ref={first} className="btn ml-auto" onClick={() => close()} aria-label={t('Close')}>
           <X size={16} />
         </button>
       </div>
@@ -287,7 +293,7 @@ export function FindLimit() {
             {t('Cancel')}
           </button>
         ) : (
-          <button className="btn btn-primary" onClick={close} data-testid="find-limit-close">
+          <button className="btn btn-primary" onClick={() => close()} data-testid="find-limit-close">
             {t('Close')}
           </button>
         )}
