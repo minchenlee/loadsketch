@@ -4,11 +4,10 @@ import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
 import { failUnder1, p99Under, pct } from '../lessonKit.ts';
 import type { RunData } from '../metrics.ts';
 
-/** Share of the users' requests answered with a fallback (a degraded answer) somewhere on the way. */
+/** Share of the users' requests answered with a degraded answer: each response counted once (summary.degraded), not each fallback on the way. */
 const degraded = (run: RunData) => {
-  let n = 0;
-  for (const e of Object.values(run.result.edges)) n += (e as { fallbacks?: number }).fallbacks ?? 0;
-  return run.result.summary.offered > 0 ? n / run.result.summary.offered : 0;
+  const s = run.result.summary as { degraded?: number; offered: number };
+  return s.offered > 0 ? (s.degraded ?? 0) / s.offered : 0;
 };
 
 const degradedUnder = (limit: number, text: string): Goal => ({

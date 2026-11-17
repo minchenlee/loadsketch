@@ -72,7 +72,10 @@ export const errorsUnder = (limit: number, text: string): Goal => ({
 /** p99 of successful requests is under `limit` ms. */
 export const p99Under = (limit: number, text: string): Goal => ({
   text,
-  check: (run) => ({ ok: run.result.summary.latencyMs.p99 < limit, value: ms(run.result.summary.latencyMs.p99) }),
+  check: (run) => {
+    const l = run.result.summary.latencyMs;
+    return l.count > 0 ? { ok: l.p99 < limit, value: ms(l.p99) } : { ok: false, value: '—' };
+  },
 });
 
 export const failUnder1 = errorsUnder(0.01, tx('Error rate under 1% for the whole run'));

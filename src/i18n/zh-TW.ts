@@ -1450,6 +1450,7 @@ export const ZH: Record<string, string> = {
   "Queue order": "排隊順序",
   "Queue {n}": "佇列 {n}",
   "Queued": "排隊中",
+  "Queued work finishes: at most 1% of messages are unfinished or expired (the DLQ counts as handled)": "排隊的工作要做完：沒做完或過期的訊息最多 1%（進 DLQ 算處理過）",
   "Queued {n}": "排隊 {n}",
   "Queueing": "排隊",
   "Queueing under overload: adaptive LIFO + CoDel": "過載時的排隊：adaptive LIFO + CoDel",
