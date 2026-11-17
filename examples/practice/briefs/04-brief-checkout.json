@@ -1,0 +1,308 @@
+{
+  "schema": "loadsketch/brief@1",
+  "id": "brief-checkout",
+  "title": "需求：結帳",
+  "text": "3 人團隊，一個月。做商店的後端：看商品和結帳，題目已經給了這兩支 API：看商品（browse）和結帳（checkout）。只有結帳這支 API 會呼叫外部的金流供應商，它已經在畫布上。它每天總有一段時間很慢。",
+  "functional": [
+    "使用者能看商品",
+    "使用者能結帳：呼叫金流供應商扣款"
+  ],
+  "load": [
+    "每秒 1,500 個請求，80% 是看商品（讀取），20% 是結帳（寫入）",
+    "第 20 秒起金流供應商慢 40 倍，持續 20 秒",
+    "金流慢的時候，結帳可以失敗，但看商品不能受影響"
+  ],
+  "given": [
+    "金流供應商平常扣一筆 50 ms，這個改不了",
+    "你的程式處理一個請求平均 5 ms",
+    "資料庫讀一筆 3 ms、寫一筆 10 ms"
+  ],
+  "outOfScope": [
+    "重複扣款",
+    "退款",
+    "換另一家金流"
+  ],
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "需求：結帳",
+    "seed": 1,
+    "durationS": 90,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 1500,
+      "readRatio": 0.8
+    },
+    "events": [
+      {
+        "type": "slow",
+        "atS": 20,
+        "forS": 20,
+        "node": "pay",
+        "multiplier": 40
+      }
+    ]
+  },
+  "limits": {
+    "maxErrorRate": 0.06,
+    "maxP99Ms": 300,
+    "budgetPerMonth": 1450,
+    "maxPoints": 6
+  },
+  "start": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：結帳",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "pay",
+        "kind": "service",
+        "label": "金流供應商（外部）",
+        "pos": [
+          0,
+          380
+        ],
+        "params": {
+          "instances": 2,
+          "concurrency": 64,
+          "serviceMs": {
+            "mean": 50,
+            "cv": 0.5
+          },
+          "queueLimit": 200
+        }
+      }
+    ],
+    "edges": [],
+    "apis": [
+      {
+        "name": "browse",
+        "op": "read",
+        "share": 0.8
+      },
+      {
+        "name": "checkout",
+        "op": "write",
+        "share": 0.2
+      }
+    ]
+  },
+  "fixed": [
+    "pay"
+  ],
+  "needs": [
+    {
+      "kind": "reaches-node",
+      "node": "pay",
+      "text": "結帳有送到金流供應商",
+      "share": 0.65
+    },
+    {
+      "kind": "looked"
+    },
+    {
+      "kind": "not-degraded"
+    }
+  ],
+  "hint": "只有結帳這支 API 會呼叫金流：先在「API → 金流」那條線的「走哪些 API」只選 checkout，看商品（browse）就不會送到金流。金流慢 40 倍時，一筆扣款要 2 秒。每秒 300 筆結帳都在等，很快就把 API Server 的位子佔滿，看商品的請求也排不進去。慢的那 20 秒結帳本來就救不了，要做的是不要讓它拖垮別人：在同一條線上設逾時，等太久就放棄。逾時設得太長一樣會佔滿位子。",
+  "reference": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：結帳",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "商店 API",
+        "pos": [
+          540,
+          200
+        ],
+        "params": {
+          "instances": 4
+        }
+      },
+      {
+        "id": "db",
+        "kind": "database",
+        "label": "商品資料庫",
+        "pos": [
+          1080,
+          80
+        ]
+      },
+      {
+        "id": "pay",
+        "kind": "service",
+        "label": "金流供應商（外部）",
+        "pos": [
+          1080,
+          320
+        ],
+        "params": {
+          "instances": 2,
+          "concurrency": 64,
+          "serviceMs": {
+            "mean": 50,
+            "cv": 0.5
+          },
+          "queueLimit": 200
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "db"
+      },
+      {
+        "from": "api",
+        "to": "pay",
+        "apis": [
+          "checkout"
+        ],
+        "timeoutMs": 300
+      }
+    ],
+    "apis": [
+      {
+        "name": "browse",
+        "op": "read",
+        "share": 0.8
+      },
+      {
+        "name": "checkout",
+        "op": "write",
+        "share": 0.2
+      }
+    ]
+  },
+  "naive": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：結帳",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "商店 API",
+        "pos": [
+          540,
+          200
+        ],
+        "params": {
+          "instances": 4
+        }
+      },
+      {
+        "id": "db",
+        "kind": "database",
+        "label": "商品資料庫",
+        "pos": [
+          1080,
+          80
+        ]
+      },
+      {
+        "id": "pay",
+        "kind": "service",
+        "label": "金流供應商（外部）",
+        "pos": [
+          1080,
+          320
+        ],
+        "params": {
+          "instances": 2,
+          "concurrency": 64,
+          "serviceMs": {
+            "mean": 50,
+            "cv": 0.5
+          },
+          "queueLimit": 200
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "db"
+      },
+      {
+        "from": "api",
+        "to": "pay",
+        "apis": [
+          "checkout"
+        ]
+      }
+    ],
+    "apis": [
+      {
+        "name": "browse",
+        "op": "read",
+        "share": 0.8
+      },
+      {
+        "name": "checkout",
+        "op": "write",
+        "share": 0.2
+      }
+    ]
+  }
+}

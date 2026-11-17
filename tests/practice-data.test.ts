@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { BRIEF_SCHEMA, INCIDENT_SCHEMA, PROBLEM_SCHEMA, loadPracticeList, parseIncident, parseProblem } from '../src/learn/practiceData.ts';
 import { INCIDENTS } from '../src/learn/oncall.ts';
 import { PROBLEMS } from '../src/learn/constraints.ts';
-import { parseBrief } from '../src/learn/briefs.ts';
+import { BRIEFS, parseBrief } from '../src/learn/briefs.ts';
 
 const ROOT = join(import.meta.dirname, '..');
 const readPracticeDir = (dir: string) =>
@@ -161,5 +161,19 @@ describe('practice data files', () => {
     expect(entries.length).toBe(3);
     for (const [file, raw] of entries) expect(() => parseProblem(file, raw)).not.toThrow();
     expect(PROBLEMS.map((p) => p.id)).toEqual(['spike-budget', 'retry-budget', 'solo-shortener']);
+  });
+
+  it('validates all brief files and preserves order', () => {
+    const entries = readPracticeDir('examples/practice/briefs');
+    expect(entries.length).toBe(6);
+    for (const [file, raw] of entries) expect(() => parseBrief(file, raw)).not.toThrow();
+    expect(BRIEFS.map((b) => b.id)).toEqual([
+      'brief-shortener',
+      'brief-sale',
+      'brief-notify',
+      'brief-checkout',
+      'brief-geocode',
+      'brief-catalog',
+    ]);
   });
 });

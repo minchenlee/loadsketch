@@ -1,0 +1,229 @@
+{
+  "schema": "loadsketch/brief@1",
+  "id": "brief-geocode",
+  "title": "需求：查地址",
+  "text": "2 人團隊，兩週。做一個查地址的 API：把地址換成座標。座標由外部的地圖供應商算，它已經在畫布上。它每 20 次會失敗 1 次。",
+  "functional": [
+    "其他服務能用地址查到座標"
+  ],
+  "load": [
+    "每秒 1,500 個請求，全部是讀取",
+    "你的 API 失敗率不能超過 1%，雖然供應商自己有 5%"
+  ],
+  "given": [
+    "地圖供應商查一次平均 30 ms，失敗率 5%，這些改不了",
+    "你的程式處理一個請求平均 5 ms"
+  ],
+  "outOfScope": [
+    "地址的格式檢查",
+    "供應商的計費",
+    "換另一家供應商"
+  ],
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "需求：查地址",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 1500,
+      "readRatio": 1
+    }
+  },
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 200,
+    "budgetPerMonth": 1200,
+    "maxPoints": 5
+  },
+  "start": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：查地址",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "geo",
+        "kind": "service",
+        "label": "地圖供應商（外部）",
+        "pos": [
+          0,
+          380
+        ],
+        "params": {
+          "instances": 2,
+          "concurrency": 64,
+          "serviceMs": {
+            "mean": 30,
+            "cv": 0.5
+          },
+          "queueLimit": 200,
+          "errorRate": 0.05
+        }
+      }
+    ],
+    "edges": []
+  },
+  "fixed": [
+    "geo"
+  ],
+  "needs": [
+    {
+      "kind": "reaches-node",
+      "node": "geo",
+      "text": "查詢有送到地圖供應商",
+      "op": "calls",
+      "share": 0.05
+    },
+    {
+      "kind": "not-degraded"
+    }
+  ],
+  "hint": "供應商每次有 5% 會失敗，而且每次失敗互不相關。失敗了再試一次，兩次都失敗的機率是 5% × 5% = 0.25%。在「API → 地圖供應商」那條線上設重試。重試會讓供應商多收約 5% 的請求，它吃得下；要是它是因為太忙才失敗，重試只會更糟。",
+  "reference": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：查地址",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "查地址 API",
+        "pos": [
+          540,
+          200
+        ],
+        "params": {
+          "instances": 3
+        }
+      },
+      {
+        "id": "geo",
+        "kind": "service",
+        "label": "地圖供應商（外部）",
+        "pos": [
+          810,
+          200
+        ],
+        "params": {
+          "instances": 2,
+          "concurrency": 64,
+          "serviceMs": {
+            "mean": 30,
+            "cv": 0.5
+          },
+          "queueLimit": 200,
+          "errorRate": 0.05
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "geo",
+        "retries": 1
+      }
+    ]
+  },
+  "naive": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：查地址",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "查地址 API",
+        "pos": [
+          540,
+          200
+        ],
+        "params": {
+          "instances": 3
+        }
+      },
+      {
+        "id": "geo",
+        "kind": "service",
+        "label": "地圖供應商（外部）",
+        "pos": [
+          810,
+          200
+        ],
+        "params": {
+          "instances": 2,
+          "concurrency": 64,
+          "serviceMs": {
+            "mean": 30,
+            "cv": 0.5
+          },
+          "queueLimit": 200,
+          "errorRate": 0.05
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "geo"
+      }
+    ]
+  }
+}

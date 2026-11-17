@@ -1,0 +1,233 @@
+{
+  "schema": "loadsketch/brief@1",
+  "id": "brief-catalog",
+  "title": "需求：商品頁",
+  "text": "2 人團隊，一個月。商品頁要顯示庫存。庫存在一個很舊的資料庫裡，它已經在畫布上：很慢，連線很少，沒有人敢動它。",
+  "functional": [
+    "使用者能看到商品的庫存",
+    "庫存數字晚幾秒更新沒關係"
+  ],
+  "load": [
+    "每秒 3,000 個請求，全部是讀取"
+  ],
+  "given": [
+    "舊的庫存資料庫讀一筆平均 40 ms，只有 20 條連線，這些改不了",
+    "你的程式處理一個請求平均 5 ms",
+    "快取命中率最高 90%"
+  ],
+  "outOfScope": [
+    "搬走舊資料庫",
+    "扣庫存",
+    "庫存數字的即時性"
+  ],
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "需求：商品頁",
+    "seed": 1,
+    "durationS": 60,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 3000,
+      "readRatio": 1
+    }
+  },
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 150,
+    "budgetPerMonth": 2000,
+    "maxPoints": 6
+  },
+  "start": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：商品頁",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "stock",
+        "kind": "database",
+        "label": "庫存資料庫（舊）",
+        "pos": [
+          0,
+          380
+        ],
+        "params": {
+          "connections": 20,
+          "readMs": {
+            "mean": 40,
+            "cv": 0.5
+          }
+        }
+      }
+    ],
+    "edges": []
+  },
+  "fixed": [
+    "stock"
+  ],
+  "needs": [
+    {
+      "kind": "reaches-node",
+      "node": "stock",
+      "text": "庫存是從舊資料庫查來的",
+      "op": "calls",
+      "share": 0.05
+    },
+    {
+      "kind": "not-degraded"
+    }
+  ],
+  "hint": "舊資料庫有 20 條連線、讀一筆 40 ms，一秒最多 500 筆；你有 3,000 個請求。它改不了，所以只能讓它少收一點：「晚幾秒沒關係」表示可以用快取。API 先問快取，沒有才去讀舊資料庫（API → 快取，API → 舊資料庫）。九成的請求由快取回答，舊資料庫每秒只收到 300 筆。",
+  "reference": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：商品頁",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "商品 API",
+        "pos": [
+          540,
+          200
+        ],
+        "params": {
+          "instances": 3
+        }
+      },
+      {
+        "id": "cache",
+        "kind": "cache",
+        "label": "庫存快取",
+        "pos": [
+          810,
+          80
+        ]
+      },
+      {
+        "id": "stock",
+        "kind": "database",
+        "label": "庫存資料庫（舊）",
+        "pos": [
+          810,
+          320
+        ],
+        "params": {
+          "connections": 20,
+          "readMs": {
+            "mean": 40,
+            "cv": 0.5
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "cache"
+      },
+      {
+        "from": "api",
+        "to": "stock"
+      }
+    ]
+  },
+  "naive": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：商品頁",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "商品 API",
+        "pos": [
+          540,
+          200
+        ],
+        "params": {
+          "instances": 3
+        }
+      },
+      {
+        "id": "stock",
+        "kind": "database",
+        "label": "庫存資料庫（舊）",
+        "pos": [
+          810,
+          320
+        ],
+        "params": {
+          "connections": 20,
+          "readMs": {
+            "mean": 40,
+            "cv": 0.5
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "stock"
+      }
+    ]
+  }
+}

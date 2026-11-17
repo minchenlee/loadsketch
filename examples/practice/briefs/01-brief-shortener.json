@@ -1,0 +1,200 @@
+{
+  "schema": "loadsketch/brief@1",
+  "id": "brief-shortener",
+  "title": "需求：短網址",
+  "text": "2 人團隊，一個月後上線。做一個短網址服務。",
+  "functional": [
+    "使用者能把一個長網址換成短網址",
+    "使用者點短網址，會被帶到原本的網址"
+  ],
+  "load": [
+    "每秒 20,000 個請求，95% 是點短網址（讀取），5% 是建立（寫入）"
+  ],
+  "given": [
+    "你的程式處理一個請求平均 5 ms",
+    "資料庫讀一筆 3 ms、寫一筆 10 ms",
+    "快取命中率最高 90%"
+  ],
+  "outOfScope": [
+    "登入和帳號",
+    "點擊統計",
+    "自訂短碼"
+  ],
+  "scenario": {
+    "schema": "loadsketch/scenario@1",
+    "name": "需求：短網址",
+    "seed": 1,
+    "durationS": 30,
+    "warmupS": 5,
+    "traffic": {
+      "rps": 20000,
+      "readRatio": 0.95
+    }
+  },
+  "limits": {
+    "maxErrorRate": 0.01,
+    "maxP99Ms": 100,
+    "budgetPerMonth": 10600,
+    "maxPoints": 6
+  },
+  "start": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：短網址",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      }
+    ],
+    "edges": []
+  },
+  "fixed": [],
+  "needs": [
+    {
+      "kind": "stored"
+    },
+    {
+      "kind": "looked"
+    },
+    {
+      "kind": "not-degraded"
+    }
+  ],
+  "hint": "先估容量。API 處理一個請求時，除了自己的 5 ms，還要等快取或資料庫回應，平均大約佔住位子 7 ms。每秒 20,000 個請求 × 7 ms = 同時要處理約 140 個，預設的 2 台不夠。資料庫：讀取每秒 19,000 次 × 3 ms = 57 條連線，寫入每秒 1,000 次 × 10 ms = 10 條，一共 67 條，預設只有 50 條。可以把資料庫開大，也可以在前面放快取擋掉九成的讀取；兩種都算算看，價錢差不多。",
+  "reference": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：短網址",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "轉址 API",
+        "pos": [
+          540,
+          200
+        ],
+        "params": {
+          "instances": 5
+        }
+      },
+      {
+        "id": "cache",
+        "kind": "cache",
+        "label": "快取（短碼 → 網址）",
+        "pos": [
+          810,
+          80
+        ],
+        "params": {
+          "instances": 2
+        }
+      },
+      {
+        "id": "db",
+        "kind": "database",
+        "label": "網址資料庫",
+        "pos": [
+          810,
+          320
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "cache"
+      },
+      {
+        "from": "api",
+        "to": "db"
+      }
+    ]
+  },
+  "naive": {
+    "schema": "loadsketch/design@1",
+    "name": "需求：短網址",
+    "nodes": [
+      {
+        "id": "users",
+        "kind": "client",
+        "label": "使用者",
+        "pos": [
+          0,
+          200
+        ]
+      },
+      {
+        "id": "lb",
+        "kind": "load_balancer",
+        "label": "負載平衡器",
+        "pos": [
+          270,
+          200
+        ]
+      },
+      {
+        "id": "api",
+        "kind": "service",
+        "label": "轉址 API",
+        "pos": [
+          540,
+          200
+        ]
+      },
+      {
+        "id": "db",
+        "kind": "database",
+        "label": "網址資料庫",
+        "pos": [
+          810,
+          200
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "from": "users",
+        "to": "lb"
+      },
+      {
+        "from": "lb",
+        "to": "api"
+      },
+      {
+        "from": "api",
+        "to": "db"
+      }
+    ]
+  }
+}
