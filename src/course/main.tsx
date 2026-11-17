@@ -401,8 +401,9 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     return () => removeEventListener('message', onMessage);
   }, []);
 
+  // the guesses lock when the simulator says the run started (status 'running'), not here: it
+  // refuses a design that does not pass its checks, and then no run starts
   const startRun = () => {
-    begin(ctxKey(ctx));
     send({ source: 'loadsketch-course', kind: 'guesses', guesses: latest.current.progress.guesses });
     send({ source: 'loadsketch-course', kind: 'run' });
   };
