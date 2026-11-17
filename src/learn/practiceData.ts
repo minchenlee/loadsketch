@@ -129,6 +129,7 @@ function formatIssuePath(i: z.core.$ZodIssue): string {
   return i.path.join('.') || '(root)';
 }
 
+// Returns the original input object (minus `schema`) after Zod validation so key order matches the source JSON.
 function parseWithSchema<T extends { schema: string; id: string }>(
   file: string,
   raw: unknown,

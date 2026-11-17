@@ -7,10 +7,10 @@ import type { WindowStat } from '../engine/index.ts';
 import type { Design, Scenario } from '../schema/design.ts';
 import { CUSTOM_KIND, KINDS } from '../schema/kinds.ts';
 import { settled } from './metrics.ts';
-import { loadPracticeList, parseIncident } from './practiceData.ts';
+import { loadPracticeList, parseIncident, type FaultValue } from './practiceData.ts';
 
 /** What went wrong. `gray`: only one instance; `traffic`: the users sent much more (node: the client). */
-export type Fault = 'down' | 'slow' | 'errors' | 'gray' | 'pause' | 'traffic';
+export type Fault = FaultValue;
 
 export const FAULTS: { id: Fault; text: string }[] = [
   { id: 'down', text: tx('整個元件故障（不回應）') },

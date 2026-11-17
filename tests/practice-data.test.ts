@@ -2,8 +2,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BRIEF_SCHEMA, INCIDENT_SCHEMA, PROBLEM_SCHEMA, loadPracticeList, parseIncident, parseProblem } from '../src/learn/practiceData.ts';
-import { INCIDENTS } from '../src/learn/oncall.ts';
+import { BRIEF_SCHEMA, FAULT_VALUES, INCIDENT_SCHEMA, PROBLEM_SCHEMA, loadPracticeList, parseIncident, parseProblem } from '../src/learn/practiceData.ts';
+import { FAULTS, INCIDENTS } from '../src/learn/oncall.ts';
 import { PROBLEMS } from '../src/learn/constraints.ts';
 import { BRIEFS, parseBrief } from '../src/learn/briefs.ts';
 
@@ -90,29 +90,25 @@ describe('practice data validation errors', () => {
     const bad = validIncident() as Record<string, unknown>;
     delete bad.title;
     const msg = catchMessage(() => parseIncident('examples/practice/oncall/01-sample-incident.json', bad));
-    expect(msg).toContain('examples/practice/oncall/01-sample-incident.json');
-    expect(msg).toContain('title');
+    expect(msg).toContain('examples/practice/oncall/01-sample-incident.json: title:');
   });
 
   it('reports extra unknown field with filename and field path', () => {
     const bad = { ...validProblem(), answer: { node: 'api', fault: 'slow' } };
     const msg = catchMessage(() => parseProblem('examples/practice/constraints/01-sample-problem.json', bad));
-    expect(msg).toContain('examples/practice/constraints/01-sample-problem.json');
-    expect(msg).toContain('answer');
+    expect(msg).toContain('examples/practice/constraints/01-sample-problem.json: answer: Unrecognized key');
   });
 
   it('reports unknown needs kind with filename and field path', () => {
     const bad = validBrief();
     bad.needs = [{ kind: 'unknown-need' } as never];
     const msg = catchMessage(() => parseBrief('examples/practice/briefs/01-sample-brief.json', bad));
-    expect(msg).toContain('examples/practice/briefs/01-sample-brief.json');
-    expect(msg).toContain('needs.0.kind');
+    expect(msg).toContain('examples/practice/briefs/01-sample-brief.json: needs.0.kind:');
   });
 
   it('reports filename and id mismatch with filename and field path', () => {
     const msg = catchMessage(() => parseIncident('examples/practice/oncall/01-wrong-id.json', validIncident()));
-    expect(msg).toContain('examples/practice/oncall/01-wrong-id.json');
-    expect(msg).toContain('id');
+    expect(msg).toContain('examples/practice/oncall/01-wrong-id.json: id: filename "01-wrong-id.json" does not match id "sample-incident"');
   });
 
   it('reports duplicate ids across files with filename and field path', () => {
@@ -121,9 +117,7 @@ describe('practice data validation errors', () => {
       'examples/practice/oncall/02-sample-incident.json': validIncident(),
     };
     const msg = catchMessage(() => loadPracticeList(files, parseIncident));
-    expect(msg).toContain('examples/practice/oncall/02-sample-incident.json');
-    expect(msg).toContain('id');
-    expect(msg).toContain('sample-incident');
+    expect(msg).toContain('examples/practice/oncall/02-sample-incident.json: id: duplicate id "sample-incident"');
   });
 
   it('reports all problems when one file has multiple errors', () => {
@@ -132,19 +126,27 @@ describe('practice data validation errors', () => {
     bad.answer = { node: 'api', fault: 'bogus' };
     bad.extraKey = true;
     const msg = catchMessage(() => parseIncident('examples/practice/oncall/01-wrong-name.json', bad));
-    expect(msg).toContain('answer.fault');
-    expect(msg).toContain('explain');
-    expect(msg).toContain('extraKey');
-    expect(msg).toContain('id');
+    expect(msg).toContain('examples/practice/oncall/01-wrong-name.json: explain:');
+    expect(msg).toContain('examples/practice/oncall/01-wrong-name.json: answer.fault:');
+    expect(msg).toContain('examples/practice/oncall/01-wrong-name.json: extraKey: Unrecognized key');
+    expect(msg).toContain('examples/practice/oncall/01-wrong-name.json: id: filename "01-wrong-name.json" does not match id "sample-incident"');
   });
 });
 
 describe('practice data files', () => {
+  it('every Fault value has a label in FAULTS', () => {
+    expect(FAULTS.length).toBe(FAULT_VALUES.length);
+    expect(new Set(FAULTS.map((f) => f.id))).toEqual(new Set(FAULT_VALUES));
+  });
+
   it('validates all oncall incident files and preserves order', () => {
     const entries = readPracticeDir('examples/practice/oncall');
-    expect(entries.length).toBe(8);
+    const fileIds = entries.map(([, raw]) => (raw as { id: string }).id);
     for (const [file, raw] of entries) expect(() => parseIncident(file, raw)).not.toThrow();
-    expect(INCIDENTS.map((i) => i.id)).toEqual([
+    const ids = INCIDENTS.map((i) => i.id);
+    expect(ids).toEqual(fileIds);
+    expect(ids.length).toBeGreaterThanOrEqual(8);
+    expect(ids.slice(0, 8)).toEqual([
       'gray-errors',
       'slow-dependency',
       'db-slow',
@@ -158,16 +160,22 @@ describe('practice data files', () => {
 
   it('validates all constraint problem files and preserves order', () => {
     const entries = readPracticeDir('examples/practice/constraints');
-    expect(entries.length).toBe(3);
+    const fileIds = entries.map(([, raw]) => (raw as { id: string }).id);
     for (const [file, raw] of entries) expect(() => parseProblem(file, raw)).not.toThrow();
-    expect(PROBLEMS.map((p) => p.id)).toEqual(['spike-budget', 'retry-budget', 'solo-shortener']);
+    const ids = PROBLEMS.map((p) => p.id);
+    expect(ids).toEqual(fileIds);
+    expect(ids.length).toBeGreaterThanOrEqual(3);
+    expect(ids.slice(0, 3)).toEqual(['spike-budget', 'retry-budget', 'solo-shortener']);
   });
 
   it('validates all brief files and preserves order', () => {
     const entries = readPracticeDir('examples/practice/briefs');
-    expect(entries.length).toBe(6);
+    const fileIds = entries.map(([, raw]) => (raw as { id: string }).id);
     for (const [file, raw] of entries) expect(() => parseBrief(file, raw)).not.toThrow();
-    expect(BRIEFS.map((b) => b.id)).toEqual([
+    const ids = BRIEFS.map((b) => b.id);
+    expect(ids).toEqual(fileIds);
+    expect(ids.length).toBeGreaterThanOrEqual(6);
+    expect(ids.slice(0, 6)).toEqual([
       'brief-shortener',
       'brief-sale',
       'brief-notify',
@@ -187,8 +195,11 @@ describe('practice data files', () => {
     const [incPath, incRaw] = readTemplate('incident.json');
     const [probPath, probRaw] = readTemplate('problem.json');
     const [briefPath, briefRaw] = readTemplate('brief.json');
-    expect(() => parseIncident(incPath, incRaw, { checkFilename: false })).not.toThrow();
-    expect(() => parseProblem(probPath, probRaw, { checkFilename: false })).not.toThrow();
-    expect(() => parseBrief(briefPath, briefRaw, { checkFilename: false })).not.toThrow();
+    const inc = parseIncident(incPath, incRaw, { checkFilename: false });
+    const prob = parseProblem(probPath, probRaw, { checkFilename: false });
+    const brief = parseBrief(briefPath, briefRaw, { checkFilename: false });
+    expect(INCIDENTS.map((i) => i.id)).not.toContain(inc.id);
+    expect(PROBLEMS.map((p) => p.id)).not.toContain(prob.id);
+    expect(BRIEFS.map((b) => b.id)).not.toContain(brief.id);
   });
 });
