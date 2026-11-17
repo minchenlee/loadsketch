@@ -100,3 +100,13 @@ export const paramAtMost = (id: string, key: string, max: number, text: string):
   },
 });
 
+/** Total worker slots of one node (instances × concurrency per instance) stay at most max. */
+export const slotsAtMost = (id: string, max: number, text: string): Goal => ({
+  text,
+  check: (run) => {
+    const i = paramOf(run.design, id, 'instances');
+    const c = paramOf(run.design, id, 'concurrency');
+    const n = typeof i === 'number' && typeof c === 'number' ? i * c : Infinity;
+    return { ok: n <= max, value: Number.isFinite(n) ? t('{i} × {c} = {n}', { i: String(i), c: String(c), n }) : '—' };
+  },
+});
