@@ -35,4 +35,10 @@ describe('queues absorb bursts lesson (5.1): challenge', () => {
     expect(passed(run(...workers(2, 5)))).toEqual(['async-queue/ready-in-1s']);
     expect(passed(run(...workers(3, 4)))).toEqual([]);
   }, SLOW);
+
+  it('messages that expire do not count as done on time', () => {
+    const r = run(...workers(2, 5), setParam('jobs', 'messageTtlS', 0.001));
+    expect(r.result.nodes.jobs.asyncFail).toBeGreaterThan(0);
+    expect(passed(r)).toEqual([]);
+  }, SLOW);
 });

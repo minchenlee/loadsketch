@@ -1,6 +1,6 @@
 // 5.1 Queues absorb bursts (async-queue with the spike scenario).
 import { t, tx } from '../../i18n/index.ts';
-import type { Lesson } from '../lesson.ts';
+import type { Goal, Lesson } from '../lesson.ts';
 import { ms, p99Under } from '../lessonKit.ts';
 import { slotsAtMost } from '../lessonKit2.ts';
 import { spikeEnd, type RunData } from '../metrics.ts';
@@ -28,6 +28,16 @@ const drainS = (run: RunData) => {
   return w ? w.t - end : Infinity;
 };
 const asyncP99 = (run: RunData) => run.result.summary.asyncLatencyMs.p99;
+
+/** Every message on the work queue is done: none expired or failed (a missing queue fails). */
+const everyMessageDone: Goal = {
+  text: tx('Every message is done: none expired or failed'),
+  check: (run) => {
+    const j = run.result.nodes.jobs as { asyncFail?: number } | undefined;
+    if (!j || !run.design.nodes.some((n) => n.id === 'jobs')) return { ok: false, value: '—' };
+    return { ok: (j.asyncFail ?? 0) === 0, value: t('{n} not done', { n: j.asyncFail ?? 0 }) };
+  },
+};
 
 
 const queuesAbsorb: Lesson = {
@@ -112,8 +122,9 @@ const queuesAbsorb: Lesson = {
       text: tx('Thumbnails must be ready within a second, spike included: async p99 under 1000 ms. You may add worker capacity, but at most 10 worker slots in all (machines × slots per machine). Users’ p99 stays under 200 ms.'),
       goals: [
         { text: tx('Async p99 (queued to done) under 1000 ms'), check: (run) => ({ ok: asyncP99(run) < 1000, value: ms(asyncP99(run)) }) },
-        slotsAtMost('thumb', 10, tx('Worker slots (machines × slots) ≤ 10')),
+        slotsAtMost('jobs', 10, tx('Worker slots (machines × slots) ≤ 10')),
         p99Under(200, tx('p99 of successful requests under 200 ms')),
+        everyMessageDone,
       ],
       rules: [],
       hint: tx('Work out the slots the spike needs: arrivals a second × seconds a job holds a slot. About 180 a second × 0.05 s ≈ 9 slots. With fewer, the queue grows during the spike; with a bit more, it stays short. Change “Concurrency per instance” or “Instances” of the worker.'),
