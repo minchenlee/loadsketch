@@ -321,6 +321,10 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
   const [reload, setReload] = useState(0);
+  /** Example and scenario of each run started in this visit: their questions' guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
+  const [started, setStarted] = useState<string[]>([]);
+  const begin = (key: string) => setStarted((s) => (s.includes(key) ? s : [...s, key]));
+  const isLocked = (q: Question) => progress.answered.includes(q.id) || started.includes(ctxKey(runOf(lesson, q)));
   /** Example designs and scenarios as they ship, by name: challenges are judged against them. */
   const [designs, setDesigns] = useState<Record<string, Design>>({});
   const [scenarios, setScenarios] = useState<Record<string, Scenario>>({});
@@ -390,6 +394,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         send({ source: 'loadsketch-course', kind: 'guesses', guesses: latest.current.progress.guesses });
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') setStatus(msg.status);
+        if (msg.status === 'running') begin(ctxKey(here));
       } else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run });
     };
     addEventListener('message', onMessage);
@@ -397,11 +402,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   }, []);
 
   const startRun = () => {
+    begin(ctxKey(ctx));
     send({ source: 'loadsketch-course', kind: 'guesses', guesses: latest.current.progress.guesses });
     send({ source: 'loadsketch-course', kind: 'run' });
   };
   const guess = (q: string, o: string) => {
-    if (progress.answered.includes(q)) return;
+    const qq = lesson.questions.find((x) => x.id === q);
+    if (!qq || isLocked(qq)) return;
     const guesses = { ...progress.guesses, [q]: o };
     update({ ...progress, guesses });
     send({ source: 'loadsketch-course', kind: 'guesses', guesses });
@@ -409,6 +416,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const restart = () => {
     update({ ...EMPTY });
     setRuns({});
+    setStarted([]);
     setStatus('loading');
     setReload((r) => r + 1);
   };
@@ -460,7 +468,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         <div className="space-y-5">
           {qs(page.questions).map((qq) => {
             const mine = progress.guesses[qq.id];
-            const locked = progress.answered.includes(qq.id);
+            const locked = isLocked(qq);
             return (
               <div key={qq.id} data-testid={`course-guess-${qq.id}`}>
                 <div className="text-[16px] leading-relaxed">{t(qq.text)}</div>
@@ -479,7 +487,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
                     </button>
                   ))}
                 </div>
-                {locked && <div className="faint mt-1.5 text-[14px]">{t('A run has answered this question: the guess is locked. Start the lesson again to guess again.')}</div>}
+                {locked && <div className="faint mt-1.5 text-[14px]">{t('A run has started with this guess: the guess is locked. Start the lesson again to guess again.')}</div>}
               </div>
             );
           })}
