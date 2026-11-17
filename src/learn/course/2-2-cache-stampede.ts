@@ -4,7 +4,7 @@
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
-import { errorsUnder, hitRatio, ms, pct } from '../lessonKit.ts';
+import { errorsUnder, failShareOf, hitRatio, ms, pct } from '../lessonKit.ts';
 
 const INTRO = tx('Cache-aside: the API reads Redis first; on a miss it reads Postgres and writes the value back. Values live 10 s in Redis (TTL). Users send 3000 reads a second, and a few keys are very hot: the hottest gets about 1000 reads a second. A Postgres read takes 100 ms and there are 16 connections. Guess what happens when a hot key expires, then press Run.');
 
@@ -32,10 +32,10 @@ const lesson: Lesson = {
         { id: 'some', text: tx('More than 1%') },
       ],
       answer: (run) => {
-        const e = run.result.summary.errorRate;
+        const e = failShareOf(run);
         return e < 0.001 ? 'none' : e < 0.01 ? 'few' : 'some';
       },
-      measured: (run) => t('Hit ratio {h}, {e} failed', { h: pct(hitRatio(run, 'redis')), e: pct(run.result.summary.errorRate) }),
+      measured: (run) => t('Hit ratio {h}, {e} failed', { h: pct(hitRatio(run, 'redis')), e: pct(failShareOf(run)) }),
       explain: tx('When the hottest key expires, every read of it misses until one DB read writes it back: 1000 a second × 100 ms is about 100 requests reading the same row at once. 16 connections take them 100 ms at a time, the DB queue fills, and requests behind it time out or are turned away. The hit ratio averages over the whole minute and hides these bursts.'),
       explainFor: {
         none: tx('Almost none fail: when a hot key expires, only one request reads the DB (a lease), and the others wait a moment for the value.'),

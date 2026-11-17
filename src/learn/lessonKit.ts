@@ -63,16 +63,35 @@ export function cacheAtMost(key: 'capacityKeys' | 'ttlS', max: number, text: str
   };
 }
 
-/** The whole run fails less than `limit` (a share). */
+/**
+ * Share of the requests users sent that did not succeed: failed, or not finished when the run
+ * ended. Counted once per user request (summary.offered and summary.ok), never by adding up
+ * events, so retries and fan-out do not dilute it. No traffic at all counts as all failed.
+ * (summary.errorRate leaves out the requests that never finished: a design so slow that nothing
+ * finishes would score 0%.)
+ */
+export const failShareOf = (run: RunData) => {
+  const s = run.result.summary;
+  return s.offered > 0 ? Math.min(1, Math.max(0, s.offered - s.ok) / s.offered) : 1;
+};
+
+/** The whole run fails less than `limit` (a share of the requests users sent). */
 export const errorsUnder = (limit: number, text: string): Goal => ({
   text,
-  check: (run) => ({ ok: run.result.summary.errorRate < limit, value: pct(run.result.summary.errorRate) }),
+  check: (run) => ({ ok: failShareOf(run) < limit, value: pct(failShareOf(run)) }),
 });
 
-/** p99 of successful requests is under `limit` ms. */
+/**
+ * p99 of successful requests is under `limit` ms. With no successful request the histogram is
+ * empty and its p99 reads 0: that does not count.
+ */
 export const p99Under = (limit: number, text: string): Goal => ({
   text,
-  check: (run) => ({ ok: run.result.summary.latencyMs.p99 < limit, value: ms(run.result.summary.latencyMs.p99) }),
+  check: (run) => {
+    const s = run.result.summary;
+    if (!(s.ok > 0)) return { ok: false, value: t('no successful requests') };
+    return { ok: s.latencyMs.p99 < limit, value: ms(s.latencyMs.p99) };
+  },
 });
 
 export const failUnder1 = errorsUnder(0.01, tx('Error rate under 1% for the whole run'));
