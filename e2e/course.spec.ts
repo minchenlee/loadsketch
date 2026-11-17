@@ -193,3 +193,19 @@ for (const width of [470, 500, 512, 560]) {
     await expect(frame.getByTestId('phone-tab-inspector').or(frame.getByRole('tab', { name: 'Results', exact: true }))).toBeVisible();
   });
 }
+
+test('course: the guesses lock as soon as a run starts', async ({ page }) => {
+  // normal speed: the run is still going when the learner goes back
+  await page.goto('/learn/?lang=en&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-recover-never').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running');
+  await page.getByTestId('course-back').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '1:guess');
+  await expect(page.getByTestId('course-option-recover-fast')).toBeDisabled();
+  await expect(page.getByTestId('course-option-amp-x6')).toBeDisabled();
+});
