@@ -19,7 +19,7 @@ const retryBudgets: Lesson = {
     {
       id: 'budget-amp',
       topic: 'retry',
-      text: tx('With a 10% retry budget, at most how many times the usual requests per second do the API servers receive during the spike? (Without it, more than 10 times.)'),
+      text: tx('With a 10% retry budget: during the spike, the API servers receive at most how many times their usual requests a second? (Without it, more than 10 times.)'),
       options: [
         { id: 'x3', text: tx('About 3 to 4 times: the spike, plus a few retries') },
         { id: 'x6', text: tx('About 6 times') },
@@ -30,9 +30,9 @@ const retryBudgets: Lesson = {
         return x < 4.5 ? 'x3' : x < 9 ? 'x6' : 'x10';
       },
       measured: (run) => t('At most {x} times the usual', { x: peakAmp(run, 'api', 20, 30).toFixed(1) }),
-      explain: tx('The budget counts first calls and retries over the last 10 s. Once retries reach 10% of the first calls, a failed call is not retried (the edge counts it as "denied"). So the API gets the 3× spike plus at most a tenth more, and the queues do not fill with retries.'),
+      explain: tx('The budget counts first calls and retries over the last 10 s. Once retries reach 10% of the first calls, a failed call is not retried (the connection counts it as “denied”). So during the spike the API gets the 3× spike plus about a tenth more, and the queues do not fill with retries. Only the first second of the spike comes near 4×: the budget saved up in the quiet seconds before it is spent at once.'),
       explainFor: {
-        x6: tx('The budget is larger than 10%, or not on the edge into the API servers: more retries get through, and they multiply the spike.'),
+        x6: tx('The budget is larger than 10%, or not on the connection into the API servers: more retries get through, and they multiply the spike.'),
         x10: tx('No budget limits the retries into the API servers. Look at the connection from the load balancer: that is where the storm grows.'),
       },
     },
@@ -40,7 +40,7 @@ const retryBudgets: Lesson = {
       id: 'throttle-recover',
       example: 'adaptive-throttle',
       topic: 'recovery',
-      text: tx('Adaptive throttling, K = 2, on every edge. After the spike ends at second 30, how soon does the system recover?'),
+      text: tx('Adaptive throttling, K = 2, on every connection. After the spike ends at second 30, how soon does the system recover?'),
       options: [
         { id: 'fast', text: tx('It recovers within a few seconds') },
         { id: 'slow', text: tx('It recovers slowly, in 10 seconds or more') },
@@ -66,7 +66,7 @@ const retryBudgets: Lesson = {
       text: tx('On the retry storm, recover within 5 seconds after the spike. Keep every retry, add no machines, and change one connection only.'),
       goals: [recoversWithin(5, tx('Recovered within 5 seconds after the spike (then fewer than 5% fail in every second)'))],
       rules: [noMoreCapacity, keepRetries, oneEdgeOnly],
-      hint: tx('The storm grows where the overloaded component is called. The API servers are the ones that fill up; which connection retries into them? A retry budget on the edges into the cache or the database changes nothing here.'),
+      hint: tx('The storm grows where the overloaded component is called. The API servers are the ones that fill up; which connection retries into them? A retry budget on the connections into the cache or the database changes nothing here.'),
     },
     {
       id: 'adaptive-throttle/let-go',
@@ -98,7 +98,7 @@ const retryBudgets: Lesson = {
     {
       kind: 'try',
       example: 'retry-storm',
-      text: tx('Deadlines: on the retry storm, set the users to propagate their 1 s deadline and run again. Nothing changes. A deadline drops work that nobody waits for any more, but here every hop gives up after 150 ms, long before the 1 s deadline.'),
+      text: tx('Deadlines: on the retry storm, set the users’ “Deadline propagation” to “Pass down” (their deadline is 1 s) and run again. Nothing changes. A deadline drops work that nobody waits for any more, but here every hop gives up after 150 ms, long before the 1 s deadline.'),
       patch: [{ node: 'users', params: { deadline: 'propagate' } }],
     },
     { kind: 'challenge', challenges: ['retry-budget/one-edge'] },
