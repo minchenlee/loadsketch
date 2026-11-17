@@ -224,9 +224,14 @@ function RunButton({ status, onRun }: { status: Status; onRun: () => void }) {
   );
 }
 
-/** One question's answer. `scored`: the answer saved from the first run that answered it; the score keeps it, a later run only measures again. */
+/**
+ * One question's answer, read from `run` (the latest run that answers it): the measurement, the
+ * answer and the explanation agree. `scored`: the answer of the first run, which the score keeps;
+ * a note says so when this run's answer is another.
+ */
 function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: string | undefined; scored: string | undefined }) {
-  const answer = scored ?? q.answer(run);
+  const answer = q.answer(run);
+  const first = scored !== undefined && scored !== answer ? q.options.find((o) => o.id === scored) : undefined;
   const right = q.options.find((o) => o.id === answer);
   const guess = q.options.find((o) => o.id === mine);
   return (
@@ -239,6 +244,11 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
       {guess && mine !== answer && <div className="muted mt-0.5 text-[14px]">{t('Your guess: {g}', { g: t(guess.text) })}</div>}
       {right && <div className="muted mt-0.5 text-[14px]">{t('Answer: {a}', { a: t(right.text) })}</div>}
       <div className="mt-1 text-[15px] leading-relaxed">{t(q.explainFor?.[answer] || q.explain)}</div>
+      {first && (
+        <div className="faint mt-1 text-[14px]" data-testid={`course-scored-${q.id}`}>
+          {t('The design changed since the first run. Your score counts that run, whose answer was: {a}', { a: t(first.text) })}
+        </div>
+      )}
     </div>
   );
 }
@@ -338,6 +348,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const isLocked = (q: Question) => progress.answered.includes(q.id) || started.includes(q.id);
   /** The page the last run started on: its questions are the ones the run answers. */
   const runPage = useRef(i);
+  /** The latest run in this visit that answers each question (it started on a page after the question's guess). */
+  const [answerRuns, setAnswerRuns] = useState<Record<string, RunData>>({});
   /** Example designs and scenarios as they ship, by name: challenges are judged against them. */
   const [designs, setDesigns] = useState<Record<string, Design>>({});
   const [scenarios, setScenarios] = useState<Record<string, Scenario>>({});
@@ -381,6 +393,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const p = latest.current.progress;
     const ids = answerable(lesson, pages, runPage.current, r.ctx);
     const answered = lesson.questions.filter((q) => ids.includes(q.id));
+    setAnswerRuns((a) => ({ ...a, ...Object.fromEntries(ids.map((id) => [id, r.run])) }));
     // the right answers are kept with the progress (the score survives a reload, which has no
     // runs); the first run's answer stays
     update(withAnswers(p, Object.fromEntries(answered.map((q) => [q.id, q.answer(r.run)]))));
@@ -440,6 +453,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const restart = () => {
     update({ ...EMPTY });
     setRuns({});
+    setAnswerRuns({});
     setStarted([]);
     setStatus('loading');
     setReload((r) => r + 1);
@@ -472,11 +486,14 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const cs = (ids: string[]) => ids.flatMap((id) => lesson.challenges.filter((x) => x.id === id));
   /** Questions whose answers this run or try page shows (guessed since the last run or try page). */
   const askedHere = qs(feedbackOf(lesson, pages, i));
+  // each answer comes from a run of its own experiment: a run started before the guess (the same
+  // example and scenario, the design not changed yet) does not answer it
+  const answeredHere = askedHere.filter((x) => answerRuns[x.id]);
   const answers = (run: RunData | undefined) =>
-    run && askedHere.length > 0 ? (
+    answeredHere.length > 0 ? (
       <div className="mt-5 space-y-4" data-testid="course-answers">
-        {askedHere.map((x) => (
-          <Answer key={x.id} q={x} run={run} mine={progress.guesses[x.id]} scored={progress.answers[x.id]} />
+        {answeredHere.map((x) => (
+          <Answer key={x.id} q={x} run={answerRuns[x.id]} mine={progress.guesses[x.id]} scored={progress.answers[x.id]} />
         ))}
         <div className="faint text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</div>
       </div>

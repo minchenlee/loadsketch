@@ -94,4 +94,17 @@ describe('course format', () => {
     const l = COURSE_BY_ID['2.1'];
     expect(stepsOf({ ...l, steps: undefined }).map((s) => s.kind)).toEqual(['read', 'guess', 'run', 'challenge']);
   });
+
+  it('the questions of a guess step and the challenges of a challenge step read one example and scenario', () => {
+    // the page opens one simulator: the first item's run (ctxOf() in src/course/steps.ts)
+    const off: string[] = [];
+    for (const l of COURSE) {
+      stepsOf(l).forEach((s, k) => {
+        const items = s.kind === 'guess' ? s.questions.map((id) => l.questions.find((q) => q.id === id)) : s.kind === 'challenge' ? s.challenges.map((id) => l.challenges.find((c) => c.id === id)) : [];
+        const ctxs = new Set(items.filter((x) => x !== undefined).map((x) => { const r = runOf(l, x!); return `${r.example}|${r.scenario}`; }));
+        if (ctxs.size > 1) off.push(`${l.id} step ${k + 1} (${s.kind}): ${[...ctxs].join(', ')}`);
+      });
+    }
+    expect(off).toEqual([]);
+  });
 });

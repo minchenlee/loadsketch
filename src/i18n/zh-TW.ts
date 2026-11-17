@@ -2080,6 +2080,7 @@ export const ZH: Record<string, string> = {
   "The design": "設計",
   "The design and the scenario are on the canvas. Change the design and press \"Run\": with an error rate of at most {e}{p} for the whole run, and no component deleted, you get {n} more points.": "設計和情境已經載入畫布。改設計、按「執行」：整場失敗率不超過 {e}{p}，而且沒有刪掉元件，就加 {n} 分。",
   "The design and the scenario are the same.": "設計和情境都一樣。",
+  "The design changed since the first run. Your score counts that run, whose answer was: {a}": "設計在第一次執行後改過了。分數算的是第一次執行，那次的答案是：{a}",
   "The design changed, so the search was cancelled.": "設計改了，搜尋已取消。",
   "The design has a wrong shape: {path} {msg}": "設計格式不對：{path} {msg}",
   "The design has errors. Fix them first (see the checks on the right).": "設計有錯誤，先修好再執行（看右邊的檢查結果）。",
