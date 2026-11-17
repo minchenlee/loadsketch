@@ -1,4 +1,4 @@
-// 6.2 Capstone: a metastable failure (saas-slack, after Slack's incident of 2022-02-22).
+// 6.2 Incident replay: a metastable failure (saas-slack, after Slack's incident of 2022-02-22).
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
 import { ms, pct } from '../lessonKit.ts';
@@ -33,13 +33,13 @@ const afterP99Under = (limit: number, text: string): Goal => ({
 
 const metastable: Lesson = {
   id: '6.2',
-  title: tx('Capstone: a failure that does not end with its cause'),
+  title: tx('Incident replay: Slack 2022, a failure that outlives its cause'),
   unit: 6,
   order: 2,
-  minutes: 40,
+  minutes: 25,
   wave: 1,
   example: 'saas-slack',
-  intro: tx('A chat service modelled on Slack’s incident of 22 February 2022, scaled down. 8000 requests a second: started clients send and read messages, starting clients send a boot query. Reads check the cache first and the sharded database only on a miss. At second 45 half of the cache nodes are replaced by empty ones; at second 55 they are back, but cold. Clients retry failed requests. Guess, then press Run.'),
+  intro: tx('A chat service modeled on Slack’s incident of 22 February 2022, scaled down. 8000 requests a second: connected clients send and read messages, booting clients send a boot query. Reads check the cache first and the sharded database only on a miss. At second 45 half of the cache nodes are replaced by empty ones; at second 55 they are back, but cold. Clients retry failed requests. Guess, then press Run.'),
   scenario: 'saas-slack',
   questions: [
     {
@@ -60,7 +60,7 @@ const metastable: Lesson = {
     {
       id: 'after-trigger',
       topic: 'recovery',
-      text: tx('The cache nodes are back at second 55. From second 70 to the end, is the p99 of successful requests back to normal, under 300 ms?'),
+      text: tx('The cache nodes are back at second 55. From second 70 to the end, does the p99 of every second stay under 300 ms?'),
       options: [
         { id: 'yes', text: tx('Yes: the system recovers once the cause is gone') },
         { id: 'no', text: tx('No: it stays slow long after') },
@@ -77,22 +77,22 @@ const metastable: Lesson = {
     {
       id: 'saas-slack/break-the-loop',
       title: tx('Break the loop'),
-      text: tx('Without more machines: after second 70 the p99 is under 300 ms, fewer than 3% of the started clients’ requests fail, and at least 20% of boot queries still succeed.'),
+      text: tx('Without more machines: after second 70 the p99 of every second is under 300 ms, fewer than 3% of the connected clients’ requests fail, and at least 20% of boot queries still succeed.'),
       goals: [
-        afterP99Under(300, tx('p99 after second 70 under 300 ms')),
-        { text: tx('Fewer than 3% of the started clients’ requests fail'), check: (run) => ({ ok: clientFailShare(run, 'active') < 0.03, value: pct(clientFailShare(run, 'active')) }) },
+        afterP99Under(300, tx('Every second after second 70: p99 under 300 ms')),
+        { text: tx('Fewer than 3% of the connected clients’ requests fail'), check: (run) => ({ ok: clientFailShare(run, 'active') < 0.03, value: pct(clientFailShare(run, 'active')) }) },
         { text: tx('At least 20% of boot queries succeed'), check: (run) => ({ ok: bootOk(run) >= 0.2, value: pct(bootOk(run)) }) },
       ],
       rules: [noMoreCapacity],
-      hint: tx('Starting clients can wait; started clients cannot. The boot rate limit applies only to the boot queries: give it a per-second limit low enough that the database gets out of the loop, but not so low that almost nobody can start.'),
+      hint: tx('Booting clients can wait; connected clients cannot. The boot rate limit applies only to the boot queries: give it a per-second limit low enough that the database gets out of the loop, but not so low that almost nobody can start.'),
     },
   ],
   steps: [
-    { kind: 'read', text: tx('A chat service modelled on Slack’s incident of 22 February 2022, scaled down. 8000 requests a second: started clients send and read messages, starting clients send a boot query. Reads check the cache first and the sharded database only on a miss. At second 45 half of the cache nodes are replaced by empty ones; at second 55 they are back, but cold. Clients retry failed requests. Guess, then press Run.') },
+    { kind: 'read', text: tx('A chat service modeled on Slack’s incident of 22 February 2022, scaled down. 8000 requests a second: connected clients send and read messages, booting clients send a boot query. Reads check the cache first and the sharded database only on a miss. At second 45 half of the cache nodes are replaced by empty ones; at second 55 they are back, but cold. Clients retry failed requests. Guess, then press Run.') },
     { kind: 'guess', questions: ['db-hold', 'after-trigger'] },
     { kind: 'run' },
-    { kind: 'try', text: tx('Set the per-second limit of “Boot rate limit” to 300 and run again. After second 70 the p99 is back to about 100 ms, and far fewer started clients fail. The price: most boot queries are turned away. Rate limiting chooses who waits.'), patch: [{ node: 'bootlimit', params: { ratePerSec: 300, burst: 300 } }] },
-    { kind: 'try', text: tx('Undo that, and set the cache’s stampede protection to lease instead. It helps only a little here: the database is short of capacity, not flooded by many reads of the same key.'), patch: [{ node: 'mcrouter', params: { stampede: 'lease' } }] },
+    { kind: 'try', text: tx('Set the per-second limit of “Boot rate limit (added during the incident)” to 300 and run again. After second 70 the p99 is back to about 100 ms, and far fewer connected clients fail. The price: most boot queries are turned away. Rate limiting chooses who waits.'), patch: [{ node: 'bootlimit', params: { ratePerSec: 300, burst: 300 } }] },
+    { kind: 'try', text: tx('Set the per-second limit of “Boot rate limit (added during the incident)” back to 100000, and set the cache’s stampede protection to lease instead. Run again. It helps only a little here: the database is short of capacity, not flooded by many reads of the same key.'), patch: [{ node: 'bootlimit', params: { ratePerSec: 100000, burst: 100000 } }, { node: 'mcrouter', params: { stampede: 'lease' } }] },
     { kind: 'challenge', challenges: ['saas-slack/break-the-loop'] },
     { kind: 'practice', items: [{ kind: 'oncall', id: 'cache-down' }, { kind: 'oncall', id: 'traffic-spike' }, { kind: 'constraint', id: 'retry-budget' }] },
   ],

@@ -44,7 +44,7 @@ const atLeastOnce: Lesson = {
       text: tx('One of two worker machines is down for 20 s. What happens to the async p99 (from queued to done)?'),
       options: [
         { id: 'same', text: tx('About the same: the other machine takes over') },
-        { id: 'seconds', text: tx('It becomes seconds') },
+        { id: 'seconds', text: tx('It grows to several seconds') },
       ],
       answer: (run) => (asyncP99(run) < 1000 ? 'same' : 'seconds'),
       measured: (run) => t('Async p99: {v}', { v: ms(asyncP99(run)) }),
@@ -58,7 +58,7 @@ const atLeastOnce: Lesson = {
       topic: 'recovery',
       text: tx('What share of the messages end up in the DLQ?'),
       options: [
-        { id: 'none', text: tx('None') },
+        { id: 'none', text: tx('None of them') },
         { id: 'poison', text: tx('About 1%: the poison messages') },
         { id: 'more', text: tx('More than 3%: the crash sent some there too') },
       ],
@@ -78,7 +78,7 @@ const atLeastOnce: Lesson = {
       topic: 'recovery',
       text: tx('At-least-once can deliver a message twice. How many messages does the worker process twice here?'),
       options: [
-        { id: 'none', text: tx('None') },
+        { id: 'none', text: tx('None: each message is processed once') },
         { id: 'some', text: tx('Tens to hundreds') },
         { id: 'many', text: tx('More than a thousand') },
       ],
@@ -117,7 +117,7 @@ const atLeastOnce: Lesson = {
     { kind: 'guess', questions: ['crash-wait', 'dlq-share', 'duplicates'] },
     { kind: 'run' },
     { kind: 'try', text: tx('Set “Visibility timeout” to 100 ms and run again. Some jobs take longer than that: their message appears again while the first worker is still busy, and about 170 messages are processed twice.'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 100 } }] },
-    { kind: 'try', text: tx('Now set “Max receive count (DLQ)” to 0 (no DLQ, retry forever) and run again. Nothing goes to the DLQ, but the poison messages come back again and again: the worker fails about seven times as many jobs, and the async p99 gets worse.'), patch: [{ node: 'jobs', params: { maxReceives: 0 } }] },
+    { kind: 'try', text: tx('Set “Visibility timeout” back to 2 s, and set “Max receive count (DLQ)” to 0 (no DLQ, retry forever). Run again. Nothing goes to the DLQ, but the poison messages come back again and again: the worker fails about seven times as many jobs, and the async p99 gets worse.'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 2000, maxReceives: 0 } }] },
     { kind: 'challenge', challenges: ['async-reliable/crash-safe'] },
     { kind: 'practice', items: [{ kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },
   ],

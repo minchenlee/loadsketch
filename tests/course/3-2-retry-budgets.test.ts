@@ -24,6 +24,13 @@ describe('retry budgets lesson (3.2): questions', () => {
     expect(question('budget-amp').answer(storm())).toBe('x10');
   }, SLOW);
 
+  it('with the budget, only the first second of the spike is near 4×; the rest is the 3× spike plus about a tenth', () => {
+    const base = run();
+    const amp = (from: number, to: number) => peakAmp(base, 'api', from, to);
+    expect(amp(20, 21)).toBeGreaterThan(3.5);
+    expect(amp(21, 30)).toBeLessThan(3.5);
+  }, SLOW);
+
   it('adaptive throttling recovers, but slowly; a small K never lets go', () => {
     const base = throttle();
     expect(recovery(base)).toBeGreaterThan(5);

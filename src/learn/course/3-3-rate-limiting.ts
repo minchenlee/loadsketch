@@ -43,7 +43,7 @@ const rateLimiting: Lesson = {
         return s < 0.1 ? 'few' : s < 0.3 ? 'some' : s < 0.6 ? 'half' : 'most';
       },
       measured: (run) => t('{p} of the requests got a 429', { p: pct(limitedShare(run)) }),
-      explain: tx('For 20 s, 4000 a second arrive and 1500 get through: 2500 a second are turned away. That is most of the sale, and about half the whole run. The checkout servers and the database stay at a normal pace (look at their utilisation), so the ones that get through are fast. But the limit is lower than what they can carry: the challenge finds the real number.'),
+      explain: tx('For 20 s, 4000 a second arrive and 1500 get through: 2500 a second are turned away. That is most of the sale, and about half the whole run. The checkout servers and the database stay at a normal pace (look at their utilization), so the ones that get through are fast. But the limit is lower than what they can carry: the challenge finds the real number.'),
       explainFor: {
         few: tx('Almost nothing was turned away: the limit is close to the sale traffic. Check that the servers behind it still keep up (p99).'),
         some: tx('The limit is close to what the servers behind it can carry: fewer shoppers are turned away, and the ones that get through are still fast.'),
@@ -81,7 +81,7 @@ const rateLimiting: Lesson = {
       text: tx('The limit turns away shoppers the servers could serve. Get the error rate of the whole run under 25% while p99 stays under 150 ms, without adding machines.'),
       goals: [errorsUnder(0.25, tx('Error rate under 25% for the whole run')), p99Under(150, tx('p99 of successful requests under 150 ms'))],
       rules: [noMoreCapacity],
-      hint: tx('Raise “Limit per second” on the edge throttling step by step. The checkout servers and the database have room: watch their utilisation climb. Too high and the database fills up: requests queue, and p99 jumps. Removing the limit fails fewer requests but p99 goes over 300 ms. A bigger burst does not help either: it lets a wave into the queues at the start of the sale.'),
+      hint: tx('Raise “Limit per second” on the edge throttling step by step. The checkout servers and the database have room: watch their utilization climb. Too high and the database fills up: requests queue, and p99 jumps. Removing the limit fails fewer requests but p99 goes over 300 ms. A bigger burst does not help either: it lets a wave into the queues at the start of the sale.'),
     },
     {
       id: 'tenant-limits/grow',

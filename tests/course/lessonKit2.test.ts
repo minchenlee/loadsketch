@@ -44,6 +44,11 @@ describe('slotsAtMost', () => {
     nodeOf(d, 'thumb').params = { ...nodeOf(d, 'thumb').params, autoscale: 'on', maxInstances: 6 };
     expect(goal.check(fakeRun(d)).ok).toBe(false);
   });
+  it('autoscale with maxInstances below instances keeps the initial instances (3 × 4 = 12 > 10)', () => {
+    const d = clone(design('async-queue'));
+    nodeOf(d, 'thumb').params = { ...nodeOf(d, 'thumb').params, instances: 3, concurrency: 4, autoscale: 'on', maxInstances: 1 };
+    expect(goal.check(fakeRun(d)).ok).toBe(false);
+  });
   it('fails when the queue is gone', () => {
     const d = clone(design('async-queue'));
     d.nodes = d.nodes.filter((n) => n.id !== 'jobs');
