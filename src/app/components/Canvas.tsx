@@ -1,4 +1,4 @@
-import { isPhone, usePhone } from '../phone.ts';
+import { sheetOf, isPhone, usePhone } from '../phone.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CircleX, TrendingUp, TriangleAlert, X } from 'lucide-react';
 import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useStoreApi, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
@@ -52,7 +52,7 @@ function firstView(nodes: SdNode[], w: number, h: number): Viewport {
     const v = getViewportForBounds(bounds, w, Math.max(200, h - top), FIT.minZoom, FIT.maxZoom, FIT.padding);
     return { ...v, y: v.y + top };
   }
-  const covered = useApp.getState().drawer ? Math.min(innerHeight * 0.56, 520) + 66 : 112;
+  const covered = sheetOf(useApp.getState()) ? Math.min(innerHeight * 0.56, 520) + 66 : 112;
   // a design brief's bar is at the top of the canvas
   const card = document.querySelector<HTMLElement>('.sd-brief');
   const top = card ? card.offsetHeight + 16 : 0;

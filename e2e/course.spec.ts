@@ -441,3 +441,65 @@ test('course: on a phone, Find limit runs and shows its result (1.2)', async ({ 
   const frameBox = await page.getByTestId('course-frame').boundingBox();
   expect(box!.x + box!.width).toBeLessThanOrEqual(frameBox!.x + frameBox!.width + 1);
 });
+
+type LS = { getState: () => { limitOpen: boolean; limit: unknown; status: string; guessLog: { lesson?: string; question: string }[] } };
+
+test('phone: closing the drawer ends the find-limit search', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await frame.getByTestId('find-limit-open').click();
+  await expect(frame.getByTestId('find-limit-steps').locator('li').first()).toBeVisible({ timeout: 60_000 });
+  await frame.getByTestId('phone-drawer-close').click();
+  // the panel is gone at once, and the search stops: no more steps mark the canvas
+  await expect(frame.getByTestId('find-limit')).toHaveCount(0);
+  const app = () => frame.locator('body').evaluate(() => { const s = (window as unknown as { __loadsketch: LS }).__loadsketch.getState(); return { open: s.limitOpen, limit: JSON.stringify(s.limit) }; });
+  await page.waitForTimeout(500);
+  const a = await app();
+  expect(a.open).toBe(false);
+  await page.waitForTimeout(3000);
+  expect((await app()).limit).toBe(a.limit);
+});
+
+test('phone: a find-limit panel opened on a wide window shows in the drawer when the window gets narrow', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await frame.getByTestId('find-limit-open').click();
+  await expect(frame.getByTestId('find-limit')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(frame.getByTestId('phone-drawer').getByTestId('find-limit')).toBeVisible();
+  // and it closes and opens again
+  await frame.getByTestId('phone-drawer-close').click();
+  await expect(frame.getByTestId('find-limit')).toHaveCount(0);
+  await frame.getByTestId('find-limit-open').click();
+  await expect(frame.getByTestId('phone-drawer').getByTestId('find-limit')).toBeVisible();
+});
+
+test('course: a guess made while a run goes reaches the simulator when it ends (2.4)', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=100');
+  test.skip((await page.getByTestId('course-lesson-2.4').getAttribute('data-state')) === 'soon', 'lesson 2.4 is not written on this branch');
+  await page.goto('/learn/?lang=en&speed=100&lesson=2.4');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-stale-share-some').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  const app = () => frame.locator('body').evaluate(() => { const s = (window as unknown as { __loadsketch: LS }).__loadsketch.getState(); return { status: s.status, log: s.guessLog.map((e) => `${e.lesson}:${e.question}`) }; });
+  await expect.poll(async () => (await app()).status).toBe('running');
+  // the second guess and its try page while the first run goes
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-primary-busy-mid').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+  await expect.poll(async () => (await app()).status, { timeout: 60_000 }).toBe('done');
+  // the simulator's own Run button: the run logs the second guess
+  await page.getByTestId('course-patch').click();
+  await frame.getByTestId('run').click();
+  await expect.poll(async () => (await app()).status, { timeout: 60_000 }).toBe('done');
+  await expect.poll(async () => (await app()).log, { timeout: 10_000 }).toContain('2.4:primary-busy');
+  await expect(page.getByTestId('course-answer-primary-busy')).toBeVisible();
+});
