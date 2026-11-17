@@ -327,7 +327,7 @@ test('course: a second guess on the same example waits for its own run (2.4)', a
   await page.getByTestId('course-option-primary-busy-high').click();
   await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
-  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'idle', { timeout: 30_000 });
+  await expect(page.getByTestId('course-patch')).toBeEnabled({ timeout: 30_000 });
   await page.getByTestId('course-patch').click();
   await page.getByTestId('course-run').click();
   // the try step shows the answer to the second guess, from the run with the change
