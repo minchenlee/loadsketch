@@ -234,3 +234,46 @@ test('course: a run the simulator refuses does not lock the guesses', async ({ p
   await page.getByTestId('course-option-amp-x6').click();
   await expect(page.getByTestId('course-option-amp-x6')).toHaveAttribute('aria-checked', 'true');
 });
+
+test('course: runs still reach the page after the design is replaced in the simulator (open or paste)', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  // what the file menu's open and paste do: load() a design, which drops the example
+  type S = { getState: () => { doc: unknown; example: string | null; load: (d: unknown) => void } };
+  const ex = await frame.locator('body').evaluate(() => {
+    const s = (window as unknown as { __loadsketch: S }).__loadsketch.getState();
+    s.load(JSON.parse(JSON.stringify(s.doc)));
+    return (window as unknown as { __loadsketch: S }).__loadsketch.getState().example;
+  });
+  expect(ex).toBeNull();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-recover-never').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answers')).toBeVisible({ timeout: 60_000 });
+});
+
+test('course: reopening an answered lesson does not log its guesses again', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-recover-never').click();
+  await page.getByTestId('course-option-amp-x3').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answers')).toBeVisible({ timeout: 60_000 });
+  type S = { getState: () => { guessLog: unknown[] } };
+  const logged = () => frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: S }).__loadsketch.getState().guessLog.length);
+  await expect.poll(logged).toBeGreaterThan(0);
+  const n = await logged();
+  // reopen the lesson: a new simulator; run again
+  await page.reload();
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'idle');
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await page.waitForTimeout(500);
+  expect(await logged()).toBe(n);
+});
