@@ -67,7 +67,7 @@ const cacheHitRatio: Lesson = {
       text: tx('Shrink the cache to 2000 keys or fewer (a tenth of the original) and keep the error rate under 1% and p99 under 150 ms, without adding machines.'),
       goals: [cacheAtMost('capacityKeys', 2000, tx('Cache capacity (keys) ≤ 2000')), failUnder1, p99Under150],
       rules: [noMoreCapacity, keepLru],
-      hint: tx('Clicks are concentrated, so a tenth of the capacity loses only some of the hit ratio. Change “Capacity (keys, LRU)” and run again; watch how much the database receives a second and how far it is from its ceiling (about 1600/s). The utilisation on a card can look like it has room to spare; read the “Bottleneck:” note on the Results tab, which says which component saturated and when.'),
+      hint: tx('Clicks are concentrated, so a tenth of the capacity loses only some of the hit ratio. Change “Capacity (keys, LRU)” and run again; watch how much the database receives a second and how far it is from its ceiling (about 1600/s). The utilization on a card can look like it has room to spare; read the “Bottleneck:” note on the Results tab, which says which component saturated and when.'),
     },
     {
       id: 'cache/fiftieth',

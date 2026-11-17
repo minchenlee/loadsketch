@@ -6,7 +6,7 @@ import type { RunData } from '../metrics.ts';
 import { failUnder1, p99Under, paramOf, pct } from '../lessonKit.ts';
 import { meanOf, mostMachines } from '../courseMachines.ts';
 
-const INTRO = tx('One API server, called directly, with the network left out. It works on 4 requests at a time; each takes 2.5 ms on average. Users send 800 requests a second, so it can do 4 × 1000 ÷ 2.5 = 1600 a second and is busy half the time (utilisation ρ = 800 ÷ 1600). Guess how much requests wait, then press Run.');
+const INTRO = tx('One API server, called directly, with the network left out. It works on 4 requests at a time (4 slots; c = 4 in the formulas); each takes 2.5 ms on average. Users send 800 requests a second, so it can do 4 × 1000 ÷ 2.5 = 1600 a second and is busy half the time (utilization ρ = 800 ÷ 1600). Guess how much requests wait, then press Run.');
 
 const api = (run: RunData) => run.result.nodes.api;
 /** Average wait in the queue ÷ average time being worked on. */
@@ -121,7 +121,7 @@ const lesson: Lesson = {
     { kind: 'guess', questions: ['wait-share', 'inside'] },
     { kind: 'run' },
     { kind: 'try', text: tx('Set the processing time to 4.5 ms (90% busy) and run again: the wait grows from a fraction of the work to more than the work, and p99 grows about 4 times. The theory row still matches.'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 1 } } }] },
-    { kind: 'try', text: tx('Keep 4.5 ms and set the variation (cv) to 2: same average, wider spread, and the wait about doubles again. Variation costs queueing too.'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 2 } } }] },
+    { kind: 'try', text: tx('Keep 4.5 ms and set the variation (cv) to 2: same average, wider spread, and the wait about triples. Variation costs queueing too.'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 2 } } }] },
     { kind: 'challenge', challenges: ['littles/slower-release', 'littles/knee'] },
   ],
 };

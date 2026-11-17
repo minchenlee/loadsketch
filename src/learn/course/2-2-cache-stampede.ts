@@ -36,7 +36,7 @@ const lesson: Lesson = {
         return e < 0.001 ? 'none' : e < 0.01 ? 'few' : 'some';
       },
       measured: (run) => t('Hit ratio {h}, {e} failed', { h: pct(hitRatio(run, 'redis')), e: pct(failShareOf(run)) }),
-      explain: tx('When the hottest key expires, every read of it misses until one DB read writes it back: 1000 a second × 100 ms is about 100 requests reading the same row at once. 16 connections take them 100 ms at a time, the DB queue fills, and requests behind it time out or are turned away. The hit ratio averages over the whole minute and hides these bursts.'),
+      explain: tx('When the hottest key expires, every read of it misses until one DB read writes it back: 1000 a second × 100 ms is about 100 requests reading the same row at once. The 16 connections serve them 16 at a time, 100 ms per round, so the last of the 100 waits about 6 rounds; the DB queue fills, and requests behind it time out or are turned away. The hit ratio averages over the whole minute and hides these bursts.'),
       explainFor: {
         none: tx('Almost none fail: when a hot key expires, only one request reads the DB (a lease), and the others wait a moment for the value.'),
         few: tx('A few fail: the expiry bursts are small enough that the DB queue mostly holds them.'),
@@ -81,7 +81,7 @@ const lesson: Lesson = {
     { kind: 'run' },
     { kind: 'try', text: tx('Set the TTL to 60 s and run again: the hit ratio goes up and fewer fail, but each expiry is still a burst, and the DB wait gets longer, not shorter.'), patch: [{ node: 'redis', params: { ttlS: 60 } }] },
     { kind: 'try', text: tx('Set "Stampede protection" to Coalesce: nothing changes. Coalescing works only when the cache reads the DB itself (read-through); here the API reads the DB, so the cache never sees the misses together.'), patch: [{ node: 'redis', params: { stampede: 'coalesce' } }] },
-    { kind: 'run', example: 'cache-lease', text: tx('Open "Cache lease + TTL jitter": the same design with a lease, so one request reads the DB per expiry and the others ask Redis again every 20 ms. DB reads drop to about a third and nothing fails; waiting requests take a few tens of ms longer.') },
+    { kind: 'run', example: 'cache-lease', text: tx('Open "Cache lease + TTL jitter": the same design with a lease, so one request reads the DB per expiry and the others ask Redis again every 20 ms, and with TTL jitter, so keys written together do not all expire in the same second. Most of the change comes from the lease: DB reads drop to about a third and nothing fails. Waiting requests take a few tens of ms longer.') },
     { kind: 'challenge', challenges: ['stampede/no-fail'] },
   ],
 };

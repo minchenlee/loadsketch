@@ -36,7 +36,7 @@ describe('lesson 1.1: questions', () => {
     expect(r.result.summary.latencyMs.p99 / base.result.summary.latencyMs.p99).toBeGreaterThan(3);
     expect(Math.abs(api(r).waitMs! / api(r).theory!.waitMs! - 1)).toBeLessThan(0.15);
     // a wider spread at the same mean waits longer
-    expect(api(run(service(4.5, 2))).waitMs!).toBeGreaterThan(1.5 * api(r).waitMs!);
+    expect(api(run(service(4.5, 2))).waitMs!).toBeGreaterThan(2.5 * api(r).waitMs!);
   }, SLOW);
 });
 

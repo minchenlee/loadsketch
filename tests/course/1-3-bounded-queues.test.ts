@@ -1,6 +1,7 @@
 // Lesson 1.3 (lifo-codel / overload). Every expected answer is read from a run of the engine.
 import { describe, expect, it } from 'vitest';
 import { COURSE_BY_ID } from '../../src/learn/course.ts';
+import { stepsOf } from '../../src/learn/lesson.ts';
 import { lessonRuns, setParam, SLOW, type Change } from './run.ts';
 
 const lesson = COURSE_BY_ID['1.3'];
@@ -40,6 +41,18 @@ describe('lesson 1.3: questions', () => {
   it('a looser CoDel target lets more requests time out', () => {
     const r = run(setParam('api', 'codelTargetMs', 50));
     expect(fails(r).timeout).toBeGreaterThan(fails(run()).timeout);
+  }, SLOW);
+});
+
+describe('lesson 1.3: the tries stack (the page keeps the design between tries)', () => {
+  it('the CoDel 50 ms try, after FIFO and a queue limit of 300, still shows fewer CoDel drops and more timeouts', () => {
+    const tries = stepsOf(lesson).filter((s) => s.kind === 'try');
+    const last = tries[tries.length - 1];
+    const patch: Change[] = ('patch' in last ? last.patch ?? [] : []).flatMap((p) => ('node' in p ? Object.entries(p.params).map(([k, v]) => setParam(p.node, k, v)) : []));
+    const base = run();
+    const r = run(...fifo, limit(300), ...patch);
+    expect(fails(r).codel).toBeLessThan(fails(base).codel);
+    expect(fails(r).timeout).toBeGreaterThan(fails(base).timeout);
   }, SLOW);
 });
 
