@@ -1,7 +1,7 @@
 // Collects every message id and writes src/i18n/en.ts, keeping the translations already there.
 // Sources: t('…') and tx('…') calls in src and cli, the component specs (KINDS) and the examples.
 // Run: node scripts/i18n-extract.ts [--check]   (--check: exit 1 if en.ts would change)
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CATEGORY_LABEL, EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { EN } from '../src/i18n/en.ts';
@@ -65,6 +65,21 @@ for (const dir of ['examples/designs', 'examples/scenarios']) {
     add(j.description);
     for (const n of j.nodes ?? []) add(n.label);
     for (const n of j.notes ?? []) add(n.text);
+  }
+}
+
+function walkStrings(v: unknown): void {
+  if (typeof v === 'string') add(v);
+  else if (Array.isArray(v)) for (const x of v) walkStrings(x);
+  else if (v && typeof v === 'object') for (const x of Object.values(v)) walkStrings(x);
+}
+
+for (const dir of ['examples/practice/oncall', 'examples/practice/constraints', 'examples/practice/briefs']) {
+  const full = join(root, dir);
+  if (!existsSync(full)) continue;
+  for (const f of readdirSync(full)) {
+    if (!f.endsWith('.json')) continue;
+    walkStrings(JSON.parse(readFileSync(join(full, f), 'utf8')));
   }
 }
 
