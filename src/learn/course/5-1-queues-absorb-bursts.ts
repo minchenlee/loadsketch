@@ -27,7 +27,7 @@ const drainS = (run: RunData) => {
   const w = run.windows.find((x) => x.t > end && depthOf(run, x.t) < 5);
   return w ? w.t - end : Infinity;
 };
-const asyncP99 = (run: RunData) => run.result.summary.asyncLatencyMs.p99;
+const asyncP99 = (run: RunData) => (run.result.summary.asyncLatencyMs.count > 0 ? run.result.summary.asyncLatencyMs.p99 : Infinity); // an empty histogram is not fast
 
 /** Every message on the work queue is done: none expired or failed (a missing queue fails). */
 const everyMessageDone: Goal = {

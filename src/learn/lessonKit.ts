@@ -88,8 +88,9 @@ export const errorsUnder = (limit: number, text: string): Goal => ({
 export const p99Under = (limit: number, text: string): Goal => ({
   text,
   check: (run) => {
+    // no successful request (wave1: summary.ok) or an empty histogram (wave1-b: count): p99 reads 0
     const s = run.result.summary;
-    if (!(s.ok > 0)) return { ok: false, value: t('no successful requests') };
+    if (!(s.ok > 0) || !(s.latencyMs.count > 0)) return { ok: false, value: t('no successful requests') };
     return { ok: s.latencyMs.p99 < limit, value: ms(s.latencyMs.p99) };
   },
 });

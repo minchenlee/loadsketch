@@ -58,7 +58,10 @@ export interface Challenge {
   goals: Goal[];
   rules: Rule[];
   hint: string; // message id
-  /** Ids of components of the example this challenge lets the user delete (default: none). */
+  /**
+   * Components of the original design (ids) this challenge lets the user remove or replace. Any
+   * other one that is gone, renamed or of another kind breaks the challenge (judge()).
+   */
   mayRemove?: string[];
 }
 
@@ -217,15 +220,44 @@ export function sameScenario(a: Scenario, b: Scenario): boolean {
   return key(a) === key(b);
 }
 
+/** Messages queued but neither done nor in a DLQ (still waiting, still running, expired, lost). */
+const UNFINISHED_MAX = 0.01;
+type QueueCounts = { arrivals?: number; asyncOk?: number; dlq?: number };
+
+/**
+ * Judged on every challenge whose design has a queue that got messages: queued work must finish.
+ * A worker too slow to finish anything, or messages that expire, leave the async histogram empty
+ * or short, and that must not pass as a fast p99.
+ */
+function asyncDone(run: RunData): (GoalResult & { text: string }) | undefined {
+  let n = 0;
+  let done = 0;
+  for (const q of run.design.nodes) {
+    if (q.kind !== 'queue') continue;
+    const s = run.result.nodes[q.id] as QueueCounts | undefined;
+    n += s?.arrivals ?? 0;
+    done += (s?.asyncOk ?? 0) + (s?.dlq ?? 0);
+  }
+  if (n === 0) return undefined;
+  const left = Math.max(0, n - done) / n;
+  return { ok: left <= UNFINISHED_MAX, value: pctText(left), text: t('Queued work finishes: at most 1% of messages are unfinished or expired (the DLQ counts as handled)') };
+}
+const pctText = (x: number) => `${(x * 100).toFixed(1)}%`;
+
 export function judge(c: Challenge, run: RunData, original: Design): Verdict {
   const goals = c.goals.map((g) => ({ ...g.check(run), text: t(g.text) }));
+  const done = asyncDone(run);
+  if (done) goals.push(done);
   const broken = [...customUsed(run.design).map((b) => t(b.text, b.vars)), ...c.rules.flatMap((r) => r.check(run.design, original))];
-  // no way round the system: every component of the example stays, as the same kind (a new id is a
-  // new component), and gets requests (not behind a weight-0 connection)
+  // every component of the original design is still there, under its id and kind (a new id is a
+  // new component; clients too), unless the challenge allows it in mayRemove
+  const now = new Map(run.design.nodes.map((n) => [n.id, n]));
   for (const o of original.nodes) {
-    const n = run.design.nodes.find((x) => x.id === o.id);
-    if (o.kind !== 'client' && !c.mayRemove?.includes(o.id) && (!n || n.kind !== o.kind)) broken.push(t('Removed "{name}"', { name: o.label ? t(o.label) : o.id }));
+    if (c.mayRemove?.includes(o.id)) continue;
+    const n = now.get(o.id);
+    if (!n || n.kind !== o.kind) broken.push(t('Removed "{name}"', { name: o.label ? t(o.label) : o.id }));
   }
+  // no way round the system: a component of the example that gets no request (e.g. behind a weight-0 connection)
   for (const o of original.nodes) {
     if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('"{name}" got no requests: you cannot go round a component of the original design', { name: o.label ? t(o.label) : o.id }));
   }

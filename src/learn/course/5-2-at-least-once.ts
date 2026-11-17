@@ -14,7 +14,7 @@ const dlqShare = (run: RunData) => {
 const duplicates = (run: RunData) => jobs(run).duplicates ?? 0;
 /** Messages that never finished and are not in the DLQ either: lost. */
 const lost = (run: RunData) => Math.max(0, (jobs(run).asyncFail ?? 0) - (jobs(run).dlq ?? 0));
-const asyncP99 = (run: RunData) => run.result.summary.asyncLatencyMs.p99;
+const asyncP99 = (run: RunData) => (run.result.summary.asyncLatencyMs.count > 0 ? run.result.summary.asyncLatencyMs.p99 : Infinity); // an empty histogram is not fast
 
 /** Zero of something counted at the work queue; a missing queue fails (nothing was counted). */
 const noneAt = (text: string, n: (run: RunData) => number): Goal => ({

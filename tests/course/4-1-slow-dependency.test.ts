@@ -33,6 +33,15 @@ describe('slow dependency lesson (4.1): questions', () => {
   }, SLOW);
 });
 
+describe('slow dependency lesson (4.1): the degraded share', () => {
+  it('counts each user response once, even when two calls of one request fall back', () => {
+    const r = bf(setEdge('api', 'db', 'fallback', 'on'), setEdge('api', 'db', 'timeoutMs', 1));
+    expect(parseFloat(question('degraded').measured(r))).toBeLessThanOrEqual(100);
+    const s = r.result.summary as { degraded?: number; offered: number };
+    expect(s.degraded ?? 0).toBeLessThanOrEqual(s.offered);
+  }, SLOW);
+});
+
 describe('slow dependency lesson (4.1): challenges', () => {
   it('keep the page up: a bulkhead or a short timeout, each with a fallback', () => {
     expect(passed(run())).toEqual([]);
