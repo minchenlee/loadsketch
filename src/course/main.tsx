@@ -123,7 +123,12 @@ function stateOf(l: CourseLesson, p: LessonProgress | undefined): State {
 }
 
 function StatePill({ s }: { s: State }) {
-  if (s === 'soon') return <span className="sd-pill no-dot faint">{t('Coming soon')}</span>;
+  if (s === 'soon')
+    return (
+      <span className="sd-pill no-dot" style={{ color: 'var(--ink-3)', fontWeight: 400 }}>
+        {t('Coming soon')}
+      </span>
+    );
   const label = s === 'done' ? t('Done') : s === 'started' ? t('In progress') : t('Start');
   const color = s === 'done' ? 'var(--ok)' : s === 'started' ? 'var(--accent)' : 'var(--ink-3)';
   return (
