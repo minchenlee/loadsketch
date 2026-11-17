@@ -191,7 +191,7 @@ const SLIDES = [
   { id: 'why', title: tx('Why it happened'), text: tx('After every run, it tells you what happened. Step by step, in time order.') },
   { id: 'constraints', title: tx('Design on a budget'), text: tx('Hit the error-rate and latency targets. Stay in budget. Spend less, score more.') },
   { id: 'terraform', title: tx('Import Terraform'), text: tx('Turn plan JSON into a design. Run any capacity finding in one click.') },
-  { id: 'examples', title: tx('47 examples'), text: tx('Cache stampede. Split brain. A bad config push. Run them. Change them.') },
+  { id: 'examples', title: tx('48 examples'), text: tx('Cache stampede. Split brain. A bad config push. Run them. Change them.') },
 ];
 
 function Carousel({ lang, theme }: { lang: Lang; theme: Theme }) {
@@ -538,7 +538,7 @@ function Site() {
       <Carousel {...live} />
 
       <Marquee />
-      <p className="site-wrap muted mt-8 text-center text-[16px]">{t('47 examples. 16 kinds of component. Every parameter is yours to change.')}</p>
+      <p className="site-wrap muted mt-8 text-center text-[16px]">{t('48 examples. 16 kinds of component. Every parameter is yours to change.')}</p>
 
       <Feature
         title={t('The CLI. The same engine.')}

@@ -39,6 +39,7 @@
   "scatter-gather": "0383206476f7b02c",
   "serverless-db": "63c0483441f7a5e0",
   "sharded": "201779f0f7394db5",
+  "single-server": "671f33cda548c985",
   "slow-dependency": "492da69346a79875",
   "split-brain": "9798559d34576a30",
   "tenant-limits": "e776a2168bf4f13c",

@@ -21,7 +21,7 @@ export const TIERS: { id: Tier; label: string; help: string }[] = [
 ];
 
 export const CATEGORIES: Category[] = [
-  { id: 'basics', label: tx('Basics'), tier: 'start', examples: ['three-tier', 'sharded', 'replica-lag', 'autoscale', 'hot-shard', 'location-writes', 'scatter-gather', 'quorum', 'custom-search'] },
+  { id: 'basics', label: tx('Basics'), tier: 'start', examples: ['single-server', 'three-tier', 'sharded', 'replica-lag', 'autoscale', 'hot-shard', 'location-writes', 'scatter-gather', 'quorum', 'custom-search'] },
   { id: 'cache', label: tx('Caching'), tier: 'start', examples: ['cache-stampede', 'cache-lease', 'url-shortener', 'cache-cold-restart', 'cdn-offload'] },
   { id: 'overload', label: tx('Overload and retries'), tier: 'start', examples: ['retry-storm', 'retry-budget', 'adaptive-throttle', 'priority-shedding', 'tenant-limits', 'lifo-codel', 'flash-sale', 'serverless-db'] },
   { id: 'failure', label: tx('Failures and resilience'), tier: 'start', examples: ['resilience', 'slow-dependency', 'bulkhead-fallback', 'gray-failure', 'gray-failure-outlier', 'hedged-reads', 'region-cutover', 'split-brain', 'bad-config-push', 'provisioning', 'blind-autoscaler'] },
