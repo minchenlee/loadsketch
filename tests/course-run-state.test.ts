@@ -1,10 +1,13 @@
 // The course page's run state (src/course/runState.ts): every row of its table.
 import { describe, expect, it } from 'vitest';
+import { LESSONS } from '../src/learn/lessons.ts';
+import type { Lesson } from '../src/learn/lesson.ts';
+import { answerable, ctxOf, pagesOf } from '../src/course/steps.ts';
 import { INITIAL, runStep, takesGuesses, type Frame, type RunEvent, type RunState } from '../src/course/runState.ts';
 
 // page 2 answers a; page 4 answers a and b
 const at = (p: number) => (p >= 4 ? ['a', 'b'] : p >= 2 ? ['a'] : []);
-const st = (frame: Frame, runPage: number | null = null, locked: string[] = []): RunState => ({ frame, runPage, locked });
+const st = (frame: Frame, runPage: number | null = null, locked: string[] = [], runAnswers: string[] | null = null): RunState => ({ frame, runPage, locked, runAnswers });
 const go = (s: RunState, ...es: RunEvent[]) => es.reduce((x, e) => runStep(x, e, at).state, s);
 const FRAMES: Frame[] = ['loading', 'idle', 'running', 'paused', 'done'];
 
@@ -24,7 +27,7 @@ describe('course run state', () => {
   it('a new run starts on this page and locks what it answers', () => {
     for (const f of ['loading', 'idle', 'done'] as Frame[]) {
       const r = runStep(st(f, 1), { kind: 'status', status: 'running', page: 2 }, at);
-      expect(r).toEqual({ state: st('running', 2, ['a']), send: false, answer: null });
+      expect(r).toEqual({ state: st('running', 2, ['a'], ['a']), send: false, answer: null });
     }
   });
 
@@ -46,8 +49,8 @@ describe('course run state', () => {
       for (const status of ['idle', 'done'] as const) expect(runStep(st(f, 2), { kind: 'status', status, page: 4 }, at)).toEqual({ state: st(status, 2), send: true, answer: null });
   });
 
-  it('a finished run answers the questions of the page it started on', () => {
-    expect(runStep(st('done', 2, ['a']), { kind: 'finished', page: 4 }, at).answer).toEqual(['a']);
+  it('a finished run answers the questions fixed when it started', () => {
+    expect(runStep(st('done', 2, ['a'], ['a']), { kind: 'finished', page: 4 }, at).answer).toEqual(['a']);
     // its start was not seen: this page
     expect(runStep(st('done', null), { kind: 'finished', page: 4 }, at).answer).toEqual(['a', 'b']);
   });
@@ -88,7 +91,7 @@ describe('course run state', () => {
 
   it('pause, then a new frame: its first run is a new run (round 4)', () => {
     const s = go(st('idle'), { kind: 'status', status: 'running', page: 2 }, { kind: 'status', status: 'paused', page: 2 }, { kind: 'gone' }, { kind: 'ready' }, { kind: 'status', status: 'running', page: 4 });
-    expect(s).toEqual(st('running', 4, ['a', 'b']));
+    expect(s).toEqual(st('running', 4, ['a', 'b'], ['a', 'b']));
   });
 
   it('guesses made while a run goes are sent when it ends (round 5)', () => {
@@ -97,5 +100,35 @@ describe('course run state', () => {
     expect(runStep(s, { kind: 'guess' }, at).send).toBe(false);
     s = go(s, { kind: 'page' }, { kind: 'guess' });
     expect(runStep(s, { kind: 'status', status: 'done', page: 4 }, at).send).toBe(true);
+  });
+
+  it('a run started on a guess page, before Next, locks and answers the guesses made there (round 6)', () => {
+    const base = LESSONS['retry-storm'];
+    const l: Lesson = { ...base, steps: [{ kind: 'read', text: 'x' }, { kind: 'guess', questions: ['recover'] }, { kind: 'run' }] };
+    const pages = pagesOf(l);
+    const ctx = ctxOf(l, pages, 1);
+    const real = (guesses: Record<string, string>) => (p: number) => answerable(l, pages, p, ctx, guesses);
+    const s = runStep(st('idle'), { kind: 'status', status: 'running', page: 1 }, real({ recover: 'fast' })).state;
+    expect(s).toEqual(st('running', 1, ['recover'], ['recover']));
+    expect(runStep(s, { kind: 'finished', page: 1 }, real({ recover: 'fast' })).answer).toEqual(['recover']);
+    // no guess yet: nothing locked, the question stays open
+    expect(runStep(st('idle'), { kind: 'status', status: 'running', page: 1 }, real({})).state.locked).toEqual([]);
+  });
+
+  it('a guess made on the guess page while its run goes waits for the next run (round 6)', () => {
+    const base = LESSONS['retry-storm'];
+    const l: Lesson = { ...base, steps: [{ kind: 'read', text: 'x' }, { kind: 'guess', questions: ['recover', 'amp'] }, { kind: 'run' }] };
+    const pages = pagesOf(l);
+    const ctx = ctxOf(l, pages, 1);
+    const g: Record<string, string> = { recover: 'fast' };
+    const at2 = (p: number) => answerable(l, pages, p, ctx, g);
+    let s = runStep(st('idle'), { kind: 'status', status: 'running', page: 1 }, at2).state;
+    g.amp = 'x';
+    s = runStep(s, { kind: 'guess' }, at2).state;
+    expect(runStep(s, { kind: 'finished', page: 1 }, at2).answer).toEqual(['recover']);
+    // the next run takes it
+    s = runStep(s, { kind: 'status', status: 'done', page: 1 }, at2).state;
+    s = runStep(s, { kind: 'status', status: 'running', page: 1 }, at2).state;
+    expect(runStep(s, { kind: 'finished', page: 1 }, at2).answer).toEqual(['recover', 'amp']);
   });
 });

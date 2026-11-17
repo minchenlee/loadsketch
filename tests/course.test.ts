@@ -136,6 +136,15 @@ describe('questions by experiment', () => {
     expect(answerable(l, pages, 2, { example: 'other', scenario: ctx.scenario })).toEqual([]);
   });
 
+  it('a run started on a guess page answers the guesses already made there (the simulator has its own Run)', () => {
+    expect(answerable(l, pages, 1, ctx, { recover: 'fast' })).toEqual(['recover']);
+    expect(answerable(l, pages, 1, ctx, {})).toEqual([]);
+    expect(answerable(l, pages, 3, ctx, { recover: 'fast', amp: 'x' })).toEqual(['recover', 'amp']);
+    expect(answerable(l, pages, 3, ctx, { recover: 'fast' })).toEqual(['recover']);
+    // not on a run page: a later guess page's guesses wait
+    expect(answerable(l, pages, 2, ctx, { recover: 'fast', amp: 'x' })).toEqual(['recover']);
+  });
+
   it('a run or try page shows the questions guessed since the last run or try page', () => {
     expect(feedbackOf(l, pages, 2)).toEqual(['recover']);
     expect(feedbackOf(l, pages, 4)).toEqual(['amp']);

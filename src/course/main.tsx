@@ -322,7 +322,7 @@ interface Ran {
  * second time).
  */
 const openGuesses = (lesson: Lesson, pages: Page[], i: number, p: LessonProgress): Record<string, string> => {
-  const ids = answerable(lesson, pages, i, ctxOf(lesson, pages, i));
+  const ids = answerable(lesson, pages, i, ctxOf(lesson, pages, i), p.guesses);
   return Object.fromEntries(Object.entries(p.guesses).filter(([q]) => ids.includes(q) && !p.answered.includes(q)));
 };
 
@@ -415,7 +415,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const sendGuesses = (p = latest.current.progress) => send({ source: 'loadsketch-course', kind: 'guesses', lesson: entry.id, guesses: openGuesses(lesson, pages, latest.current.i, p) });
   /** One event through the table: the new state shows, and its sends go out. */
   const dispatch = (e: RunEvent, p?: LessonProgress) => {
-    const r = runStep(rs.current, e, (page) => answerable(lesson, pages, page, latest.current.ctx));
+    const r = runStep(rs.current, e, (page) => answerable(lesson, pages, page, latest.current.ctx, latest.current.progress.guesses));
     rs.current = r.state;
     setStatus(r.state.frame);
     setStarted(r.state.locked);
