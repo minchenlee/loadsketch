@@ -1,7 +1,8 @@
 // 5.1 Queues absorb bursts (async-queue with the spike scenario).
 import { t, tx } from '../../i18n/index.ts';
-import type { Goal, Lesson } from '../lesson.ts';
-import { ms, p99Under, paramOf } from '../lessonKit.ts';
+import type { Lesson } from '../lesson.ts';
+import { ms, p99Under } from '../lessonKit.ts';
+import { slotsAtMost } from '../lessonKit2.ts';
 import { spikeEnd, type RunData } from '../metrics.ts';
 
 const SPIKE_FROM = 20;
@@ -28,15 +29,6 @@ const drainS = (run: RunData) => {
 };
 const asyncP99 = (run: RunData) => run.result.summary.asyncLatencyMs.p99;
 
-const workerSlotsAtMost = (max: number, text: string): Goal => ({
-  text,
-  check: (run) => {
-    const i = paramOf(run.design, 'thumb', 'instances');
-    const c = paramOf(run.design, 'thumb', 'concurrency');
-    const n = typeof i === 'number' && typeof c === 'number' ? i * c : Infinity;
-    return { ok: n <= max, value: Number.isFinite(n) ? t('{i} × {c} = {n}', { i: String(i), c: String(c), n }) : '—' };
-  },
-});
 
 const queuesAbsorb: Lesson = {
   id: '5.1',
@@ -120,7 +112,7 @@ const queuesAbsorb: Lesson = {
       text: tx('Thumbnails must be ready within a second, spike included: async p99 under 1000 ms. You may add worker capacity, but at most 10 worker slots in all (machines × slots per machine). Users’ p99 stays under 200 ms.'),
       goals: [
         { text: tx('Async p99 (queued to done) under 1000 ms'), check: (run) => ({ ok: asyncP99(run) < 1000, value: ms(asyncP99(run)) }) },
-        workerSlotsAtMost(10, tx('Worker slots (machines × slots) ≤ 10')),
+        slotsAtMost('thumb', 10, tx('Worker slots (machines × slots) ≤ 10')),
         p99Under(200, tx('p99 of successful requests under 200 ms')),
       ],
       rules: [],

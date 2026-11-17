@@ -6,7 +6,9 @@ import { edgeId } from '../schema/design.ts';
 import { KINDS } from '../schema/kinds.ts';
 import type { Goal, Rule } from './lesson.ts';
 import { recoveryS, spikeEnd, type RunData } from './metrics.ts';
-import { labelOf, paramOf } from './lessonKit.ts';
+import { labelOf, paramOf, pct, ms } from './lessonKit.ts';
+import { complexity, customUsed } from './constraints.ts';
+import { costOf } from './cost.ts';
 
 /** Seconds from the end of the scenario's spike until fewer than 5% fail in every second (Infinity: never). */
 export const recovery = (run: RunData) => recoveryS(run, spikeEnd(run.scenario));
@@ -100,3 +102,45 @@ export const paramAtMost = (id: string, key: string, max: number, text: string):
   },
 });
 
+/** Total worker slots of one node (instances × concurrency per instance) stay at most max. */
+export const slotsAtMost = (id: string, max: number, text: string): Goal => ({
+  text,
+  check: (run) => {
+    const i = paramOf(run.design, id, 'instances');
+    const c = paramOf(run.design, id, 'concurrency');
+    const n = typeof i === 'number' && typeof c === 'number' ? i * c : Infinity;
+    return { ok: n <= max, value: Number.isFinite(n) ? t('{i} × {c} = {n}', { i: String(i), c: String(c), n }) : '—' };
+  },
+});
+
+/**
+ * The four limits of a constraint problem as goals. texts: message ids for errors, p99, money a
+ * month and complexity points, in that order (they name the limit; the run shows the value).
+ */
+export const limitGoals = (l: { maxErrorRate: number; maxP99Ms: number; budgetPerMonth: number; maxPoints: number }, texts: [string, string, string, string]): Goal[] => [
+  { text: texts[0], check: (run) => ({ ok: run.result.summary.errorRate <= l.maxErrorRate, value: pct(run.result.summary.errorRate) }) },
+  { text: texts[1], check: (run) => ({ ok: run.result.summary.latencyMs.p99 <= l.maxP99Ms, value: ms(run.result.summary.latencyMs.p99) }) },
+  { text: texts[2], check: (run) => { const c = costOf(run.design, run).perMonth; return { ok: c <= l.budgetPerMonth, value: '$' + Math.round(c).toLocaleString('en-US') }; } },
+  { text: texts[3], check: (run) => { const p = complexity(run.design).total; return { ok: p <= l.maxPoints, value: String(p) }; } },
+];
+
+const GIVEN = ['serviceMs', 'readMs', 'writeMs'];
+const meanOf = (v: unknown) => (typeof v === 'number' ? v : v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined);
+
+/** The speed of the parts is given: no time shorter than in the original design, and no custom service. */
+export const givenParts: Rule = {
+  short: tx('Same speed of parts'),
+  text: tx('The time each part takes stays as given, and no custom service'),
+  check: (d, original) => {
+    const out = customUsed(d).map((b) => t(b.text, b.vars));
+    for (const o of original.nodes) {
+      if (!d.nodes.some((n) => n.id === o.id && n.kind === o.kind)) continue;
+      for (const k of GIVEN) {
+        const was = meanOf(paramOf(original, o.id, k));
+        const now = meanOf(paramOf(d, o.id, k));
+        if (was !== undefined && now !== undefined && now < was) out.push(t('{name}: {what} is shorter than given', { name: labelOf(original, o.id), what: KINDS[o.kind]?.params[k]?.label ? t(KINDS[o.kind].params[k].label) : k }));
+      }
+    }
+    return out;
+  },
+};
