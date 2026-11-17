@@ -3,25 +3,25 @@
 import { useEffect, useRef, type PointerEvent as RPointerEvent } from 'react';
 import { ChartLine, Shapes, SlidersHorizontal, X } from 'lucide-react';
 import { useApp, type Drawer } from '../store.ts';
+import { closeSheet, pickTab, sheetOf } from '../phone.ts';
 import { Inspector } from './Inspector.tsx';
 import { Metrics } from './Metrics.tsx';
 import { Palette } from './Palette.tsx';
 import { FindLimitPanel } from './FindLimit.tsx';
 import { t, tx } from '../../i18n/index.ts';
 
-const TABS: { key: Exclude<Drawer, null | 'limit'>; label: string; Icon: typeof Shapes }[] = [
+const TABS: { key: Exclude<Drawer, null>; label: string; Icon: typeof Shapes }[] = [
   { key: 'palette', label: tx('Component'), Icon: Shapes },
   { key: 'inspector', label: tx('Settings'), Icon: SlidersHorizontal },
   { key: 'metrics', label: tx('Charts'), Icon: ChartLine },
 ];
 
 export function PhoneTabs() {
-  const drawer = useApp((s) => s.drawer);
-  const setDrawer = useApp((s) => s.setDrawer);
+  const drawer = useApp(sheetOf);
   return (
     <nav className="sd-tabs panel shrink-0 border-t" aria-label={t('Panel')}>
       {TABS.map(({ key, label, Icon }) => (
-        <button key={key} className="sd-tab" aria-pressed={drawer === key} onClick={() => setDrawer(drawer === key ? null : key)} data-testid={`phone-tab-${key}`}>
+        <button key={key} className="sd-tab" aria-pressed={drawer === key} onClick={() => useApp.setState(pickTab(useApp.getState(), key))} data-testid={`phone-tab-${key}`}>
           <Icon size={18} />
           {t(label)}
         </button>
@@ -30,31 +30,24 @@ export function PhoneTabs() {
   );
 }
 
+/** The sheet's X, a drag down or Escape: closes the panel and the drawer under it. */
+const closeAll = () => useApp.setState(closeSheet());
+
 export function PhoneDrawer() {
-  const drawer = useApp((s) => s.drawer);
-  const setDrawer = useApp((s) => s.setDrawer);
+  // the find-limit panel or a tab's drawer (sheetOf() in phone.ts)
+  const drawer = useApp(sheetOf);
+  const limitOpen = useApp((s) => s.limitOpen);
   // the panel stays in the drawer while it slides shut
   const shown = useRef(drawer);
   if (drawer) shown.current = drawer;
   const which = shown.current;
   useEffect(() => {
     if (!drawer) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(null);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeAll();
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, [drawer, setDrawer]);
+  }, [drawer]);
   const label = which === 'limit' ? tx('Find limit') : TABS.find((x) => x.key === which)?.label;
-  // Find limit (the run bar) opens its panel here; closing the drawer or opening another one ends the search
-  const limitOpen = useApp((s) => s.limitOpen);
-  const closeLimit = useApp((s) => s.closeLimit);
-  const was = useRef({ drawer, limitOpen });
-  useEffect(() => {
-    const prev = was.current;
-    was.current = { drawer, limitOpen };
-    if (limitOpen && !prev.limitOpen) setDrawer('limit');
-    else if (!limitOpen && prev.limitOpen && drawer === 'limit') setDrawer(null);
-    else if (prev.drawer === 'limit' && drawer !== 'limit' && limitOpen) closeLimit();
-  }, [drawer, limitOpen, setDrawer, closeLimit]);
   const el = useRef<HTMLDivElement>(null);
   // a drag down on the top edge closes it. The offset is a CSS variable on the parent, so the run
   // card above the drawer moves with it.
@@ -77,19 +70,19 @@ export function PhoneDrawer() {
     host()?.style.removeProperty('--drawer-drag');
     const dy = e.clientY - d.y;
     // far enough, or a quick flick down
-    if (e.type === 'pointerup' && (dy > 90 || (dy > 24 && dy / Math.max(1, e.timeStamp - d.t) > 0.5))) setDrawer(null);
+    if (e.type === 'pointerup' && (dy > 90 || (dy > 24 && dy / Math.max(1, e.timeStamp - d.t) > 0.5))) closeAll();
   };
   return (
     <div ref={el} className="sd-drawer" data-open={drawer ? '' : undefined} inert={!drawer} role="region" aria-label={label ? t(label) : undefined} data-testid="phone-drawer">
       <div className="sd-drawer-head" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} data-testid="phone-drawer-grip">
         <span className="sd-drawer-grip" aria-hidden />
-        <button className="sd-chart-btn" onClick={() => setDrawer(null)} aria-label={t('Close')} title={t('Close')} data-testid="phone-drawer-close">
+        <button className="sd-chart-btn" onClick={() => closeAll()} aria-label={t('Close')} title={t('Close')} data-testid="phone-drawer-close">
           <X size={16} />
         </button>
       </div>
       {/* a component picked from the list goes on the canvas: the drawer closes to show it */}
-      <div key={which} className="sd-drawer-body" onClick={(e) => which === 'palette' && (e.target as HTMLElement).closest('[data-kind], [data-adds]') && setDrawer(null)}>
-        {which === 'palette' ? <Palette /> : which === 'inspector' ? <Inspector /> : which === 'metrics' ? <Metrics /> : which === 'limit' ? <FindLimitPanel /> : null}
+      <div key={which} className="sd-drawer-body" onClick={(e) => which === 'palette' && (e.target as HTMLElement).closest('[data-kind], [data-adds]') && closeAll()}>
+        {which === 'palette' ? <Palette /> : which === 'inspector' ? <Inspector /> : which === 'metrics' ? <Metrics /> : which === 'limit' && limitOpen ? <FindLimitPanel /> : null}
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import type { Design, Scenario } from '../schema/design.ts';
 import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
+import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
 import { answerable, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 
@@ -311,6 +312,8 @@ function practiceTitle(p: PracticeLink): string {
 interface Ran {
   ctx: Ctx;
   run: RunData;
+  /** The questions it answers (runState.ts). */
+  answers: string[];
 }
 
 /**
@@ -338,18 +341,15 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const page = pages[i];
   const ctx = ctxOf(lesson, pages, i);
   const frame = useRef<HTMLIFrameElement>(null);
+  /** The frame and its runs, as the table in runState.ts says. `status` and `started` show it. */
+  const rs = useRef<RunState>(INITIAL);
   const [status, setStatus] = useState<Status>('loading');
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
   const [reload, setReload] = useState(0);
   /** Questions a run started in this visit answers: their guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
   const [started, setStarted] = useState<string[]>([]);
-  const begin = (ids: string[]) => setStarted((s) => [...new Set([...s, ...ids])]);
   const isLocked = (q: Question) => progress.answered.includes(q.id) || started.includes(q.id);
-  /** The page the last run started on: its questions are the ones the run answers. */
-  const runPage = useRef(i);
-  /** The frame's last status: running after paused is the same run going on. */
-  const frameStatus = useRef('');
   /** The latest run in this visit that answers each question (it started on a page after the question's guess). */
   const [answerRuns, setAnswerRuns] = useState<Record<string, RunData>>({});
   /** Example designs and scenarios as they ship, by name: challenges are judged against them. */
@@ -393,7 +393,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const all = { ...runs, [key]: r.run };
     setRuns(all);
     const p = latest.current.progress;
-    const ids = answerable(lesson, pages, runPage.current, r.ctx);
+    const ids = r.answers;
     const answered = lesson.questions.filter((q) => ids.includes(q.id));
     setAnswerRuns((a) => ({ ...a, ...Object.fromEntries(ids.map((id) => [id, r.run])) }));
     // the right answers are kept with the progress (the score survives a reload, which has no
@@ -412,7 +412,18 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
 
   const send = (msg: FromCourse) => frame.current?.contentWindow?.postMessage(msg, location.origin);
   /** The guesses a run started on the current page answers, with the course lesson (the simulator's guess log records them under it). */
-  const sendGuesses = () => send({ source: 'loadsketch-course', kind: 'guesses', lesson: entry.id, guesses: openGuesses(lesson, pages, latest.current.i, latest.current.progress) });
+  const sendGuesses = (p = latest.current.progress) => send({ source: 'loadsketch-course', kind: 'guesses', lesson: entry.id, guesses: openGuesses(lesson, pages, latest.current.i, p) });
+  /** One event through the table: the new state shows, and its sends go out. */
+  const dispatch = (e: RunEvent, p?: LessonProgress) => {
+    const r = runStep(rs.current, e, (page) => answerable(lesson, pages, page, latest.current.ctx));
+    rs.current = r.state;
+    setStatus(r.state.frame);
+    setStarted(r.state.locked);
+    if (r.send) sendGuesses(p);
+    return r;
+  };
+  const dispatchRef = useRef(dispatch);
+  dispatchRef.current = dispatch;
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== location.origin || e.source !== frame.current?.contentWindow) return;
@@ -421,21 +432,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       // routed by the frame's lesson context (its address), which stays when the learner opens or
       // pastes another design there
       if (!msg || msg.source !== 'loadsketch-app' || msg.ctx?.example !== here.example || msg.ctx.scenario !== here.scenario) return;
+      const d = dispatchRef.current;
       if (msg.kind === 'ready') {
-        // a new simulator: its first running is a new run, whatever the last one did
-        frameStatus.current = '';
-        setStatus('idle');
         send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
-        sendGuesses();
+        d({ kind: 'ready' });
       } else if (msg.kind === 'status') {
-        if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') setStatus(msg.status);
-        // a new run starts on this page; a paused run that goes on keeps the page it started on
-        if (msg.status === 'running' && frameStatus.current !== 'paused') {
-          runPage.current = latest.current.i;
-          begin(answerable(lesson, pages, latest.current.i, here));
-        }
-        frameStatus.current = msg.status;
-      } else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run });
+        if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') d({ kind: 'status', status: msg.status, page: latest.current.i });
+      } else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run, answers: d({ kind: 'finished', page: latest.current.i }).answer ?? [] });
     };
     addEventListener('message', onMessage);
     return () => removeEventListener('message', onMessage);
@@ -444,24 +447,23 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   // the guesses lock when the simulator says the run started (status 'running'), not here: it
   // refuses a design that does not pass its checks, and then no run starts
   const startRun = () => {
-    sendGuesses();
+    if (takesGuesses(rs.current)) sendGuesses();
     send({ source: 'loadsketch-course', kind: 'run' });
   };
   // a page's guesses go to the simulator when the page opens: a run started there answers them
-  useEffect(() => sendGuesses(), [i]);
+  useEffect(() => void dispatch({ kind: 'page' }), [i]);
   const guess = (q: string, o: string) => {
     const qq = lesson.questions.find((x) => x.id === q);
     if (!qq || isLocked(qq)) return;
     const guesses = { ...progress.guesses, [q]: o };
     update({ ...progress, guesses });
-    send({ source: 'loadsketch-course', kind: 'guesses', lesson: entry.id, guesses: openGuesses(lesson, pages, i, { ...progress, guesses }) });
+    dispatch({ kind: 'guess' }, { ...progress, guesses });
   };
   const restart = () => {
     update({ ...EMPTY });
     setRuns({});
     setAnswerRuns({});
-    setStarted([]);
-    setStatus('loading');
+    dispatch({ kind: 'restart' });
     setReload((r) => r + 1);
   };
 
@@ -472,6 +474,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   useEffect(() => {
     send({ source: 'loadsketch-course', kind: 'look', theme, lang });
   }, [theme, lang]);
+  // a new address is a new frame: the old frame and its run are gone
+  const frameKey = `${ctxKey(ctx)}#${reload}`;
+  const firstFrame = useRef(frameKey);
+  useEffect(() => {
+    if (frameKey !== firstFrame.current) dispatch({ kind: 'gone' });
+    firstFrame.current = frameKey;
+  }, [frameKey]);
   const q = new URLSearchParams({ embed: '1', course: '1', example: ctx.example, scenario: ctx.scenario, lang: look.current.lang, theme: look.current.theme });
   // The settings panel on the right; no charts under the canvas: the frame is too short for both.
   // phone=1: a frame as narrow as a phone shows the phone layout instead. The frame decides with

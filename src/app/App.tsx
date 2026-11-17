@@ -18,7 +18,7 @@ import { t } from '../i18n/index.ts';
 import { PracticeOverlay } from './components/Practice.tsx';
 import { PhoneDrawer, PhoneTabs } from './components/Phone.tsx';
 import { CompareHost } from './components/Compare.tsx';
-import { isPhone, usePhone } from './phone.ts';
+import { isPhone, sheetOf, usePhone } from './phone.ts';
 import { useCourseBridge } from './courseBridge.ts';
 
 /**
@@ -161,7 +161,7 @@ function Shell() {
   const saved = useApp((s) => s.panels);
   const panels = EMBED ? { left: false, right: EMBED.right, bottom: EMBED.bottom } : saved;
   const phone = usePhone() && (!EMBED || EMBED.phone);
-  const drawer = useApp((s) => s.drawer);
+  const drawer = useApp(sheetOf);
   const limitOpen = useApp((s) => s.limitOpen);
   // a phone: the canvas alone, with the panels in drawers that come up from the bottom
   if (phone)
