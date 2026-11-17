@@ -94,7 +94,7 @@ const lesson: Lesson = {
     { kind: 'run' },
     { kind: 'try', text: tx('Set "Queue order" to FIFO and "CoDel queue target" to 0, and run again: the queue grows to its 5000 limit, requests wait seconds, and most fail by timeout although the servers are just as busy.'), patch: [{ node: 'api', params: { queueOrder: 'fifo', codelTargetMs: 0 } }] },
     { kind: 'try', text: tx('Keep FIFO without CoDel, and set the queue limit to 10, then 100, then 300: the failure rate barely changes (the part above capacity), but the wait, and p99, grows with the limit.') },
-    { kind: 'try', text: tx('Put CoDel back with a target of 50 ms instead of 5: requests may wait longer before they are dropped, and more of them time out instead.'), patch: [{ node: 'api', params: { codelTargetMs: 50 } }] },
+    { kind: 'try', text: tx('This puts the queue back as it was (adaptive LIFO, limit 5000) with a CoDel target of 50 ms instead of 5. Run it: fewer requests are dropped by CoDel, and more of them time out instead.'), patch: [{ node: 'api', params: { queueOrder: 'adaptive_lifo', queueLimit: 5000, codelTargetMs: 50 } }] },
     { kind: 'challenge', challenges: ['queues/bounded-fifo'] },
   ],
 };

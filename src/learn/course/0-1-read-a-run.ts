@@ -1,11 +1,11 @@
-// 0.1 Read a run (three-tier / spike): utilisation, p99, the bottleneck note and the theory row.
+// 0.1 Read a run (three-tier / spike): utilization, p99, the bottleneck note and the theory row.
 import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
 import { failUnder1, p99Under } from '../lessonKit.ts';
 import { mostMachines } from '../courseMachines.ts';
 
-const INTRO = tx('A three-tier site: a load balancer, 3 API servers (4 requests at a time each), a Redis cache and a Postgres database. Traffic is 600 requests a second, and from second 20 to 35 it is 3 times higher. Each card on the canvas shows how busy that component is; the Results tab shows p99 (the time 99% of requests finish within), the bottleneck note, and a theory row that predicts queueing from the average load. Guess, then press Run.');
+const INTRO = tx('A three-tier site: a load balancer, 3 API servers (4 requests at a time each), a Redis cache and a Postgres database. Traffic is 600 requests a second, and from second 20 to 35 it is 3 times higher. Each card on the canvas shows how busy that component is; the Results tab shows p99 (the time 99% of requests finish within) and the bottleneck note. Guess which component fills up first.');
 
 const LAYERS = ['lb', 'api', 'cache', 'db'];
 
@@ -35,6 +35,8 @@ const apiAtMost5: Goal = {
     return { ok: n > 0 && n <= 5, value: String(n) };
   },
 };
+
+const THEORY = tx('The Results tab also has a theory row (M/G/c). It predicts how long requests wait in a queue from the average load of the whole run. Guess how the measured wait compares, then press Run.');
 
 const lesson: Lesson = {
   id: '0.1',
@@ -107,10 +109,12 @@ const lesson: Lesson = {
   ],
   steps: [
     { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['first-full', 'theory-gap'] },
+    { kind: 'guess', questions: ['first-full'] },
+    { kind: 'read', text: THEORY },
+    { kind: 'guess', questions: ['theory-gap'] },
     { kind: 'run' },
-    { kind: 'try', text: tx('Set the API servers to 6 instances and run again: the spike fits, nobody waits, and the measured wait drops to the theory or below.'), patch: [{ node: 'api', params: { instances: 6 } }] },
-    { kind: 'try', text: tx('Open the steady scenario (no spike) and run the original design: with the load flat, the average is the whole story.'), scenario: 'steady' },
+    { kind: 'try', text: tx('Set the API servers to 6 instances and run again: the spike fits, nobody waits, and the measured wait drops to the theory or below. The challenge below asks for the same with at most 5.'), patch: [{ node: 'api', params: { instances: 6 } }] },
+    { kind: 'try', text: tx('This switches to the steady scenario (no spike) with the original design. Run it: with the load flat, the average is the whole story.'), scenario: 'steady' },
     { kind: 'challenge', challenges: ['read-run/hold-spike'] },
   ],
 };
