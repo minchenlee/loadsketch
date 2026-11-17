@@ -5,7 +5,8 @@ import { t, tx } from '../../i18n/index.ts';
 import { DEFAULT_SLO } from '../../engine/limit.ts';
 import type { Goal, Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
-import { errorsUnder, failShareOf, ms, p99Under, paramOf, pct } from '../lessonKit.ts';
+import { errorsUnder, failShareOf, ms, p99Under, pct } from '../lessonKit.ts';
+import { mostMachines } from '../courseMachines.ts';
 
 const INTRO = tx('The same three-tier site at a steady 800 requests a second: a load balancer, 3 API servers, Redis and Postgres. Nothing is wrong yet. How much more traffic can it take, and which part gives up first? Guess, then press Run.');
 
@@ -19,8 +20,8 @@ const meetsTarget = (run: RunData) => failShareOf(run) < DEFAULT_SLO.errorRate &
 const apiAtMost5: Goal = {
   text: tx('At most 5 API servers'),
   check: (run) => {
-    const n = paramOf(run.design, 'api', 'instances');
-    return { ok: typeof n === 'number' && n <= 5, value: String(n ?? '—') };
+    const n = mostMachines(run, 'api');
+    return { ok: n > 0 && n <= 5, value: String(n) };
   },
 };
 
