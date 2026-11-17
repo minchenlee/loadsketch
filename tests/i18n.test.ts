@@ -28,13 +28,39 @@ describe('i18n catalog', () => {
 
   it('t() fills placeholders, strips @@context, falls back to English, and translates legacy Chinese ids in en mode', () => {
     expect(t('Second {at}: traffic {m}×{span}', { at: 20, m: 3, span: '' })).toBe('第 20 秒流量變 3 倍');
-    expect(t('Missing message {x}@@ctx', { x: 1 })).toBe('Missing message 1');
-    setLang('en');
-    expect(t('Missing message {x}@@ctx', { x: 1 })).toBe('Missing message 1');
+    // a new id the extractor added with empty Chinese: shown in English, without the @@context
+    ZH['Missing message {x}@@ctx'] = '';
+    try {
+      expect(t('Missing message {x}@@ctx', { x: 1 })).toBe('Missing message 1');
+      setLang('en');
+      expect(t('Missing message {x}@@ctx', { x: 1 })).toBe('Missing message 1');
+    } finally {
+      delete ZH['Missing message {x}@@ctx'];
+    }
     expect(t('Off@@not-used')).toBe('Off');
     expect(t('primary')).toBe('primary');
     // legacy Chinese id in an old design file still translates in English mode
     expect(t('主庫')).toBe('Primary');
+  });
+});
+
+describe('user text', () => {
+  it('a user\'s own text with @@ is shown as written in both languages; a catalog id still loses its @@context', () => {
+    const sc = { name: '壓測@@臺北' } as Scenario;
+    for (const l of ['zh-TW', 'en'] as const) {
+      setLang(l);
+      expect(t('壓測@@臺北')).toBe('壓測@@臺北');
+      expect(localizeScenario(sc).name).toBe('壓測@@臺北');
+      expect(localizeDesign({ name: 'a@@b', nodes: [{ label: 'x@@y' }] } as unknown as Design).nodes[0].label).toBe('x@@y');
+    }
+    setLang('en');
+    expect(t('Arrivals@@how')).toBe('Arrivals');
+    expect(t('Database@@kind')).toBe('Database');
+    setLang('zh-TW');
+    // an id that stays English in Chinese (src/i18n/same.ts) is a catalog id too
+    expect(t('Database@@kind')).toBe('Database');
+    setLang('zh-TW');
+    expect(t('Arrivals@@how')).toBe('請求怎麼到');
   });
 });
 

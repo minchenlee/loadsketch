@@ -1,9 +1,11 @@
 // Translation. The English text in the code is the message id (gettext style);
 // Traditional Chinese looks it up in ZH and falls back to the English text.
-// Disambiguated keys carry a context suffix ("Off@@not-used") stripped before display.
+// Disambiguated keys carry a context suffix ("Off@@not-used") stripped before display; only a
+// catalog id has one, so a user's own text with "@@" is shown as written.
 // Legacy Chinese message ids are mapped back to English so old design files still translate.
 // Placeholders are written {name}: t('{s} s@@at', { s: 20 }).
 import { ZH } from './zh-TW.ts';
+import { SAME_IN_ZH } from './same.ts';
 
 export type Lang = 'zh-TW' | 'en';
 export const LANGS: Lang[] = ['zh-TW', 'en'];
@@ -33,16 +35,20 @@ export function pickLang(code: string | null | undefined): Lang {
   return code && /^zh/i.test(code) ? 'zh-TW' : 'en';
 }
 
+const has = (o: Record<string, string>, k: string) => Object.hasOwn(o, k);
+/** The text of a message id with no translation: a catalog id loses its @@context, other text stays. */
+const plain = (msg: string) => (has(ZH, msg) || SAME_IN_ZH.has(msg) ? stripContext(msg) : msg);
+
 export function t(msg: string, vars?: Record<string, string | number>): string {
   const cat = CATALOGS[lang];
-  const s = cat ? cat[msg] || stripContext(msg) : ZH_TO_EN[msg] || stripContext(msg);
+  const s = cat ? (has(cat, msg) && cat[msg]) || plain(msg) : (has(ZH_TO_EN, msg) && ZH_TO_EN[msg]) || plain(msg);
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 }
 
 /** Whether the message has a translation in the current language (English always has). */
 export function translated(msg: string): boolean {
   const cat = CATALOGS[lang];
-  return !cat || !!cat[msg];
+  return !cat || (has(cat, msg) && !!cat[msg]);
 }
 
 /** Marks a message for extraction without translating it here (translate it where it is shown). */

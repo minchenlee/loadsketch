@@ -8,54 +8,10 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { join } from 'node:path';
 import { CATEGORY_LABEL, EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { ZH } from '../src/i18n/zh-TW.ts';
+import { SAME_IN_ZH } from '../src/i18n/same.ts';
 
 const root = join(import.meta.dirname, '..');
 
-// Proper nouns, component kind names and technical terms that stay identical in Traditional Chinese.
-const SAME_IN_ZH = new Set([
-  'API',
-  'API Gateway',
-  'API Server',
-  'CDN',
-  'Cache',
-  'Circuit Breaker',
-  'CloudFront',
-  'DNS',
-  'DNS / edge PoP',
-  'DNS failover',
-  'Data service',
-  'Database@@kind',
-  'Django',
-  'Django (gunicorn) ×27',
-  'ECS → RDS',
-  'Executor',
-  'Function',
-  'Health check',
-  'IaC',
-  'Load Balancer',
-  'Mcrouter + Memcached',
-  'Memcached',
-  'Memcached ×6',
-  'NGINX ×3',
-  'Object Storage',
-  'PostgreSQL',
-  'Postgres',
-  'Queue@@kind',
-  'Rate Limiter',
-  'Redis',
-  'Redis job queue',
-  'Route53',
-  'S3',
-  'Sharded DB',
-  'TTL',
-  'TTL jitter',
-  'Visibility timeout',
-  'Worker',
-  'failover',
-  'memcache',
-  'outlier detection',
-  'p99 ≤ {v}',
-]);
 
 const ids = new Set<string>();
 const add = (s: unknown) => {

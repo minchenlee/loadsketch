@@ -41,7 +41,7 @@ node scripts/check-agents-md.ts
 
 1. **修前要失敗。** 修 bug 或改引擎行為時，先寫一個在修改前會失敗的測試，確認它失敗，再改程式碼。
 2. **golden 測試。** `tests/golden.test.ts` 用固定 seed 跑每個範例，記下結果的雜湊（`tests/golden.json`）。只改結構、不改行為時，雜湊必須完全一樣。有意改變行為時，用 `UPDATE_GOLDEN=1` 更新，並在 commit 訊息寫原因。
-3. **i18n。** 英文是原文，也是訊息 id：介面文字寫成英文，`t('…')` 立刻翻譯，`tx('…')` 只標記、顯示時才翻譯。範例和練習題的 JSON 也只寫英文。改完跑 `node scripts/i18n-extract.ts`，它把新的 id 加進 `src/i18n/zh-TW.ts`（值是空字串）；會中文就補上繁中，不會就留空。`npm run i18n:check` 會列出缺中文的訊息但不失敗；中英文引數不一致或 `zh-TW.ts` 過時才失敗。main 每晚跑 `npm run i18n:strict`，缺中文就失敗。同一句英文要有兩種中文時，第二個 id 加語境標記（`Off@@not-used`）；`t()` 顯示前會去掉 `@@` 之後的字。改了一句英文，它的中文要跟著搬：抽取器會印出最像的舊 id 和它的中文。
+3. **i18n。** 英文是原文，也是訊息 id：介面文字寫成英文，`t('…')` 立刻翻譯，`tx('…')` 只標記、顯示時才翻譯。範例和練習題的 JSON 也只寫英文。改完跑 `node scripts/i18n-extract.ts`，它把新的 id 加進 `src/i18n/zh-TW.ts`（值是空字串）；會中文就補上繁中，不會就留空。`npm run i18n:check` 會列出缺中文的訊息但不失敗；中英文引數不一致或 `zh-TW.ts` 過時才失敗。main 每晚跑 `npm run i18n:strict`，缺中文就失敗。同一句英文要有兩種中文時，第二個 id 加語境標記（`Off@@not-used`）；`t()` 顯示前會去掉 `@@` 之後的字（只對 `zh-TW.ts` 裡有的 id；使用者自己的文字含 `@@` 照原樣顯示）。改了一句英文，它的中文要跟著搬：抽取器會印出最像的舊 id 和它的中文。
 4. **不用 HTML `<select>` 和 `<input type="number">`。** 用 `src/app/components/Select.tsx` 的 `Select` 和 `NumberField`。e2e 會檢查（`e2e/app.spec.ts` 的 "dropdowns are our own menus"）。
 5. **速度預算看 CPU 時間。** 測試要檢查「跑得夠快」時，用 `tests/helpers.ts` 的 `cpuMs()`，不要用牆上時間：機器忙的時候牆上時間會變長。
 6. **格式只加不改。** `loadsketch/design@1` 只加選填欄位，不改已有欄位的意思；舊的設計檔和分享連結要能打開。格式改了要跑 `npm run schema`（`tests/format.test.ts` 會檢查 `schema/` 有沒有更新）。
