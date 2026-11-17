@@ -327,6 +327,9 @@ test('course: a second guess on the same example waits for its own run (2.4)', a
   await page.getByTestId('course-option-primary-busy-high').click();
   await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+  // the first run did not answer this guess: no answer until a run of this step
+  await expect(page.getByTestId('course-answers')).toHaveCount(0);
+  await expect(page.getByTestId('course-answer-primary-busy')).toHaveCount(0);
   await expect(page.getByTestId('course-patch')).toBeEnabled({ timeout: 30_000 });
   await page.getByTestId('course-patch').click();
   await page.getByTestId('course-run').click();
@@ -334,4 +337,32 @@ test('course: a second guess on the same example waits for its own run (2.4)', a
   await expect(page.getByTestId('course-answer-primary-busy')).toBeVisible({ timeout: 60_000 });
   // with the 200 ms limit every read goes to the primary: 10% to 30% busy (without the change, under 10%)
   await expect(page.getByTestId('course-answer-primary-busy')).toContainText('Answer: 10% to 30%');
+});
+
+test('course: a run again shows the answer of that run; the score keeps the first', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-recover-never').click();
+  await page.getByTestId('course-option-amp-x3').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  const recover = page.getByTestId('course-answer-recover');
+  await expect(recover).toContainText('Answer: It stays broken', { timeout: 60_000 });
+  // fix the storm (a retry budget on every connection that retries) and run again on this page
+  await frame.locator('body').evaluate(() => {
+    type E = { id: string; data?: { edge: { retries?: number } } };
+    const s = (window as unknown as { __loadsketch: { getState: () => { edges: E[]; updateEdge: (id: string, p: Record<string, number>) => void } } }).__loadsketch.getState();
+    for (const e of s.edges) if (e.data?.edge.retries) s.updateEdge(e.id, { retryBudget: 0.1 });
+  });
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  // the answer and its explanation follow the run shown; a note says what the score counted
+  await expect(recover).not.toContainText('Answer: It stays broken');
+  await expect(page.getByTestId('course-scored-recover')).toContainText('It stays broken');
+  while (!(await page.getByTestId('course-finish').isVisible())) await page.getByTestId('course-next').click();
+  // never was right on the first run: the score keeps it
+  await expect(page.getByTestId('course-score')).toHaveAttribute('data-right', /^[12]$/);
 });
