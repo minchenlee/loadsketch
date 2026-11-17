@@ -209,3 +209,28 @@ test('course: the guesses lock as soon as a run starts', async ({ page }) => {
   await expect(page.getByTestId('course-option-recover-fast')).toBeDisabled();
   await expect(page.getByTestId('course-option-amp-x6')).toBeDisabled();
 });
+
+test('course: a run the simulator refuses does not lock the guesses', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-recover-never').click();
+  await page.getByTestId('course-next').click();
+  // a design the simulator does not run: the users have no connection out
+  type S = { getState: () => { edges: { id: string; source: string }[]; onEdgesChange: (c: { type: 'remove'; id: string }[]) => void } };
+  const out = await frame.locator('body').evaluate(() => {
+    const s = (window as unknown as { __loadsketch: S }).__loadsketch.getState();
+    const e = s.edges.filter((x) => x.source === 'users');
+    s.onEdgesChange(e.map((x) => ({ type: 'remove', id: x.id })));
+    return e.length;
+  });
+  expect(out).toBeGreaterThan(0);
+  await page.getByTestId('course-run').click();
+  await page.waitForTimeout(1000);
+  await expect(page.getByTestId('course-status')).not.toHaveAttribute('data-status', 'running');
+  await page.getByTestId('course-back').click();
+  await expect(page.getByTestId('course-option-recover-fast')).toBeEnabled();
+  await page.getByTestId('course-option-amp-x6').click();
+  await expect(page.getByTestId('course-option-amp-x6')).toHaveAttribute('aria-checked', 'true');
+});
