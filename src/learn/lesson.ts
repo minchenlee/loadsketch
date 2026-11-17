@@ -218,9 +218,15 @@ export function sameScenario(a: Scenario, b: Scenario): boolean {
 export function judge(c: Challenge, run: RunData, original: Design): Verdict {
   const goals = c.goals.map((g) => ({ ...g.check(run), text: t(g.text) }));
   const broken = [...customUsed(run.design).map((b) => t(b.text, b.vars)), ...c.rules.flatMap((r) => r.check(run.design, original))];
-  // no way round the system: a component of the example that gets no request (e.g. behind a weight-0 connection)
+  // no way round the system: every component of the example stays, as the same kind (a new id is a
+  // new component), and gets requests (not behind a weight-0 connection)
+  for (const o of original.nodes) {
+    const n = run.design.nodes.find((x) => x.id === o.id);
+    if (o.kind !== 'client' && (!n || n.kind !== o.kind)) broken.push(t('Removed "{name}"', { name: o.label ? t(o.label) : o.id }));
+  }
   for (const o of original.nodes) {
     if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('"{name}" got no requests: you cannot go round a component of the original design', { name: o.label ? t(o.label) : o.id }));
   }
-  return { passed: broken.length === 0 && goals.every((g) => g.ok), goals, broken };
+  const unique = [...new Set(broken)];
+  return { passed: unique.length === 0 && goals.every((g) => g.ok), goals, broken: unique };
 }

@@ -42,10 +42,11 @@ describe('cache hit-ratio lesson: questions', () => {
     expect(hit(small)).toBeLessThan(hit(run()));
   }, SLOW);
 
-  it('a fixed 90% hit ratio sends under a tenth to the database', () => {
+  it('a fixed 90% hit ratio still sends 10 to 40 of 100 to the database (the writes, and the misses)', () => {
     const fixed = run(fixedHits);
     expect(hitQ.answer(fixed)).toBe('all');
-    expect(shareQ.answer(fixed)).toBe('tenth');
+    expect(dbShare(fixed)).toBeGreaterThanOrEqual(0.1);
+    expect(shareQ.answer(fixed)).toBe('quarter');
   }, SLOW);
 
   it('spread-out clicks (a low Zipf exponent) make the same cache miss most reads', () => {

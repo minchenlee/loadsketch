@@ -33,6 +33,15 @@ export const setEdge = (from: string, to: string, key: string, v: unknown): Chan
 });
 export const setScenario = (key: string, apply: (s: Scenario) => void): Change => ({ key: `scenario:${key}`, apply: (_d, s) => apply(s) });
 
+/** Delete a node and every edge to or from it. */
+export const removeNode = (id: string): Change => ({
+  key: `remove:${id}`,
+  apply: (d) => {
+    d.nodes = d.nodes.filter((n) => n.id !== id);
+    d.edges = d.edges.filter((e) => e.from !== id && e.to !== id);
+  },
+});
+
 const runs = new Map<string, RunData>();
 /** One run of `example` with `scenarioName` and the changes, cached. */
 export function runOf(example: string, scenarioName: string, ...changes: Change[]): RunData {
