@@ -66,6 +66,8 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   const guesses = await frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { guesses: Record<string, string> } } }).__loadsketch.getState().guesses);
   expect(guesses).toEqual({ recover: 'never', amp: 'x3' });
   await page.screenshot({ path: join(SHOTS, 'course-lesson-answers.png') });
+  const right = await page.locator('[data-testid^="course-answer-"][data-right]').count();
+  expect(right).toBeGreaterThanOrEqual(1);
 
   // the try step sends its change to the frame
   await page.getByTestId('course-next').click();
@@ -101,6 +103,8 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   // the last page; the table of contents shows the lesson as done
   for (let k = 0; k < 5; k++) await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-finish')).toBeVisible();
+  // the score of the guesses is kept with the progress: no run in this visit, still counted
+  await expect(page.getByTestId('course-score')).toHaveAttribute('data-right', String(right));
   await page.getByTestId('course-home').click();
   await expect(page.getByTestId('course-lesson-3.1')).toHaveAttribute('data-state', 'done');
   expect(errors).toEqual([]);
@@ -156,5 +160,36 @@ for (const theme of ['light', 'dark'] as const) {
     // Chinese text is wider in places
     await page.getByTestId('course-lang').click();
     await noSideways(page);
+  });
+}
+
+test('course: changing the theme or the language keeps the design in the simulator', async ({ page }) => {
+  await page.goto('/learn/?lang=en&theme=light&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+  type S = { getState: () => { lang: string; edges: { id: string; data?: { edge: { retryBudget?: number } } }[]; updateEdge: (id: string, p: Record<string, number>) => void } };
+  await frame.locator('body').evaluate(() => {
+    (window as unknown as { __same: boolean }).__same = true;
+    (window as unknown as { __loadsketch: S }).__loadsketch.getState().updateEdge('lb->api', { retryBudget: 0.1 });
+  });
+  const look = () =>
+    frame.locator('body').evaluate(() => {
+      const s = (window as unknown as { __loadsketch: S }).__loadsketch.getState();
+      return { same: (window as unknown as { __same?: boolean }).__same === true, dark: document.documentElement.classList.contains('dark'), lang: s.lang, budget: s.edges.find((e) => e.id === 'lb->api')?.data?.edge.retryBudget };
+    });
+  await page.getByTestId('course-theme').click();
+  await expect.poll(look).toEqual({ same: true, dark: true, lang: 'en', budget: 0.1 });
+  await page.getByTestId('course-lang').click();
+  await expect.poll(look).toEqual({ same: true, dark: true, lang: 'zh-TW', budget: 0.1 });
+});
+
+for (const width of [470, 500, 512, 560]) {
+  test(`course: the simulator's settings can be reached at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/learn/?lang=en&lesson=3.1');
+    const frame = page.frameLocator('[data-testid="course-frame"]');
+    await expect(frame.locator('[data-node]')).toHaveCount(5, { timeout: 30_000 });
+    // the phone layout's tabs, or the desktop's settings panel: one of them is there
+    await expect(frame.getByTestId('phone-tab-inspector').or(frame.getByRole('tab', { name: 'Results', exact: true }))).toBeVisible();
   });
 }

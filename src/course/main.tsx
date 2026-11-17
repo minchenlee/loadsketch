@@ -3,7 +3,7 @@
 // app in an iframe with ?embed=1&course=1, which tells this page about every run
 // (src/app/courseBridge.ts). Every answer and verdict is read from that run. Progress is kept in
 // this browser (src/course/progress.ts).
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
 import '../app/index.css';
@@ -19,7 +19,7 @@ import type { RunData } from '../learn/metrics.ts';
 import type { Design, Scenario } from '../schema/design.ts';
 import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
-import { EMPTY, loadProgress, saveProgress, type LessonProgress, type Progress } from './progress.ts';
+import { EMPTY, loadProgress, saveProgress, type LessonProgress, type Progress, scoreOf } from './progress.ts';
 import { clampStep, ctxKey, ctxOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 
@@ -45,17 +45,6 @@ const save = (key: string, value: string) => {
     /* private mode */
   }
 };
-
-function useMedia(query: string): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      const m = matchMedia(query);
-      m.addEventListener('change', onChange);
-      return () => m.removeEventListener('change', onChange);
-    },
-    () => matchMedia(query).matches,
-  );
-}
 
 /** The lesson in the address (?lesson=3.1), followed through back and forward. */
 function useRoute(): [string | null, (id: string | null) => void] {
@@ -335,9 +324,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** Example designs and scenarios as they ship, by name: challenges are judged against them. */
   const [designs, setDesigns] = useState<Record<string, Design>>({});
   const [scenarios, setScenarios] = useState<Record<string, Scenario>>({});
-  const phoneFrame = useMedia('(max-width: 512px)');
-  const latest = useRef({ progress, ctx });
-  latest.current = { progress, ctx };
+  const latest = useRef({ progress, ctx, lang, theme });
+  latest.current = { progress, ctx, lang, theme };
 
   useEffect(() => {
     let live = true;
@@ -353,7 +341,6 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     };
   }, [lesson]);
 
-  const runFor = (x: { example?: string; scenario?: string }): RunData | null => runs[ctxKey(runOf(lesson, x))] ?? null;
   /** A challenge's verdict on its run, when that run used the challenge's scenario. */
   const verdictOf = (c: Challenge): Verdict | null => {
     const r = runOf(lesson, c);
@@ -375,8 +362,10 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const all = { ...runs, [key]: r.run };
     setRuns(all);
     const p = latest.current.progress;
-    const answered = lesson.questions.filter((q) => ctxKey(runOf(lesson, q)) === key).map((q) => q.id);
-    update({ ...p, answered: [...new Set([...p.answered, ...answered])] });
+    const answered = lesson.questions.filter((q) => ctxKey(runOf(lesson, q)) === key);
+    // the right answers are kept with the progress: the score survives a reload, which has no runs
+    const answers = { ...p.answers, ...Object.fromEntries(answered.map((q) => [q.id, q.answer(r.run)])) };
+    update({ ...p, answered: [...new Set([...p.answered, ...answered.map((q) => q.id)])], answers });
   };
   const onRunRef = useRef(onRun);
   onRunRef.current = onRun;
@@ -397,6 +386,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       if (!msg || msg.source !== 'loadsketch-app' || msg.example !== here.example) return;
       if (msg.kind === 'ready') {
         setStatus('idle');
+        send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
         send({ source: 'loadsketch-course', kind: 'guesses', guesses: latest.current.progress.guesses });
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') setStatus(msg.status);
@@ -423,10 +413,19 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     setReload((r) => r + 1);
   };
 
-  const q = new URLSearchParams({ embed: '1', course: '1', example: ctx.example, scenario: ctx.scenario, lang, theme });
-  // the settings panel on the right; no charts under the canvas: the frame is too short for both
-  q.set('panels', phoneFrame ? '' : 'right');
-  if (phoneFrame) q.set('phone', '1');
+  // A new theme or language goes to the frame as a message: a new address would reload it and lose
+  // the learner's changes. The address only takes them when the frame loads anyway (a new run).
+  const look = useRef({ lang, theme, at: '' });
+  if (look.current.at !== `${ctxKey(ctx)}#${reload}`) look.current = { lang, theme, at: `${ctxKey(ctx)}#${reload}` };
+  useEffect(() => {
+    send({ source: 'loadsketch-course', kind: 'look', theme, lang });
+  }, [theme, lang]);
+  const q = new URLSearchParams({ embed: '1', course: '1', example: ctx.example, scenario: ctx.scenario, lang: look.current.lang, theme: look.current.theme });
+  // The settings panel on the right; no charts under the canvas: the frame is too short for both.
+  // phone=1: a frame as narrow as a phone shows the phone layout instead. The frame decides with
+  // its own width and the simulator's breakpoint (src/app/phone.ts), so both always agree.
+  q.set('panels', 'right');
+  q.set('phone', '1');
   const speed = new URLSearchParams(location.search).get('speed');
   if (speed) q.set('speed', speed);
   const src = `${APP}?${q.toString()}`;
@@ -441,10 +440,10 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const cs = (ids: string[]) => ids.flatMap((id) => lesson.challenges.filter((x) => x.id === id));
   /** Questions guessed on the pages up to this one that read this page's run. */
   const askedHere = pages.slice(0, i + 1).flatMap((p) => (p.kind === 'guess' ? qs(p.questions) : [])).filter((x) => ctxKey(runOf(lesson, x)) === ctxKey(ctx));
-  const answeredRight = lesson.questions.filter((x) => {
-    const r = runFor(x);
-    return r && progress.guesses[x.id] === x.answer(r);
-  }).length;
+  const score = scoreOf(
+    lesson.questions.map((x) => x.id),
+    progress,
+  );
 
   let body: React.ReactNode;
   switch (page.kind) {
@@ -561,7 +560,12 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         <div data-testid="course-finish">
           <p className="text-[16px] leading-relaxed">{t('You finished this lesson.')}</p>
           <ul className="muted mt-2 space-y-1 text-[15px]">
-            {lesson.questions.length > 0 && <li>{t('Guesses right: {n} of {all}', { n: answeredRight, all: lesson.questions.length })}</li>}
+            {lesson.questions.length > 0 && (
+              <li data-testid="course-score" data-right={score.right}>
+                {t('Guesses right: {n} of {all}', { n: score.right, all: lesson.questions.length })}
+              </li>
+            )}
+            {score.unscored > 0 && <li>{t('{n} answered guesses have no saved score. Start the lesson again to score them.', { n: score.unscored })}</li>}
             {lesson.challenges.length > 0 && <li>{t('Challenges passed: {n} of {all}', { n: lesson.challenges.filter((c) => progress.passed.includes(c.id)).length, all: lesson.challenges.length })}</li>}
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -667,7 +671,7 @@ function Course() {
     });
   }, []);
   return (
-    <div className="course-page" key={lang}>
+    <div className="course-page">
       <Bar lang={lang} theme={theme} onLang={flipLang} onTheme={flipTheme} onHome={entry && lesson ? () => go(null) : null} />
       {entry && lesson ? (
         <LessonView
