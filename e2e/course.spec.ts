@@ -692,9 +692,9 @@ test('course: back on a step run before, its measurements are still there', asyn
   const box = page.getByTestId('course-measured');
   await expect(box).toBeVisible({ timeout: 60_000 });
   const first = (await box.locator('[data-measure]').first().textContent())!;
-  // run on a later step (the challenge), then come back
+  // run on the next step (a try step, or the challenge in a lesson without one), then come back
   await page.getByTestId('course-next').click();
-  await expect(step).toHaveAttribute('data-step', /:challenge$/);
+  await expect(step).toHaveAttribute('data-step', /^3:(try|challenge)$/);
   await page.getByTestId('course-run').click();
   await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
   await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
