@@ -146,3 +146,24 @@ html.course #root {
     padding-inline: 14px;
   }
 }
+
+/* what the lesson teaches (Lesson.learn), the key idea of a read step, the arithmetic of an answer */
+.course-learn summary {
+  cursor: pointer;
+}
+.course-key {
+  border-left: 3px solid var(--accent);
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.course-calc {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  white-space: pre;
+}

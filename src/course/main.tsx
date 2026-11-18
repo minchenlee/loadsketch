@@ -5,7 +5,7 @@
 // this browser (src/course/progress.ts).
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, ChartLine, SkipForward, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChartLine, SkipForward, Calculator, Check, Circle, KeyRound, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
 import '../app/index.css';
 import './course.css';
 import logoBlack from '../app/assets/logo-black.svg';
@@ -21,7 +21,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { answerable, judgedOn, lookOf, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
+import { answerable, judgedOn, learnTicks, lookOf, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 import { readings, type Row } from './measures.ts';
 
@@ -272,6 +272,17 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
       {guess && mine !== answer && <div className="muted mt-0.5 text-[14px]">{t('Your guess: {g}', { g: t(guess.text) })}</div>}
       {right && <div className="muted mt-0.5 text-[14px]">{t('Answer: {a}', { a: t(right.text) })}</div>}
       <div className="mt-1 text-[15px] leading-relaxed">{t(q.explainFor?.[answer] || q.explain)}</div>
+      {q.calc && q.calc.length > 0 && (
+        <div className="course-calc mt-2" data-testid={`course-calc-${q.id}`}>
+          <div className="faint mb-1 flex items-center gap-1.5 text-[13px] font-medium uppercase tracking-wide">
+            <Calculator size={13} />
+            {t('The arithmetic')}
+          </div>
+          {q.calc.map((line, k) => (
+            <div key={k}>{t(line)}</div>
+          ))}
+        </div>
+      )}
       {first && (
         <div className="faint mt-1 text-[14px]" data-testid={`course-scored-${q.id}`}>
           {t('The design changed since the first run. Your score counts that run, whose answer was: {a}', { a: t(first.text) })}
@@ -638,6 +649,15 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       body = (
         <>
           <p className="text-[16px] leading-relaxed">{t(page.text)}</p>
+          {page.key && (
+            <div className="course-key mt-3" data-testid="course-key">
+              <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide">
+                <KeyRound size={13} />
+                {t('Key idea')}
+              </div>
+              <div className="text-[16px] leading-relaxed">{t(page.key)}</div>
+            </div>
+          )}
           {i === 0 && <p className="muted mt-3 text-[15px] leading-relaxed">{t('How a lesson goes: guess the answers first, then run the simulator. The answers are read from that run. Then change the design to pass the challenges.')}</p>}
         </>
       );
@@ -748,6 +768,16 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       body = (
         <div data-testid="course-finish">
           <p className="text-[16px] leading-relaxed">{t('You finished this lesson.')}</p>
+          {lesson.recap && lesson.recap.length > 0 && (
+            <div className="card mt-3 p-3" data-testid="course-recap">
+              <div className="faint text-[14px]">{t('To remember')}</div>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-[15px] leading-relaxed">
+                {lesson.recap.map((r, k) => (
+                  <li key={k}>{t(r)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <ul className="muted mt-2 space-y-1 text-[15px]">
             {lesson.questions.length > 0 && (
               <li data-testid="course-score" data-right={score.right}>
@@ -777,6 +807,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       break;
   }
 
+  const ticks = learnTicks(lesson, progress.reached);
+  const upNext = nextTitle(pages, i);
   const unguessed = page.kind === 'guess' && qs(page.questions).some((x) => !progress.guesses[x.id] && !progress.answered.includes(x.id));
   return (
     <div className="course-lesson" data-testid="course-lesson">
@@ -803,6 +835,21 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           <div className="muted mt-2 text-[14px]" data-testid="course-step" data-step={`${i}:${page.kind}`}>
             {t('Step {n} of {all}: {name}', { n: i + 1, all: pages.length, name: pageLabel(page) })}
           </div>
+          {lesson.learn && lesson.learn.length > 0 && (
+            <details className="course-learn mt-3" open={i === 0 || undefined} key={i === 0 ? 'first' : 'later'} data-testid="course-learn">
+              <summary className="text-[14px] font-medium">
+                {t('What this lesson teaches')} <span className="faint num">{t('{n} of {all}', { n: ticks.filter(Boolean).length, all: ticks.length })}</span>
+              </summary>
+              <ul className="mt-1.5 space-y-1 text-[15px]">
+                {lesson.learn.map((l, k) => (
+                  <li key={k} className="flex gap-1.5" data-ticked={ticks[k] || undefined}>
+                    {ticks[k] ? <Check size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--ok-ink)' }} /> : <Circle size={16} className="faint mt-0.5 shrink-0" />}
+                    <span className={ticks[k] ? 'muted' : undefined}>{t(l)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <div className="mt-4">{body}</div>
           <div className="mt-6 flex gap-2">
             <button className="btn" onClick={() => go(i - 1)} disabled={i === 0} data-testid="course-back">
@@ -811,7 +858,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
             </button>
             {page.kind !== 'done' && (
               <button className="btn btn-primary" onClick={() => go(i + 1)} data-testid="course-next">
-                {unguessed ? t('Skip') : t('Next@@step')}
+                {unguessed ? t('Skip') : upNext ? t('Next: {title}', { title: t(upNext) }) : t('Next@@step')}
                 <ArrowRight size={14} />
               </button>
             )}
