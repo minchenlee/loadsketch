@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BookOpen, Check, ChevronDown, ClipboardPaste, Download, Ellipsis, Dumbbell, FileInput, Link2, Redo2, Undo2, FilePlus2, FolderOpen, Languages, Moon, PanelBottom, PanelLeft, PanelRight, Sun } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, ClipboardPaste, Download, Ellipsis, Dumbbell, FileInput, GraduationCap, Link2, Redo2, Undo2, FilePlus2, FolderOpen, Languages, Moon, PanelBottom, PanelLeft, PanelRight, Sun } from 'lucide-react';
 import logoBlack from '../assets/logo-black.svg';
 import logoWhite from '../assets/logo-white.svg';
 import { DESIGN_SCHEMA, parseDesign } from '../../schema/design.ts';
@@ -16,6 +16,9 @@ import { t, tx } from '../../i18n/index.ts';
 import { usePhone } from '../phone.ts';
 import { importMessage } from '../../i18n/importMessages.ts';
 import { importTerraform, PlanError, runChecks } from '../../import/terraform/index.ts';
+
+/** The course page (/learn/), next to the simulator's own /app/. */
+const COURSE_URL = '../learn/';
 
 const PANEL_BUTTONS: { key: keyof Panels; label: string; Icon: typeof PanelLeft }[] = [
   { key: 'left', label: tx('Component panel'), Icon: PanelLeft },
@@ -140,6 +143,8 @@ export function TopBar() {
   ];
   const moreItems: MenuItem[] = [
     ...(phone ? phoneItems : []),
+    // the course link is in the bar on a wide window; the course's own frame does not link to it
+    ...(phone && !EMBEDDED ? [{ label: t('Course'), icon: <GraduationCap size={14} />, onSelect: () => void location.assign(COURSE_URL), 'data-testid': 'course-item' }] : []),
     // a phone has no room for the GitHub button either (M16); the embedded app links nowhere
     ...(phone && !EMBEDDED ? [{ label: 'GitHub', icon: <GithubMark />, onSelect: () => void window.open(REPO, '_blank', 'noopener,noreferrer'), title: t('View the source on GitHub'), 'data-testid': 'github-item' }] : []),
     { label: lang === 'en' ? '切換成中文' : 'Switch to English', sep: phone, icon: <Languages size={14} />, onSelect: () => setLang(lang === 'en' ? 'zh-TW' : 'en'), 'data-testid': 'lang' },
@@ -208,6 +213,11 @@ export function TopBar() {
           <Dumbbell size={14} /> <span className="sd-desk">{t('Practice')}</span>
         </button>
         {practice && <PracticeDialog onClose={() => setPractice(false)} />}
+        {!EMBEDDED && (
+          <a className="btn sd-desk" href={COURSE_URL} title={t('Lessons: guess, run, read why, change the design')} data-testid="open-course">
+            <GraduationCap size={14} /> {t('Course')}
+          </a>
+        )}
         <div className="sd-desk mx-1 h-5 w-px" style={{ background: 'var(--line)' }} />
         <button className="btn sd-desk" onClick={() => void share()} title={t('Put the design and the scenario into one URL: anyone who opens it gets both')} data-testid="share">
           {shared ? <Check size={14} /> : <Link2 size={14} />} {shared ? t('Link copied') : t('Share')}
