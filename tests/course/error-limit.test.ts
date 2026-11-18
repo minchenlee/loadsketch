@@ -6,11 +6,21 @@ import { describe, expect, it } from 'vitest';
 import { COURSE } from '../../src/learn/course.ts';
 import type { Goal } from '../../src/learn/lesson.ts';
 import type { RunData } from '../../src/learn/metrics.ts';
-import { runOf } from './run.ts';
+import { runOf, setScenario } from './run.ts';
 
 /** Challenges that need no error limit, each with the reason. */
 const NO_LIMIT: Record<string, string> = {};
 
+/**
+ * withOk() sets the counts of the summary, so the run only has to be a run of the example: two
+ * seconds of the scenario, no events. (6.2 takes about 20 s a full run, much more when the course
+ * suite runs many files at once.)
+ */
+const short = setScenario('short', (s) => {
+  s.durationS = 2;
+  s.warmupS = 0;
+  s.events = [];
+});
 const withOk = (run: RunData, share: number): RunData => {
   const s = run.result.summary;
   const ok = Math.round(s.offered * share);
@@ -33,7 +43,7 @@ describe('every challenge limits failed requests', () => {
       for (const c of l.challenges) {
         if (NO_LIMIT[c.id]) continue;
         const ex = c.example ?? l.example;
-        const run = runOf(ex, c.scenario ?? l.scenario ?? ex);
+        const run = runOf(ex, c.scenario ?? l.scenario ?? ex, short);
         if (!c.goals.some((g) => limitsErrors(g, run))) missing.push(c.id);
       }
       expect(missing, missing.join('; ')).toEqual([]);
