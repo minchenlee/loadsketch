@@ -1,13 +1,16 @@
 // The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
-import { answerable, clampStep, ctxOf, feedbackOf, pagesOf } from '../src/course/steps.ts';
+import { answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, nextTitle, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
 import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
 import { stepsOf, type Lesson } from '../src/learn/lesson.ts';
 import { entriesForRun, lessonOfEntry, logFile, parseLog } from '../src/learn/guessLog.ts';
 import type { RunData } from '../src/learn/metrics.ts';
+
+/** A lesson to build fixtures on (its own steps are replaced). */
+const fixture = (): Lesson => ({ ...LESSONS['retry-storm'], steps: undefined, learn: undefined, learnAt: undefined, recap: undefined });
 
 describe('course table of contents', () => {
   it('has the 7 units of the course and the 33 lessons of the outline, in order', () => {
@@ -150,6 +153,63 @@ describe('questions by experiment', () => {
     expect(feedbackOf(l, pages, 4)).toEqual(['amp']);
     expect(feedbackOf(l, pages, 5)).toEqual([]);
     expect(feedbackOf(l, pages, 3)).toEqual([]);
+  });
+
+  it('a challenge judges only a run started on a challenge page that lists it', () => {
+    const id = base.challenges[0].id;
+    expect(judgedOn(pages, 6, id)).toBe(true);
+    // a run or try page before it (the reported case: a try run on the same example and scenario)
+    for (const p of [2, 4, 5]) expect(judgedOn(pages, p, id)).toBe(false);
+    expect(judgedOn(pages, 6, 'other')).toBe(false);
+    expect(judgedOn(pages, 99, id)).toBe(false);
+  });
+
+  it('a step with look.panel bottom opens the charts; others do not', () => {
+    expect(opensCharts({ kind: 'run', look: { panel: 'bottom' } })).toBe(true);
+    expect(opensCharts({ kind: 'read', text: 'x', look: { node: 'api' } })).toBe(false);
+    expect(opensCharts({ kind: 'run' })).toBe(false);
+    expect(opensCharts({ kind: 'done' })).toBe(false);
+  });
+
+  it('a step points at its look: the node and tab, without the charts', () => {
+    expect(lookOf({ kind: 'read', text: 'x', look: { node: 'db', tab: 'results', panel: 'bottom' } })).toEqual({ node: 'db', tab: 'results' });
+    expect(lookOf({ kind: 'read', text: 'x', look: { panel: 'bottom' } })).toBeNull();
+    expect(lookOf({ kind: 'run' })).toBeNull();
+    expect(lookOf({ kind: 'done' })).toBeNull();
+  });
+
+  it('after Make this change: the changed node and its settings, unless the step looks elsewhere', () => {
+    expect(patchFocus({ kind: 'try', text: 'x', patch: [{ node: 'api', params: { instances: 2 } }] })).toEqual({ node: 'api', tab: 'design' });
+    expect(patchFocus({ kind: 'try', text: 'x', patch: [{ edge: 'api->db', set: { timeoutMs: 100 } }, { node: 'db', params: {} }] })).toEqual({ node: 'db', tab: 'design' });
+    expect(patchFocus({ kind: 'try', text: 'x', look: { node: 'cache', tab: 'results' }, patch: [{ node: 'api', params: {} }] })).toEqual({ node: 'cache', tab: 'results' });
+    // only an edge changed: its caller
+    expect(patchFocus({ kind: 'try', text: 'x', patch: [{ edge: 'api->db', set: {} }] })).toEqual({ node: 'api', tab: 'design' });
+    expect(patchFocus({ kind: 'read', text: 'x' })).toBeNull();
+  });
+
+  it('the Next button names the next step by its title', () => {
+    const ps = pagesOf({ ...fixture(), steps: [{ kind: 'read', text: 'a' }, { kind: 'run', title: 'Run the spike' }] } as Lesson);
+    expect(nextTitle(ps, 0)).toBe('Run the spike');
+    expect(nextTitle(ps, 1)).toBeUndefined(); // the last page is next
+    expect(nextTitle(ps, 2)).toBeUndefined();
+  });
+
+  it('learn lines tick at the step that teaches them; without learnAt, at the end', () => {
+    const steps = [{ kind: 'read', text: 'a' }, { kind: 'run' }, { kind: 'try', text: 'b' }] as Lesson['steps'];
+    const l = { ...fixture(), steps, learn: ['one', 'two', 'three'], learnAt: [0, 2, 1] } as Lesson;
+    expect(learnTicks(l, 0)).toEqual([true, false, false]);
+    expect(learnTicks(l, 1)).toEqual([true, false, true]);
+    expect(learnTicks(l, 2)).toEqual([true, true, true]);
+    const plain = { ...fixture(), steps, learn: ['one', 'two'] } as Lesson;
+    expect(learnTicks(plain, 2)).toEqual([false, false]);
+    expect(learnTicks(plain, 3)).toEqual([true, true]);
+    expect(learnTicks({ ...fixture(), steps } as Lesson, 3)).toEqual([]);
+    expect(learnProblems(l)).toEqual([]);
+    expect(learnProblems({ ...l, learnAt: [0, 3] })).toEqual(['learnAt has 2 entries, learn has 3', 'learnAt 3 is not a step (0 to 2)']);
+  });
+
+  it('every course lesson has a learnAt that fits its learn and its steps', () => {
+    for (const e of ALL_LESSONS) if (e.lesson) expect(learnProblems(e.lesson), e.id).toEqual([]);
   });
 
   it('without steps, the one run answers every question', () => {

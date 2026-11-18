@@ -77,11 +77,15 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
     .poll(() => frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { edges: { id: string; data?: { edge: { retries?: number } } }[] } } }).__loadsketch.getState().edges.find((e) => e.id === 'lb->api')?.data?.edge.retries))
     .toBe(0);
 
-  // the challenges: the original design (the run before the change) passes none
+  // the challenges: no verdict until a run on this page. A step before may have changed the design
+  // (no retries into the API recovers on its own), but nothing passes keeping the retries yet
   await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:challenge');
-  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible();
-  await expect(page.getByTestId('course-passed')).toHaveCount(0);
+  await expect(page.getByTestId('course-verdict')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('course-challenge-retry-storm/keep-retries').getByTestId('course-verdict')).toBeVisible();
+  await expect(page.getByTestId('course-challenge-retry-storm/keep-retries').getByTestId('course-passed')).toHaveCount(0);
 
   // change the design in the frame (a retry budget on every connection), run again: passed
   await frame.locator('body').evaluate(() => {
@@ -587,4 +591,145 @@ test('the intro site links to the course: the nav and next to the main button', 
   await page.getByTestId('site-course').click();
   await expect(page).toHaveURL(/\/learn\/$/);
   await expect(page.getByTestId('course-lesson-2.1')).toBeVisible();
+});
+
+test('course: a challenge judges only runs started on its page, not an earlier run of the same example', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answer-hit')).toBeVisible({ timeout: 60_000 });
+  const card = page.locator('[data-testid^="course-challenge-"]').first();
+  for (let k = 0; k < 6 && !(await card.isVisible()); k++) await page.getByTestId('course-next').click();
+  await expect(card).toBeVisible();
+  // the run of the run page is not this challenge's
+  await expect(page.getByTestId('course-verdict')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  await expect(card.getByTestId('course-verdict')).toBeVisible({ timeout: 60_000 });
+});
+
+test('course: the Charts toggle opens the charts under the canvas, and stays after a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  const toggle = page.getByTestId('course-charts');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(frame.getByTestId('metrics-side')).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame.getByTestId('metrics-side')).toBeVisible();
+  // the canvas and the lesson stay usable
+  const box = await frame.locator('.react-flow').boundingBox();
+  expect(box!.height).toBeGreaterThan(250);
+  await expect(page.getByTestId('course-step')).toBeInViewport();
+  await page.reload();
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('course-charts')).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame.getByTestId('metrics-side')).toBeVisible();
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('metrics-side')).toHaveCount(0);
+});
+
+test('course: on a phone the Charts toggle opens the charts drawer in the simulator', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('data-open', '');
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('aria-label', 'Charts');
+  await expect(page.getByTestId('course-step')).toBeVisible();
+  // no sideways scroll on the course page
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('phone-drawer')).not.toHaveAttribute('data-open', '');
+});
+
+test('course: after a run the step shows what it measured, next to the run before it', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-measured')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  const box = page.getByTestId('course-measured');
+  await expect(box).toBeVisible({ timeout: 60_000 });
+  // without a show: p99, failed requests and the busiest component
+  await expect(box.locator('[data-measure]')).toHaveCount(3);
+  await expect(box.locator('[data-measure="p99"]')).toContainText(/\d/);
+  await expect(box.locator('[data-measure="busiest"]')).toContainText('Busiest component');
+  await expect(box.locator('[data-before]')).toHaveCount(0);
+  // a second run is compared with the first
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(box.locator('[data-measure="p99"][data-before]')).toBeVisible();
+  await expect(box.locator('[data-measure="p99"]')).toContainText('→');
+  // another step does not show this step's run
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-measured')).toHaveCount(0);
+});
+
+test('course: a run shows its progress on the page, and Skip to end finishes it', async ({ page }) => {
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-skip')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  const st = page.getByTestId('course-status');
+  // at normal speed the run takes about a minute: the page counts the simulated seconds
+  await expect(st).toHaveText(/Running… [1-9]\d* \/ \d+ s/, { timeout: 30_000 });
+  const at = (s: string | null) => Number(/(\d+) \//.exec(s ?? '')?.[1]);
+  const first = at(await st.textContent());
+  await expect.poll(async () => at(await st.textContent()), { timeout: 15_000 }).toBeGreaterThan(first);
+  await page.getByTestId('course-skip').click();
+  await expect(st).toHaveAttribute('data-status', 'done', { timeout: 30_000 });
+  await expect(page.getByTestId('course-skip')).toHaveCount(0);
+  await expect(page.getByTestId('course-measured')).toBeVisible();
+});
+
+const toFrame = (page: Page, m: Record<string, unknown>) =>
+  page.evaluate((msg) => (document.querySelector('[data-testid="course-frame"]') as HTMLIFrameElement).contentWindow!.postMessage({ source: 'loadsketch-course', ...msg }, location.origin), m);
+
+test('course: the page can point at a component: selected, centred, its settings open', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await toFrame(page, { kind: 'focus', tab: 'results' });
+  await expect(frame.getByTestId('tab-learn')).toHaveAttribute('aria-selected', 'true');
+  await toFrame(page, { kind: 'focus', node: 'db', tab: 'design' });
+  await expect(frame.locator('.react-flow__node.selected [data-node="db"]')).toBeVisible();
+  await expect(frame.getByTestId('tab-design')).toHaveAttribute('aria-selected', 'true');
+  // centred in the canvas
+  const pane = (await frame.locator('.react-flow').boundingBox())!;
+  await expect
+    .poll(async () => {
+      const b = (await frame.locator('[data-node="db"]').boundingBox())!;
+      return Math.hypot(b.x + b.width / 2 - (pane.x + pane.width / 2), b.y + b.height / 2 - (pane.y + pane.height / 2));
+    })
+    .toBeLessThan(30);
+  // an unknown component changes nothing
+  await toFrame(page, { kind: 'focus', node: 'nope' });
+  await expect(frame.locator('.react-flow__node.selected [data-node="db"]')).toBeVisible();
+});
+
+test('course: on a phone, pointing at a component opens its settings drawer', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="db"]')).toBeAttached({ timeout: 30_000 });
+  await toFrame(page, { kind: 'focus', node: 'db' });
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('data-open', '');
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('aria-label', 'Settings');
 });

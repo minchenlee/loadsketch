@@ -165,6 +165,20 @@ function useRefitOnLimit() {
   }, [limitOpen, setViewport, store]);
 }
 
+/** The course page asked to look at a node: centre it, at the same zoom (no motion with reduced motion). */
+function useCentreAsked() {
+  const asked = useApp((s) => s.centreAsked);
+  const { setCenter, getZoom } = useReactFlow();
+  useEffect(() => {
+    if (!asked) return;
+    const n = useApp.getState().nodes.find((x) => x.id === asked.node);
+    if (!n) return;
+    const w = n.measured?.width ?? 0;
+    const h = n.measured?.height ?? 0;
+    void setCenter(n.position.x + w / 2, n.position.y + h / 2, { zoom: getZoom(), duration: reducedMotion() ? 0 : 300 });
+  }, [asked, setCenter, getZoom]);
+}
+
 /**
  * A dragged card swings from the point it is held by: it leans against the direction it moves in,
  * and springs back level when it is let go.
@@ -258,6 +272,7 @@ export function Canvas() {
   const { screenToFlowPosition } = useReactFlow();
   const fly = useFlight(nodes);
   useRefitOnLimit();
+  useCentreAsked();
   const tilt = useDragTilt();
 
   const onDrop = useCallback(
