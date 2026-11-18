@@ -14,6 +14,24 @@ export interface Option {
 }
 
 /** Guess first, then run: the answer is read from the run, so it holds for a changed design too. */
+/**
+ * Course lessons: where to look on a step or a question's answer. The simulator selects and
+ * centres `node`, opens a tab of its settings panel (`tab`), or opens the charts under the canvas
+ * (`panel: 'bottom'`, for steps about what changes over time; on a phone, the charts drawer).
+ */
+export interface Look {
+  node?: string;
+  tab?: 'design' | 'scenario' | 'results' | 'versions';
+  panel?: 'bottom';
+}
+
+/**
+ * Course lessons: what a run or try step shows on the page after its run, compared with the run
+ * before it (keys of MEASURES in src/course/measures.ts). Without it: p99, failed requests and the
+ * busiest component.
+ */
+export type Show = string[];
+
 export interface Question {
   id: string;
   /**
@@ -32,6 +50,10 @@ export interface Question {
   explainFor?: Partial<Record<string, string>>;
   /** What the question is about, for the guess log (a key of TOPICS in guessLog.ts). Options run from low to high. */
   topic?: string;
+  /** Course lessons: where to look when the answer shows. */
+  look?: Look;
+  /** Course lessons: the arithmetic of the explanation, one line each (message ids), shown in a monospace box. */
+  calc?: string[];
 }
 
 export interface GoalResult {
@@ -76,14 +98,24 @@ export type PracticeLink = { kind: 'oncall' | 'constraint' | 'brief'; id: string
  *   scenario, and run again. Not judged: the run shows the answer.
  * - challenge: the challenges (ids), judged on every run.
  * - practice: problems to do after the lesson.
+ *
+ * Every step may have a short `title` (message id; the Next button says "Next: <title>") and a
+ * `look` (where to look, see Look). A read step may have a `key` (message id): the one idea of the
+ * step, shown in a KEY IDEA box. Run and try steps may say what to `show` after their run.
  */
-export type Step =
-  | { kind: 'read'; text: string }
-  | { kind: 'guess'; questions: string[] }
-  | { kind: 'run'; example?: string; scenario?: string; text?: string }
-  | { kind: 'try'; text: string; example?: string; scenario?: string; patch?: Patch[] }
-  | { kind: 'challenge'; challenges: string[] }
-  | { kind: 'practice'; text?: string; items: PracticeLink[] };
+interface StepBase {
+  title?: string;
+  look?: Look;
+}
+export type Step = StepBase &
+  (
+    | { kind: 'read'; text: string; key?: string }
+    | { kind: 'guess'; questions: string[] }
+    | { kind: 'run'; example?: string; scenario?: string; text?: string; show?: Show }
+    | { kind: 'try'; text: string; example?: string; scenario?: string; patch?: Patch[]; show?: Show }
+    | { kind: 'challenge'; challenges: string[] }
+    | { kind: 'practice'; text?: string; items: PracticeLink[] }
+  );
 
 export interface Lesson {
   example: string;
@@ -98,6 +130,12 @@ export interface Lesson {
   minutes?: number;
   /** Course lessons: the wave it ships in. */
   wave?: 1 | 2;
+  /** Course lessons: what the lesson teaches, 3 to 5 lines (message ids), shown at the top; ticked as the learner goes (learnAt). */
+  learn?: string[];
+  /** Course lessons: for each line of `learn`, the index of the step that teaches it (ticked once reached). Same length as `learn`. */
+  learnAt?: number[];
+  /** Course lessons: the points to remember, shown on the last page above the score (message ids). */
+  recap?: string[];
   /** Course lessons: other examples the lesson opens (a pair: the problem, then the fix). */
   extraExamples?: string[];
   /** Course lessons: the steps in order. Without it: stepsOf() (intro, guess all, run, challenges). */
