@@ -69,10 +69,12 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   const right = await page.locator('[data-testid^="course-answer-"][data-right]').count();
   expect(right).toBeGreaterThanOrEqual(1);
 
-  // the challenges: the original design passes none
+  // the challenges: no verdict until a run on this page; the original design passes none
   await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:challenge');
-  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible();
+  await expect(page.getByTestId('course-verdict')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId('course-passed')).toHaveCount(0);
 
   // change the design in the frame (a retry budget on every connection), run again: passed
@@ -582,4 +584,23 @@ test('the intro site links to the course: the nav and next to the main button', 
   await page.getByTestId('site-course').click();
   await expect(page).toHaveURL(/\/learn\/$/);
   await expect(page.getByTestId('course-lesson-2.1')).toBeVisible();
+});
+
+test('course: a challenge judges only runs started on its page, not an earlier run of the same example', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answer-hit')).toBeVisible({ timeout: 60_000 });
+  const card = page.locator('[data-testid^="course-challenge-"]').first();
+  for (let k = 0; k < 6 && !(await card.isVisible()); k++) await page.getByTestId('course-next').click();
+  await expect(card).toBeVisible();
+  // the run of the run page is not this challenge's
+  await expect(page.getByTestId('course-verdict')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  await expect(card.getByTestId('course-verdict')).toBeVisible({ timeout: 60_000 });
 });

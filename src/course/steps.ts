@@ -54,6 +54,16 @@ export function answerable(lesson: Lesson, pages: Page[], i: number, ctx: Ctx, g
   return [...new Set([...guessedOn(lesson, pages, 0, i, ctx), ...here])];
 }
 
+/**
+ * A challenge judges a run only when the run started on a challenge page that lists it. A run on
+ * an earlier page (a try page often runs the same example and scenario, with the lesson's fix) is
+ * not the learner's answer to the challenge.
+ */
+export function judgedOn(pages: Page[], runPage: number, challenge: string): boolean {
+  const p = pages[runPage];
+  return !!p && p.kind === 'challenge' && p.challenges.includes(challenge);
+}
+
 /** The questions whose answers a run or try page shows: those guessed since the last run or try page. */
 export function feedbackOf(lesson: Lesson, pages: Page[], i: number): string[] {
   const p = pages[i];

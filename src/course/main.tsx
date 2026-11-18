@@ -21,7 +21,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { answerable, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
+import { answerable, judgedOn, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 
 const APP = '../app/';
@@ -314,6 +314,8 @@ interface Ran {
   run: RunData;
   /** The questions it answers (runState.ts). */
   answers: string[];
+  /** The page it started on. */
+  page: number;
 }
 
 /**
@@ -346,6 +348,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const [status, setStatus] = useState<Status>('loading');
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
+  /** The page each of those runs started on (a challenge judges only a run started on its page). */
+  const [runPages, setRunPages] = useState<Record<string, number>>({});
   const [reload, setReload] = useState(0);
   /** Questions a run started in this visit answers: their guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
   const [started, setStarted] = useState<string[]>([]);
@@ -375,7 +379,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** A challenge's verdict on its run, when that run used the challenge's scenario. */
   const verdictOf = (c: Challenge): Verdict | null => {
     const r = runOf(lesson, c);
-    const run = runs[ctxKey(r)];
+    const key = ctxKey(r);
+    const run = runPages[key] !== undefined && judgedOn(pages, runPages[key], c.id) ? runs[key] : undefined;
     const want = scenarios[r.scenario];
     const original = designs[r.example];
     return run && want && original && sameScenario(run.scenario, want) ? judge(c, run, original) : null;
@@ -392,6 +397,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const key = ctxKey(r.ctx);
     const all = { ...runs, [key]: r.run };
     setRuns(all);
+    setRunPages((x) => ({ ...x, [key]: r.page }));
     const p = latest.current.progress;
     const ids = r.answers;
     const answered = lesson.questions.filter((q) => ids.includes(q.id));
@@ -439,7 +445,10 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') d({ kind: 'status', status: msg.status, page: latest.current.i });
       } else if (msg.kind === 'loaded') d({ kind: 'loaded' });
-      else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run, answers: d({ kind: 'finished', page: latest.current.i }).answer ?? [] });
+      else if (msg.kind === 'run') {
+        const answers = d({ kind: 'finished', page: latest.current.i }).answer ?? [];
+        onRunRef.current({ ctx: here, run: msg.run, answers, page: rs.current.runPage ?? latest.current.i });
+      }
     };
     addEventListener('message', onMessage);
     return () => removeEventListener('message', onMessage);
@@ -463,6 +472,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const restart = () => {
     update({ ...EMPTY });
     setRuns({});
+    setRunPages({});
     setAnswerRuns({});
     dispatch({ kind: 'restart' });
     setReload((r) => r + 1);
@@ -599,7 +609,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
               <ChallengeCard key={c.id} c={c} verdict={verdictOf(c)} passed={progress.passed.includes(c.id)} />
             ))}
           </div>
-          {runs[ctxKey(ctx)] && scenarios[ctx.scenario] && !sameScenario(runs[ctxKey(ctx)].scenario, scenarios[ctx.scenario]) && (
+          {runs[ctxKey(ctx)] && runPages[ctxKey(ctx)] === i && scenarios[ctx.scenario] && !sameScenario(runs[ctxKey(ctx)].scenario, scenarios[ctx.scenario]) && (
             <div className="mt-2 text-[14px]" style={{ color: 'var(--warn-ink)' }}>{t('The scenario was changed. Switch back to "{name}" for the challenges to count.', { name: t(scenarios[ctx.scenario].name ?? ctx.scenario) })}</div>
           )}
           <RunButton status={status} onRun={startRun} />
