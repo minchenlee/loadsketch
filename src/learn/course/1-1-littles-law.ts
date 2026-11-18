@@ -50,6 +50,20 @@ const lesson: Lesson = {
   order: 1,
   minutes: 20,
   wave: 1,
+  learn: [
+    tx("Work out how busy a server is: ρ = λ ÷ (c × μ)"),
+    tx("Use Little’s law to turn a rate and a time into a count"),
+    tx("See how waiting grows as a server nears 100% busy"),
+    tx("See that variation costs queueing too"),
+    tx("Find the knee where p99 starts to climb"),
+  ],
+  learnAt: [0, 2, 3, 4, 5],
+  recap: [
+    tx("ρ = λ ÷ (c × μ): the same traffic on slower or fewer slots is busier."),
+    tx("Little’s law, L = λ × W, holds for any queue."),
+    tx("Past about 85% busy, the wait grows much faster than the load; a wider spread of times makes it grow more."),
+    tx("Plan for 70–80% busy, not 100%."),
+  ],
   example: 'single-server',
   scenario: 'steady',
   intro: INTRO,
@@ -91,7 +105,8 @@ const lesson: Lesson = {
         return l < 1.5 ? 'one' : l < 3 ? 'two' : l < 6 ? 'four' : 'many';
       },
       measured: (run) => t('{n} inside on average ({rps}/s × {ms} ms)', { n: inside(run).toFixed(1), rps: Math.round(api(run)?.rps ?? 0), ms: ((api(run)?.waitMs ?? 0) + (api(run)?.holdMs ?? 0)).toFixed(2) }),
-      explain: tx('800 a second × about 2.7 ms inside is about 2 requests: on average 2 of the 4 slots are busy, which is the same 50% from the other side. Little’s law holds for any queue, whatever the distribution; it turns a rate and a time into a count.'),
+      calc: [tx('L = λ × W'), tx('800/s × about 2.7 ms ≈ 2 requests inside'), tx('2 of 4 slots = 50% busy')],
+      explain: tx('About 2 requests are inside on average: 2 of the 4 slots are busy, which is the same 50% from the other side. Little’s law holds for any queue, whatever the distribution; it turns a rate and a time into a count.'),
       explainFor: {
         four: tx('About 4 inside: every slot is busy most of the time, and new requests start to queue.'),
         many: tx('More than 6 inside: the slots are full and the rest are waiting in the queue. The time inside is mostly waiting.'),
@@ -117,12 +132,12 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['wait-share', 'inside'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Set the processing time to 4.5 ms (90% busy) and run again: the wait grows from a fraction of the work to more than the work, and p99 grows about 4 times. The theory row still matches.'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 1 } } }] },
-    { kind: 'try', text: tx('Keep 4.5 ms and set the variation (cv) to 2: same average, wider spread, and the wait about triples. Variation costs queueing too.'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 2 } } }] },
-    { kind: 'challenge', challenges: ['littles/slower-release', 'littles/knee'] },
+    { kind: 'read', title: tx('One server'), text: INTRO, key: tx('Utilization ρ = arrivals per second ÷ what the server can do per second.') },
+    { kind: 'guess', title: tx('Wait and requests inside'), questions: ['wait-share', 'inside'] },
+    { kind: 'run', title: tx('Run at 50% busy'), look: { node: 'api', tab: 'results' } },
+    { kind: 'try', title: tx('A slower release'), text: tx('Set the processing time to 4.5 ms (90% busy) and run again. How long do requests wait now, compared with the work? Does the theory row still match?'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 1 } } }], show: ['p99', 'p50', 'busiest'] },
+    { kind: 'try', title: tx('A wider spread'), text: tx('Keep 4.5 ms and set the variation (cv) to 2: the same average, a wider spread. Run again: does the wait change?'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 2 } } }], show: ['p99', 'p50', 'busiest'] },
+    { kind: 'challenge', title: tx('Two challenges'), challenges: ['littles/slower-release', 'littles/knee'] },
   ],
 };
 

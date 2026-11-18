@@ -17,6 +17,18 @@ const lesson: Lesson = {
   order: 2,
   minutes: 20,
   wave: 1,
+  learn: [
+    tx("See how a 98% hit ratio can still fail requests"),
+    tx("See why bursts, not the average, size the database"),
+    tx("See why a longer TTL only makes the bursts rarer"),
+    tx("Stop a stampede with a lease"),
+  ],
+  learnAt: [2, 2, 3, 5],
+  recap: [
+    tx("An expiring hot key sends a burst of reads to the database; the hit ratio averages it away."),
+    tx("A longer TTL makes the bursts rarer, not smaller."),
+    tx("Coalescing needs read-through; with cache-aside, use a lease: one request reads, the others wait a little."),
+  ],
   example: 'cache-stampede',
   scenario: 'hot-key-expiry',
   extraExamples: ['cache-lease'],
@@ -36,7 +48,8 @@ const lesson: Lesson = {
         return e < 0.001 ? 'none' : e < 0.01 ? 'few' : 'some';
       },
       measured: (run) => t('Hit ratio {h}, {e} failed', { h: pct(hitRatio(run, 'redis')), e: pct(failShareOf(run)) }),
-      explain: tx('When the hottest key expires, every read of it misses until one DB read writes it back: 1000 a second × 100 ms is about 100 requests reading the same row at once. The 16 connections serve them 16 at a time, 100 ms per round, so the last of the 100 waits about 6 rounds; the DB queue fills, and requests behind it time out or are turned away. The hit ratio averages over the whole minute and hides these bursts.'),
+      calc: [tx('1000 reads/s × 100 ms ≈ 100 reads of the same row at once'), tx('100 ÷ 16 connections ≈ 6 rounds of 100 ms')],
+      explain: tx('When the hottest key expires, every read of it misses until one DB read writes it back: about 100 requests read the same row at once. The 16 connections serve them 16 at a time, so the last of them waits about 6 rounds; the DB queue fills, and requests behind it time out or are turned away. The hit ratio averages over the whole minute and hides these bursts.'),
       explainFor: {
         none: tx('Almost none fail: when a hot key expires, only one request reads the DB (a lease), and the others wait a moment for the value.'),
         few: tx('A few fail: the expiry bursts are small enough that the DB queue mostly holds them.'),
@@ -76,13 +89,13 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['hit-fail', 'db-wait'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Set the TTL to 60 s and run again: the hit ratio goes up and fewer fail, but each expiry is still a burst, and the DB wait gets longer, not shorter.'), patch: [{ node: 'redis', params: { ttlS: 60 } }] },
-    { kind: 'try', text: tx('Set “Stampede protection” to Coalesce: nothing changes. Coalescing works only when the cache reads the DB itself (read-through); here the API reads the DB, so the cache never sees the misses together.'), patch: [{ node: 'redis', params: { stampede: 'coalesce' } }] },
-    { kind: 'run', example: 'cache-lease', text: tx('Open “Cache lease + TTL jitter”: the same design with a lease, so one request reads the DB per expiry and the others ask Redis again every 20 ms, and with TTL jitter, so keys written together do not all expire in the same second. Most of the change comes from the lease: DB reads drop to about a third and nothing fails. Waiting requests take a few tens of ms longer.') },
-    { kind: 'challenge', challenges: ['stampede/no-fail'] },
+    { kind: 'read', title: tx('Cache-aside with hot keys'), text: INTRO, key: tx('When a hot key expires, every read of it goes to the database at once.') },
+    { kind: 'guess', title: tx('Failures and the wait'), questions: ['hit-fail', 'db-wait'] },
+    { kind: 'run', title: tx('Run'), show: ['hitRatio', 'failRate', 'p99'], look: { panel: 'bottom' } },
+    { kind: 'try', title: tx('A longer TTL'), text: tx('Set the TTL to 60 s and run again. The hit ratio goes up: do the failures stop?'), patch: [{ node: 'redis', params: { ttlS: 60 } }], show: ['hitRatio', 'failRate', 'p99'], look: { panel: 'bottom' } },
+    { kind: 'try', title: tx('Coalesce'), text: tx('Set “Stampede protection” to Coalesce and run again. Does anything change?'), patch: [{ node: 'redis', params: { stampede: 'coalesce' } }], show: ['hitRatio', 'failRate', 'p99'] },
+    { kind: 'run', title: tx('A lease and TTL jitter'), example: 'cache-lease', text: tx('Coalescing works only when the cache reads the DB itself (read-through); here the API reads the DB, so the cache never sees the misses together. Open “Cache lease + TTL jitter”: the same design with a lease, so one request reads the DB per expiry and the others ask Redis again every 20 ms, and with TTL jitter, so keys written together do not all expire in the same second. Run it: how many fail now, and what do the waiting requests pay?'), show: ['failRate', 'p99', 'p50'] },
+    { kind: 'challenge', title: tx('Stop the stampede'), challenges: ['stampede/no-fail'] },
   ],
 };
 

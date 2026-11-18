@@ -39,6 +39,19 @@ const lesson: Lesson = {
   order: 5,
   minutes: 25,
   wave: 1,
+  learn: [
+    tx("See how long a flash crowd fails while the autoscaler catches up"),
+    tx("See why slow scaling overshoots, then comes back slowly"),
+    tx("See how the boot time and the check interval add up"),
+    tx("Use headroom when scaling cannot be faster"),
+  ],
+  learnAt: [2, 2, 4, 5],
+  recap: [
+    tx("Autoscaling helps only after the check interval plus the boot time."),
+    tx("Checks keep adding instances while the first ones boot, so slow scaling overshoots."),
+    tx("Fast boots alone are not enough while the autoscaler waits to notice: shorten both."),
+    tx("If scaling cannot be faster, start with spare capacity: a lower target costs idle machines."),
+  ],
   example: 'autoscale',
   scenario: 'flash-crowd',
   intro: INTRO,
@@ -60,6 +73,7 @@ const lesson: Lesson = {
         const s = failingFor(run);
         return s === 0 ? t('No second failed during the spike') : t('Failing until {s} s after the spike started', { s: Math.round(s) });
       },
+      calc: [tx('Up to 60 s to notice + 120 s to boot = up to 3 minutes before help')],
       explain: tx('The autoscaler first has to notice: it checks once a minute. Then each new instance boots for 2 minutes. Until they are up, the 2 old instances get 3 times the traffic, their queues fill and requests fail. Check interval + boot time is the floor on how fast autoscaling can help.'),
       explainFor: {
         quick: tx('Failures stop within a minute: new instances come up fast enough here (short boot time or frequent checks), or there was spare capacity before the spike.'),
@@ -113,13 +127,13 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['failing-for', 'overshoot'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Set the boot time to 300 s and run again: the failing stretch gets longer, and the failure rate about doubles.'), patch: [{ node: 'api', params: { bootS: 300 } }] },
-    { kind: 'try', text: tx('Set the boot time to 10 s (pre-warmed instances): failures drop but do not stop, because the autoscaler still waits up to a minute to notice. Then set the check interval to 15 s as well.'), patch: [{ node: 'api', params: { bootS: 10 } }] },
-    { kind: 'challenge', challenges: ['autoscale/faster', 'autoscale/headroom'] },
-    { kind: 'practice', items: [{ kind: 'constraint', id: 'spike-budget' }] },
+    { kind: 'read', title: tx('A flash crowd'), text: INTRO, key: tx('Help arrives only after the check interval plus the boot time.') },
+    { kind: 'guess', title: tx('How long, how many'), questions: ['failing-for', 'overshoot'] },
+    { kind: 'run', title: tx('Run 30 minutes'), look: { panel: 'bottom' } },
+    { kind: 'try', title: tx('A slower boot'), text: tx('Set the boot time to 300 s and run again. How much longer do requests keep failing?'), patch: [{ node: 'api', params: { bootS: 300 } }], look: { panel: 'bottom' } },
+    { kind: 'try', title: tx('Pre-warmed instances'), text: tx('Set the boot time to 10 s (pre-warmed instances) and run again. Do the failures stop? Then set the check interval to 15 s as well and run once more.'), patch: [{ node: 'api', params: { bootS: 10 } }], look: { panel: 'bottom' } },
+    { kind: 'challenge', title: tx('Two challenges'), challenges: ['autoscale/faster', 'autoscale/headroom'] },
+    { kind: 'practice', title: tx('Practice'), items: [{ kind: 'constraint', id: 'spike-budget' }] },
   ],
 };
 

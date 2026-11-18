@@ -35,6 +35,18 @@ const lesson: Lesson = {
   order: 4,
   minutes: 20,
   wave: 1,
+  learn: [
+    tx("See what replication lag does to replica reads"),
+    tx("See why the hottest keys are stale most often"),
+    tx("See what a lag limit costs the primary"),
+    tx("See why a shorter lag does not fix keys that keep changing"),
+  ],
+  learnAt: [2, 2, 4, 5],
+  recap: [
+    tx("Replicas are eventually consistent: a key that keeps changing is often stale."),
+    tx("A lag limit sends the reads back to the primary: fresh reads cost primary capacity."),
+    tx("Replicas help only for reads that can be a little old."),
+  ],
   example: 'replica-lag',
   scenario: 'read-after-write',
   intro: INTRO,
@@ -53,6 +65,7 @@ const lesson: Lesson = {
         return s < 0.05 ? 'few' : s <= 0.25 ? 'some' : 'many';
       },
       measured: (run) => t('{stale} of {reads} replica reads were stale ({s})', { stale: db(run)?.staleReads ?? 0, reads: db(run)?.replicaReads ?? 0, s: pct(staleShare(run)) }),
+      calc: [tx('800 requests/s × 20% = 160 writes/s'), tx('A read is stale if its key was written in the last 300 ms')],
       explain: tx('A read is stale when its key was written in the last 300 ms. With 160 writes a second landing mostly on the same popular keys, those keys are almost always inside that window, so the reads people make most are the ones most often stale. Replicas are eventually consistent: they catch up, but never for a key that keeps changing.'),
       explainFor: {
         few: tx('Few are stale: the replicas are only a few ms behind, so a key is rarely read inside its lag window.'),
@@ -103,13 +116,13 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['stale-share'] },
-    { kind: 'run' },
-    { kind: 'guess', questions: ['primary-busy'] },
-    { kind: 'try', text: tx('Set “Max replication lag” to 200 ms and run again: stale reads drop to zero, and the primary takes every read.'), patch: [{ node: 'db', params: { maxLagMs: 200 } }] },
-    { kind: 'try', text: tx('Put the lag limit back to 0 and set “Replication lag” to 50 ms: fewer reads are stale, but not few, because the hot keys are written more often than every 50 ms.'), patch: [{ node: 'db', params: { maxLagMs: 0, replicaDelayMs: 50 } }] },
-    { kind: 'challenge', challenges: ['replicas/no-stale', 'replicas/keep-replicas'] },
+    { kind: 'read', title: tx('Reads from replicas'), text: INTRO, key: tx('A replica read is stale when its key was written within the lag.') },
+    { kind: 'guess', title: tx('Stale reads'), questions: ['stale-share'] },
+    { kind: 'run', title: tx('Run'), show: ['staleReads', 'p99', 'failRate'] },
+    { kind: 'guess', title: tx('A lag limit'), questions: ['primary-busy'] },
+    { kind: 'try', title: tx('Max lag 200 ms'), text: tx('Set “Max replication lag” to 200 ms and run again. How many reads are stale now, and how busy is the primary?'), patch: [{ node: 'db', params: { maxLagMs: 200 } }], show: ['staleReads', 'p99', 'failRate'], look: { node: 'db' } },
+    { kind: 'try', title: tx('A shorter lag'), text: tx('Put the lag limit back to 0 and set “Replication lag” to 50 ms. Run again: how many reads are stale now?'), patch: [{ node: 'db', params: { maxLagMs: 0, replicaDelayMs: 50 } }], show: ['staleReads', 'p99', 'failRate'] },
+    { kind: 'challenge', title: tx('Two challenges'), challenges: ['replicas/no-stale', 'replicas/keep-replicas'] },
   ],
 };
 

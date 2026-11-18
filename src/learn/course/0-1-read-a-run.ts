@@ -36,7 +36,7 @@ const apiAtMost5: Goal = {
   },
 };
 
-const THEORY = tx('The Results tab also has a theory row (M/G/c). It predicts how long requests wait in a queue from the average load of the whole run. Guess how the measured wait compares, then press Run.');
+const THEORY = tx('After the run, the Results tab will also show a theory row (M/G/c). It predicts how long requests wait in a queue from the average load of the whole run. Guess how the measured wait compares, then press Run.');
 
 const lesson: Lesson = {
   id: '0.1',
@@ -45,6 +45,18 @@ const lesson: Lesson = {
   order: 1,
   minutes: 15,
   wave: 1,
+  learn: [
+    tx("Find the component that fills up first"),
+    tx("Compare the measured wait with the theory row (M/G/c)"),
+    tx("See why an average hides a spike"),
+    tx("Add servers until a spike fits, with room to spare"),
+  ],
+  learnAt: [4, 5, 6, 7],
+  recap: [
+    tx("The smallest part fills up first: one server does (requests at a time) ÷ (time per request)."),
+    tx("An average hides a spike: read the peak and the bottleneck note, not only the averages."),
+    tx("A server that is 100% busy still makes requests queue: leave room."),
+  ],
   example: 'three-tier',
   scenario: 'spike',
   intro: INTRO,
@@ -64,7 +76,8 @@ const lesson: Lesson = {
         const b = run.result.bottleneck;
         return b ? t('Bottleneck: {name}, {u} busy at its peak', { name: t(b.label), u: `${Math.round(b.peakUtilization * 100)}%` }) : t('No bottleneck');
       },
-      explain: tx('The API servers are the smallest part: 3 servers × 4 at a time × about 9 ms each is about 1300 requests a second, and the spike asks for 1800. Most reads stop at Redis, so the database sees only the misses and the writes, and stays far from full. The bottleneck note on the Results tab says this in words, with the second it happened.'),
+      calc: [tx('3 servers × 4 at a time ÷ 9 ms ≈ 1300 requests/s'), tx('Spike: 600/s × 3 = 1800 requests/s, more than 1300')],
+      explain: tx('The API servers are the smallest part: they can do about 1300 requests a second, and the spike asks for 1800. Most reads stop at Redis, so the database sees only the misses and the writes, and stays far from full. The bottleneck note on the Results tab says this in words, with the second it happened.'),
       explainFor: {
         lb: tx('Here the load balancer is the bottleneck: it forwards every request, so check its own settings.'),
         cache: tx('Here the cache is the bottleneck: check its capacity and the number of requests it can serve at a time.'),
@@ -108,14 +121,14 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['first-full'] },
-    { kind: 'read', text: THEORY },
-    { kind: 'guess', questions: ['theory-gap'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Set the API servers to 6 instances and run again: the spike fits, nobody waits, and the measured wait drops to the theory or below. The challenge below asks for the same with at most 5.'), patch: [{ node: 'api', params: { instances: 6 } }] },
-    { kind: 'try', text: tx('This switches to the steady scenario (no spike) with the original design. Run it: with the load flat, the average is the whole story.'), scenario: 'steady' },
-    { kind: 'challenge', challenges: ['read-run/hold-spike'] },
+    { kind: 'read', title: tx('A three-tier site'), text: INTRO, key: tx('The busiest component fills up first, and sets how much the site can take.') },
+    { kind: 'guess', title: tx('Which part fills up first'), questions: ['first-full'] },
+    { kind: 'read', title: tx('The theory row'), text: THEORY, key: tx('The theory row sees only the average load of the whole run.') },
+    { kind: 'guess', title: tx('Measured wait or theory'), questions: ['theory-gap'] },
+    { kind: 'run', title: tx('Run the spike'), look: { tab: 'results', panel: 'bottom' } },
+    { kind: 'try', title: tx('6 API servers'), text: tx('Set the API servers to 6 instances and run again. Does the spike fit now, and how close is the measured wait to the theory? The challenge below asks for the same with at most 5.'), patch: [{ node: 'api', params: { instances: 6 } }] },
+    { kind: 'try', title: tx('No spike'), text: tx('This switches to the steady scenario (no spike) with the original design. Run it: with the load flat, how close is the measured wait to the theory?'), scenario: 'steady', look: { tab: 'results' } },
+    { kind: 'challenge', title: tx('Hold the spike'), challenges: ['read-run/hold-spike'] },
   ],
 };
 
