@@ -23,6 +23,7 @@ import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, 
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
 import { answerable, judgedOn, opensCharts, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
+import { readings, type Row } from './measures.ts';
 
 const APP = '../app/';
 type Theme = 'light' | 'dark';
@@ -270,6 +271,36 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
   );
 }
 
+/** What a run or try step's run measured (its `show`, src/course/measures.ts), next to the run before it. Data: no motion. */
+function Measured({ rows }: { rows: Row[] }) {
+  if (!rows.length) return null;
+  const ink = (c: Row['change']) => (c === 'better' ? 'var(--ok-ink)' : c === 'worse' ? 'var(--bad-ink)' : undefined);
+  return (
+    <div className="card mt-4 p-3" data-testid="course-measured">
+      <div className="faint text-[14px]">{rows.some((r) => r.before !== undefined) ? t('This run, next to the run before it') : t('This run measured')}</div>
+      <dl className="mt-1.5 space-y-1">
+        {rows.map((r) => (
+          <div key={r.key} className="flex flex-wrap items-baseline justify-between gap-x-3" data-measure={r.key} data-before={r.before !== undefined || undefined} data-change={r.change}>
+            <dt className="text-[15px]">
+              {r.label}
+              {r.who && !r.key.startsWith('clientFail:') && <span className="faint"> · {r.who}</span>}
+            </dt>
+            <dd className="num text-[15px] font-medium">
+              {r.before !== undefined && (
+                <>
+                  <span className="muted">{r.before}</span>
+                  <span className="faint"> → </span>
+                </>
+              )}
+              <span style={{ color: ink(r.change) }}>{r.now}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function ChallengeCard({ c, verdict, passed }: { c: Challenge; verdict: Verdict | null; passed: boolean }) {
   return (
     <div className="card p-3" data-testid={`course-challenge-${c.id}`}>
@@ -368,6 +399,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const [status, setStatus] = useState<Status>('loading');
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
+  /** The last two finished runs in this visit, with the page each started on: a run or try step shows the last one, next to the one before it. */
+  const [lastRuns, setLastRuns] = useState<{ run: RunData; page: number }[]>([]);
   /** The page each of those runs started on (a challenge judges only a run started on its page). */
   const [runPages, setRunPages] = useState<Record<string, number>>({});
   const [reload, setReload] = useState(0);
@@ -418,6 +451,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const all = { ...runs, [key]: r.run };
     setRuns(all);
     setRunPages((x) => ({ ...x, [key]: r.page }));
+    setLastRuns((x) => [...x.slice(-1), { run: r.run, page: r.page }]);
     const p = latest.current.progress;
     const ids = r.answers;
     const answered = lesson.questions.filter((q) => ids.includes(q.id));
@@ -506,6 +540,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     update({ ...EMPTY });
     setRuns({});
     setRunPages({});
+    setLastRuns([]);
     setAnswerRuns({});
     dispatch({ kind: 'restart' });
     setReload((r) => r + 1);
@@ -559,6 +594,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     ) : (
       run && <p className="faint mt-2 text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</p>
     );
+  /** The run started on this step, next to the run before it (in this visit, whatever it ran). */
+  const measuredHere = (show: string[] | undefined) => {
+    const now = lastRuns[lastRuns.length - 1];
+    if (!now || now.page !== i) return null;
+    const before = lastRuns.length > 1 ? lastRuns[0].run : undefined;
+    return <Measured rows={readings(show, now.run, before)} />;
+  };
   const score = scoreOf(
     lesson.questions.map((x) => x.id),
     progress,
@@ -613,6 +655,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           <p className="text-[16px] leading-relaxed">{page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')}</p>
           {!run && askedHere.some((x) => !progress.guesses[x.id]) && <p className="muted mt-2 text-[14px]">{t('Some questions have no guess yet. Go back to guess, or run without one.')}</p>}
           <RunButton status={status} onRun={startRun} />
+          {measuredHere(page.show)}
           {answers(run)}
         </>
       );
@@ -629,6 +672,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
             </button>
           )}
           <RunButton status={status} onRun={startRun} />
+          {measuredHere(page.show)}
           {answers(runs[ctxKey(ctx)])}
         </>
       );

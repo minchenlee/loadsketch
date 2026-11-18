@@ -1875,6 +1875,8 @@ export const ZH: Record<string, string> = {
   "This is not valid JSON.": "這不是有效的 JSON。",
   "This is not valid JSON: something is wrong {where}.": "這不是有效的 JSON：{where}有問題。",
   "This queue has several consumers. The simulator gives messages to the first one, so this consumer may get none and the effect does not show.": "這個佇列有好幾個消費者。模擬器先把訊息交給第一個，這個消費者可能收不到訊息，看不到效果。",
+  "This run measured": "這次量到的",
+  "This run, next to the run before it": "這次量到的（和上一輪比較）",
   "This scenario has {n} events; the limit search leaves them all out.": "這個情境有 {n} 個事件，找上限時都拿掉。",
   "This search ran scaled down ({ks}): traffic and capacity at 1/k, the numbers multiplied back. Near full load a scaled-down run waits longer than full size, so the limit may be on the low side.": "這次用縮小比例模擬（{ks}）：流量和容量都縮成 1/k 再把數字乘回來。接近滿載時，縮小後的等待時間比原尺寸長，所以上限可能偏保守。",
   "This step ran at 1/{k} of the traffic and capacity, then multiplied the numbers back": "這一步用 1/{k} 的流量和容量模擬，再把數字乘回來",
