@@ -354,6 +354,7 @@ export const ZH: Record<string, string> = {
   "Busiest": "最忙",
   "Busiest component": "最忙的元件",
   "Busiest component: {node} (utilization {pct}%)": "最忙的元件：{node}（忙碌率 {pct}%）",
+  "Busiest instance of {name}": "{name} 最忙的 instance",
   "Busiest second": "最忙的一秒",
   "Busiest single instance": "最忙的單一 instance",
   "Busy": "忙碌",

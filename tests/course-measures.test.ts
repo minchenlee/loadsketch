@@ -137,4 +137,38 @@ describe('course measures', () => {
       ['timedOut', '30%', '1.0%', 'better'],
     ]);
   });
+  // a sharded database with 1 replica per shard: instances 0..3 are shard 0 primary, shard 0 replica 1, shard 1 primary, shard 1 replica 1
+  const sharded = (hotIdx: number, hot: number, roles: string[]) => {
+    const r = run(10, 0, { api: 0.5 }, {
+      api: { maxInstanceUtilization: 0.6, instances: [{ idx: 0, role: '#0', utilization: 0.6 }, { idx: 1, role: '#1', utilization: 0.4 }] as never },
+      db: { kind: 'sharded_db', label: 'Sharded database', utilization: 0.2, maxInstanceUtilization: hot, instances: roles.map((role, idx) => ({ idx, role, utilization: idx === hotIdx ? hot : 0.05 })) as never },
+    });
+    (r.design as { nodes: unknown[] }).nodes = [{ id: 'db', kind: 'sharded_db', params: { shards: 2, replicas: 1 } }, { id: 'api', kind: 'api', params: {} }];
+    return r;
+  };
+  const zhRoles = ['分片 0 主庫', '分片 0 副本 1', '分片 1 主庫', '分片 1 副本 1'];
+
+  it('busiestInstance:<id>: the busiest instance of that component only, named like busiestInstance', () => {
+    const r = sharded(2, 0.3, ['Shard 0 Primary', 'Shard 0 Replica 1', 'Shard 1 Primary', 'Shard 1 Replica 1']);
+    // busiestInstance alone finds the API; the keyed one looks inside the database
+    expect(readings(['busiestInstance'], r)[0]).toMatchObject({ who: 'API #0', now: '60%' });
+    const row = readings(['busiestInstance:db'], r, sharded(2, 0.9, zhRoles))[0];
+    expect(row).toMatchObject({ key: 'busiestInstance:db', before: '90%', now: '30%', change: 'better', who: 'Sharded database Shard 1 Primary' });
+    expect(measureOf('busiestInstance:db')).toBeDefined();
+    expect(readings(['busiestInstance:nobody'], r)).toEqual([]);
+    // a component with one instance: its utilization
+    expect(readings(['busiestInstance:api'], run(10, 0, { api: 0.5 }, { api: { maxInstanceUtilization: 0.5 } }))[0]).toMatchObject({ now: '50%', who: 'API' });
+  });
+
+  it('instance names are in the page language, whatever language the run was made in', () => {
+    // a run made in Chinese (its roles are Chinese), shown on an English page
+    const r = sharded(1, 0.95, zhRoles);
+    expect(readings(['busiestInstance'], r)[0].who).toBe('Sharded database Shard 0 Replica 1');
+    setLang('zh-TW');
+    try {
+      expect(readings(['busiestInstance'], sharded(1, 0.95, ['Shard 0 Primary', 'Shard 0 Replica 1', 'Shard 1 Primary', 'Shard 1 Replica 1']))[0].who).toBe('Sharded database 分片 0 副本 1');
+    } finally {
+      setLang('en');
+    }
+  });
 });
