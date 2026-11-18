@@ -3,11 +3,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { splitAction, splitSources, splitSteps, stepGap } from '../src/app/components/Prose.tsx';
-import { EN } from '../src/i18n/en.ts';
+import { ZH } from '../src/i18n/zh-TW.ts';
 
 const dir = join(import.meta.dirname, '..', 'examples', 'designs');
 const designs = readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')));
-const both = (s: string) => [s, EN[s] || s];
+const both = (s: string) => [s, ZH[s] || s];
 const squash = (s: string) => s.replace(/[\s、,，。.:：;；]+/g, '');
 const URL_RE = /https?:\/\/[^\s，、。）)]+/g;
 
@@ -37,17 +37,17 @@ describe('design text layout', () => {
       expect(stepGap(splitAction(t).action, splitAction(t).rest), t).toBe(' ');
     expect(stepGap('看看這裡？', '再改那裡。')).toBe('');
     expect(stepGap('改成 5 次：', '負載變大')).toBe('');
-    const notes = designs.flatMap((d) => (d.notes ?? []).map((n: { text: string }) => n.text)).filter((t: string) => /^試試看/.test(t));
-    for (const zh of notes) for (const text of both(zh)) {
+    const notes = designs.flatMap((d) => (d.notes ?? []).map((n: { text: string }) => n.text)).filter((t: string) => /^(試試看|Try it|Try this)[:：]/.test(t));
+    for (const en of notes) for (const text of both(en)) {
       const s = splitSteps(text.replace(/^(試試看|Try it|Try this)[:：]\s*/, ''))!;
       for (const step of s.steps) expect(splitAction(step).action, step.slice(0, 50)).not.toBe('');
     }
   });
 
   it('every "try it" note becomes steps with every word kept, in both languages', () => {
-    const notes = designs.flatMap((d) => (d.notes ?? []).map((n: { text: string }) => n.text)).filter((t: string) => /^試試看/.test(t));
+    const notes = designs.flatMap((d) => (d.notes ?? []).map((n: { text: string }) => n.text)).filter((t: string) => /^(試試看|Try it|Try this)[:：]/.test(t));
     expect(notes.length).toBeGreaterThanOrEqual(5);
-    for (const zh of notes) for (const text of both(zh)) {
+    for (const en of notes) for (const text of both(en)) {
       const s = splitSteps(text.replace(/^(試試看|Try it|Try this)[:：]\s*/, ''))!;
       expect(s, text.slice(0, 40)).not.toBeNull();
       expect(s.steps.length).toBeGreaterThanOrEqual(2);

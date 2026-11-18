@@ -96,13 +96,13 @@ export const useOnCall = create<OnCallState>((set, get) => {
       const app = useApp.getState();
       const build = (): Design => {
         const { description: _d, notes: _n, ...d } = designOf(id);
-        return { ...d, name: t('值班中的系統') };
+        return { ...d, name: t('The system on call') };
       };
       // set first: the load below ends any practice whose design it replaces (see the subscription)
       set({ canvasLoads: app.loads + 1 });
       app.load(build(), build);
       // the message id, translated where it is shown (a language change then follows)
-      app.setScenario({ ...structuredClone(inc.scenario), name: tx('值班中的情境') });
+      app.setScenario({ ...structuredClone(inc.scenario), name: tx('The incident on call') });
       // the incident's own event objects: quitting removes these, not events that only look the same
       incidentEvents = new Set(useApp.getState().scenario.events ?? []);
       // Run in slices of ~12 ms of real time, so the page still answers input (a busy incident
@@ -223,25 +223,25 @@ function NodeMetrics({ windows, design, id }: { windows: WindowStat[]; design: D
   return (
     <div className="mt-1" data-testid={`oncall-metrics-${id}`}>
       <Chart
-        title={t('每秒請求與失敗')}
+        title={t('Requests and failures each second')}
         height={110}
         data={[xs, s.map((x) => x.rps), s.map((x) => x.fail)]}
         series={[
-          { label: t('每秒請求'), color: 'var(--ink-3)' },
-          { label: t('失敗'), color: 'var(--bad)', fill: true },
+          { label: t('Requests per second'), color: 'var(--ink-3)' },
+          { label: t('Failures'), color: 'var(--bad)', fill: true },
         ]}
       />
       {hasUtil && (
         <Chart
-          title={insts ? t('使用率（每台）') : t('使用率')}
+          title={insts ? t('Utilisation (each instance)') : t('Utilisation')}
           height={110}
           yMax={1.05}
           unit="%"
           data={insts ? [xs, ...Array.from({ length: insts }, (_, i) => s.map((x) => x.instUtil?.[i] ?? null))] : [xs, s.map((x) => x.util ?? null)]}
-          series={insts ? Array.from({ length: insts }, (_, i) => ({ label: `#${i}`, color: PALETTE[i % PALETTE.length] })) : [{ label: t('使用率'), color: 'var(--accent)' }]}
+          series={insts ? Array.from({ length: insts }, (_, i) => ({ label: `#${i}`, color: PALETTE[i % PALETTE.length] })) : [{ label: t('Utilisation'), color: 'var(--accent)' }]}
         />
       )}
-      {hasQueue && <Chart title={t('排隊中')} height={110} data={[xs, s.map((x) => x.queue ?? null)]} series={[{ label: t('排隊中'), color: 'var(--warn)' }]} />}
+      {hasQueue && <Chart title={t('Queued')} height={110} data={[xs, s.map((x) => x.queue ?? null)]} series={[{ label: t('Queued'), color: 'var(--warn)' }]} />}
     </div>
   );
 }
@@ -264,21 +264,21 @@ function Watch() {
         <Siren size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--bad)' }} />
         {/* the example's name can tell the cause (e.g. "slow dependency"): shown only after the answer */}
         <span>
-          {revealed && <span className="faint block text-[13px]">{t('系統：{name}', { name: design.name })}</span>}
+          {revealed && <span className="faint block text-[13px]">{t('System: {name}', { name: design.name })}</span>}
           {t(inc.title)}
         </span>
       </div>
-      <Chart testId="oncall-errors" title={t('使用者看到的失敗率')} height={120} yMax={1.05} unit="%" data={[xs, sym.map((x) => x.errorRate)]} series={[{ label: t('失敗率'), color: 'var(--bad)', fill: true }]} />
-      <Chart testId="oncall-p99" title={t('使用者看到的 p99')} height={120} unit="ms" data={[xs, sym.map((x) => x.p99)]} series={[{ label: 'p99', color: 'var(--warn)' }]} />
+      <Chart testId="oncall-errors" title={t('Error rate that users see')} height={120} yMax={1.05} unit="%" data={[xs, sym.map((x) => x.errorRate)]} series={[{ label: t('Error rate@@failure'), color: 'var(--bad)', fill: true }]} />
+      <Chart testId="oncall-p99" title={t('p99 that users see')} height={120} unit="ms" data={[xs, sym.map((x) => x.p99)]} series={[{ label: 'p99', color: 'var(--warn)' }]} />
 
-      <div className="mt-3 text-[14px] font-medium">{t('元件')}</div>
+      <div className="mt-3 text-[14px] font-medium">{t('Component')}</div>
       <div className="faint text-[13px]" data-testid="oncall-score-rule">
-        {t('前 {free} 個元件的指標免費；第 {next} 個起，每打開一個扣 {n} 分。', { free: POINTS.free, next: POINTS.free + 1, n: -POINTS.open })}{' '}
-        {t('已打開 {k} 個。', { k: st.opened.length })}
+        {t('The metrics of the first {free} components are free; from component {next} on, each one you open costs {n} points.', { free: POINTS.free, next: POINTS.free + 1, n: -POINTS.open })}{' '}
+        {t('Opened: {k}.', { k: st.opened.length })}
       </div>
       {!revealed && (
         <div className="faint text-[13px]" data-testid="oncall-canvas-note">
-          {t('畫布上就是這個系統。在畫布上按「執行」會重現問題，也會看到每個元件的指標：算打開全部元件（−{n} 分）。', { n: -openCost(design.nodes.length) })}
+          {t('The canvas holds this system. "Run" there shows the same problem, and every component\'s metrics too: it counts as opening them all (−{n} points).', { n: -openCost(design.nodes.length) })}
         </div>
       )}
       <ul className="mt-1 space-y-1">
@@ -293,7 +293,7 @@ function Watch() {
                 {!opened && !revealed && (
                   <button className="btn text-[13px]" onClick={() => st.open(n.id)} data-testid={`oncall-open-${n.id}`}>
                     <Eye size={12} />
-                    {st.opened.length < POINTS.free ? t('打開指標（免費）') : t('打開指標（−{n} 分）', { n: -POINTS.open })}
+                    {st.opened.length < POINTS.free ? t('Open metrics (free)') : t('Open metrics (−{n} points)', { n: -POINTS.open })}
                   </button>
                 )}
               </div>
@@ -303,30 +303,30 @@ function Watch() {
         })}
       </ul>
 
-      <div className="mt-3 text-[14px] font-medium">{t('你的判斷')}</div>
-      <div className="mt-1 text-[13px]">{t('哪個元件出問題？')}</div>
+      <div className="mt-3 text-[14px] font-medium">{t('Your call')}</div>
+      <div className="mt-1 text-[13px]">{t('Which component has the problem?')}</div>
       <div className="mt-1 flex flex-wrap gap-1">
         {design.nodes.map((n) => {
           const right = revealed && n.id === inc.answer.node;
           const wrong = revealed && st.node === n.id && !right;
           return (
             <button key={n.id} className={`btn text-[13px] ${st.node === n.id ? 'btn-on' : ''}`} onClick={() => st.pick({ node: n.id })} disabled={revealed} aria-pressed={st.node === n.id} data-testid={`oncall-node-${n.id}`}>
-              {right && <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('答案')} />}
-              {wrong && <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('你猜的')} />}
+              {right && <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('Answer')} />}
+              {wrong && <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('Your guess')} />}
               {name(n.id)}
             </button>
           );
         })}
       </div>
-      <div className="mt-2 text-[13px]">{t('是哪種故障？')}</div>
+      <div className="mt-2 text-[13px]">{t('What kind of fault?')}</div>
       <div className="mt-1 flex flex-col gap-1">
         {FAULTS.map((f) => {
           const right = revealed && f.id === inc.answer.fault;
           const wrong = revealed && st.fault === f.id && !right;
           return (
             <button key={f.id} className={`btn justify-start text-left text-[13px] ${st.fault === f.id ? 'btn-on' : ''}`} onClick={() => st.pick({ fault: f.id })} disabled={revealed} aria-pressed={st.fault === f.id} data-testid={`oncall-fault-${f.id}`}>
-              {right && <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('答案')} />}
-              {wrong && <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('你猜的')} />}
+              {right && <CircleCheck size={12} style={{ color: 'var(--ok)' }} aria-label={t('Answer')} />}
+              {wrong && <CircleX size={12} style={{ color: 'var(--bad)' }} aria-label={t('Your guess')} />}
               {t(f.text)}
             </button>
           );
@@ -334,51 +334,51 @@ function Watch() {
       </div>
       {!revealed && (
         <button className="btn btn-primary mt-2" onClick={st.answer} disabled={!st.node || !st.fault} data-testid="oncall-answer">
-          {t('送出答案')}
+          {t('Submit')}
         </button>
       )}
 
       {sc && (
         <div className="mt-3 text-[14px] leading-snug" data-testid="oncall-reveal">
           <div className="font-medium" data-testid="oncall-score">
-            {t('得分：{n}', { n: sc.total })}
+            {t('Score: {n}', { n: sc.total })}
           </div>
           <ul className="muted mt-0.5 text-[13px]">
-            <li>{sc.node ? t('元件答對 +{n}', { n: POINTS.node }) : t('元件答錯：是「{name}」', { name: name(inc.answer.node) })}</li>
-            <li>{sc.fault ? t('故障種類答對 +{n}', { n: POINTS.fault }) : t('故障種類答錯：是「{f}」', { f: t(FAULTS.find((f) => f.id === inc.answer.fault)!.text) })}</li>
-            {sc.opened > 0 && <li>{openCost(sc.opened) < 0 ? t('打開 {k} 個元件（前 {free} 個免費）{n}', { k: sc.opened, free: POINTS.free, n: openCost(sc.opened) }) : t('打開 {k} 個元件（免費）', { k: sc.opened })}</li>}
-            {sc.fixed && <li>{t('修好了 +{n}', { n: POINTS.fix })}</li>}
+            <li>{sc.node ? t('Right component +{n}', { n: POINTS.node }) : t('Wrong component: it was "{name}"', { name: name(inc.answer.node) })}</li>
+            <li>{sc.fault ? t('Right kind of fault +{n}', { n: POINTS.fault }) : t('Wrong kind of fault: it was "{f}"', { f: t(FAULTS.find((f) => f.id === inc.answer.fault)!.text) })}</li>
+            {sc.opened > 0 && <li>{openCost(sc.opened) < 0 ? t('Opened {k} components (the first {free} free) {n}', { k: sc.opened, free: POINTS.free, n: openCost(sc.opened) }) : t('Opened {k} components (free)', { k: sc.opened })}</li>}
+            {sc.fixed && <li>{t('Fixed +{n}', { n: POINTS.fix })}</li>}
           </ul>
           <div className="mt-1.5">{t(inc.explain)}</div>
           <div className="mt-1.5">
-            <span className="font-medium">{t('怎麼修：')}</span>
+            <span className="font-medium">{t('How to fix it: ')}</span>
             {t(inc.hint)}
           </div>
           {/* fixed once: the points are earned, and a later attempt is not judged again */}
           {!st.fixing && !st.fixed && (
             <button className="btn mt-2" onClick={st.fixOnCanvas} data-testid="oncall-fix">
               <Wrench size={12} />
-              {t('在畫布上修（+{n} 分）', { n: POINTS.fix })}
+              {t('Fix it on the canvas (+{n} points)', { n: POINTS.fix })}
             </button>
           )}
           {st.fixing && !st.fixed && (
             <div className="mt-2" style={{ color: 'var(--warn-ink)' }} data-testid="oncall-fixing">
-              {t('設計和情境已經載入畫布。改設計、按「執行」：整場失敗率不超過 {e}{p}，而且沒有刪掉元件，就加 {n} 分。', {
+              {t('The design and the scenario are on the canvas. Change the design and press "Run": with an error rate of at most {e}{p} for the whole run, and no component deleted, you get {n} more points.', {
                 e: pctText(inc.fixGoal.maxErrorRate),
-                p: inc.fixGoal.maxP99Ms ? t('、p99 不超過 {ms} ms', { ms: inc.fixGoal.maxP99Ms }) : '',
+                p: inc.fixGoal.maxP99Ms ? t(', p99 at most {ms} ms', { ms: inc.fixGoal.maxP99Ms }) : '',
                 n: POINTS.fix,
               })}
             </div>
           )}
           {st.fixed && (
             <div className="mt-2 font-medium" style={{ color: 'var(--ok-ink)' }} data-testid="oncall-fixed">
-              {t('修好了！')}
+              {t('Fixed!')}
             </div>
           )}
         </div>
       )}
       <button className="btn mt-3 text-[13px]" onClick={st.quit} data-testid="oncall-quit">
-        {t('換一題')}
+        {t('Another incident')}
       </button>
     </div>
   );
@@ -398,15 +398,15 @@ export function OnCall({ onStart }: { onStart?: () => void }) {
   const start = useOnCall((s) => s.start);
   return (
     <section data-testid="oncall">
-      <div className="text-[15px] font-semibold">{t('值班練習')}</div>
+      <div className="text-[15px] font-semibold">{t('On-call practice')}</div>
       <div className="muted mt-0.5 text-[13px] leading-snug">
-        {t('系統裡偷偷放了一個故障。你只看得到使用者的失敗率和 p99；要看元件的指標得花點數。找出哪個元件、哪種故障，再到畫布上修好。')}
+        {t('A fault is hidden in the system. You see only the users\' error rate and p99; a component\'s own metrics cost points. Find the component and the kind of fault, then fix it on the canvas.')}
       </div>
       <ul className="mt-2.5 space-y-2">
         {INCIDENTS.map((inc, i) => (
           <li key={inc.id}>
             <PracticeItem
-              title={t('第 {i} 題', { i: i + 1 })}
+              title={t('Incident {i}', { i: i + 1 })}
               about={alertText(t(inc.title))}
               best={best[inc.id]}
               on={phase !== 'idle' && id === inc.id}
@@ -435,18 +435,18 @@ export function OnCallCard() {
     <div className="card sd-float sd-float-tall flex flex-col text-[14px]" data-testid="oncall-card">
       <div className="flex shrink-0 items-center gap-2 py-2 pl-3 pr-2">
         <Siren size={15} className="shrink-0" style={{ color: 'var(--bad)' }} />
-        <span className="font-medium">{t('值班練習')}</span>
+        <span className="font-medium">{t('On-call practice')}</span>
         <button className="btn ml-auto text-[13px]" onClick={() => setFolded(!folded)} aria-expanded={!folded} data-testid="oncall-fold">
           {folded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
-          {folded ? t('展開') : t('收合')}
+          {folded ? t('Expand') : t('Collapse')}
         </button>
-        <button className="btn px-1.5" onClick={quit} aria-label={t('結束值班練習')} title={t('結束值班練習')} data-testid="oncall-close">
+        <button className="btn px-1.5" onClick={quit} aria-label={t('End on-call practice')} title={t('End on-call practice')} data-testid="oncall-close">
           <X size={14} />
         </button>
       </div>
       {!folded && (
         <div className="min-h-0 overflow-y-auto px-3 pb-2.5">
-          {phase === 'running' && <div className="muted mt-1 text-[14px]" data-testid="oncall-running">{t('收到告警，正在取得資料…')}</div>}
+          {phase === 'running' && <div className="muted mt-1 text-[14px]" data-testid="oncall-running">{t('Paged. Getting the data…')}</div>}
           {(phase === 'watch' || phase === 'revealed') && <Watch />}
         </div>
       )}

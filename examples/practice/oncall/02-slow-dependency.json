@@ -1,43 +1,20 @@
 {
   "schema": "loadsketch/incident@1",
   "id": "slow-dependency",
-  "title": "值班告警：第 20 秒起，大部分請求失敗，p99 升到約 3 秒。",
+  "title": "Page: from 20 s, most requests fail and p99 goes up to about 3 s.",
   "example": "slow-dependency",
   "scenario": {
     "schema": "loadsketch/scenario@1",
-    "name": "值班：大部分失敗",
+    "name": "On-call: most requests fail",
     "seed": 1,
     "durationS": 60,
     "warmupS": 5,
-    "traffic": {
-      "rps": 1500,
-      "readRatio": 0.9
-    },
-    "events": [
-      {
-        "type": "slow",
-        "atS": 20,
-        "node": "recs",
-        "multiplier": 30
-      }
-    ]
+    "traffic": { "rps": 1500, "readRatio": 0.9 },
+    "events": [{ "type": "slow", "atS": 20, "node": "recs", "multiplier": 30 }]
   },
-  "answer": {
-    "node": "recs",
-    "fault": "slow"
-  },
-  "explain": "推薦服務（recs）整個變慢 30 倍。API 每個請求都要等它，逾時 1 秒；等待中的請求佔住 API 的槽，API 的佇列滿了，連不需要推薦的請求也一起失敗。API 的使用率很高，但它是受害者：佔住它的是在等 recs 的請求。",
-  "hint": "把 API → recs 的逾時調短（例如 100 ms），並打開降級回應：推薦拿不到就先回沒有推薦的頁面。",
-  "solution": [
-    {
-      "edge": "api->recs",
-      "set": {
-        "timeoutMs": 100,
-        "fallback": "on"
-      }
-    }
-  ],
-  "fixGoal": {
-    "maxErrorRate": 0.01
-  }
+  "answer": { "node": "recs", "fault": "slow" },
+  "explain": "The whole recommendation service (recs) is 30× slower. Each API request waits for it, with a 1 s timeout; the waiting requests hold the API's slots, the API's queue fills up, and even requests that need no recommendations fail. The API is very busy, but it is the victim: the requests that hold it are waiting for recs.",
+  "hint": "Make the API → recs timeout short (for example 100 ms) and turn on the fallback: without recommendations, return the page without them.",
+  "solution": [{ "edge": "api->recs", "set": { "timeoutMs": 100, "fallback": "on" } }],
+  "fixGoal": { "maxErrorRate": 0.01 }
 }

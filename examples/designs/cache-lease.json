@@ -1,14 +1,14 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "快取 lease＋TTL jitter",
-  "description": "和「快取擊穿」一樣，只多了兩個設定。Lease：熱門 key 過期時，第一個沒命中的請求拿到 lease 去查 DB，其他的每 20 ms 再問一次 Redis，等它寫回。每次過期只查 DB 一次，DB 從約 61 rps 降到約 23 rps，沒有失敗。TTL jitter 0.2：一開始一起寫入的 key 不會在第 10、20、30 秒一起過期，DB 的尖峰變低、變平均。代價：等待的請求多花幾十 ms。",
+  "name": "Cache lease + TTL jitter",
+  "description": "Same as \"Cache stampede\", with two more settings. Lease: when a hot key expires, the first miss gets a lease and reads the DB; the others ask Redis again every 20 ms until the value is written back. Each expiry reads the DB once: DB load drops from about 61 rps to about 23 rps, and nothing fails. TTL jitter 0.2: keys written together at the start do not all expire at second 10, 20 and 30, so DB peaks are lower and more even. The cost: waiting requests take tens of ms longer.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
-    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [300, 200] },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [600, 200],
       "params": {
         "instances": 4,

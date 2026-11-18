@@ -172,7 +172,7 @@ Token 定義在 `src/app/index.css` 的 `:root` 和 `:root.dark`。顏色值跟�
 3. 彈性只在 `transform` 上。
 4. 新動畫加進了 `prefers-reduced-motion` 的關閉清單。
 5. 深色和淺色主題都截圖看過（headless）。
-6. 介面文字用 `t()`，英文補在 `src/i18n/en.ts`。
+6. 介面文字用英文寫在 `t()` 裡，繁中補在 `src/i18n/zh-TW.ts`。
 7. 移動或改名了 `data-testid` 時，一起改 `e2e/app.spec.ts`。
 8. 跑過 `npm run test:quick` 和 `npx playwright test`。
 9. 卡片多的範例（例如 `saas-stripe`）平移和縮放仍然順暢。

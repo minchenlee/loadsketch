@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "熱門 key 過期：3,000 rps，少數 key 特別熱",
+  "name": "Hot key expiry: 3,000 rps, a few keys are very hot",
   "seed": 1,
   "durationS": 60,
   "warmupS": 0,

@@ -1,69 +1,26 @@
 {
   "schema": "loadsketch/problem@1",
   "id": "retry-budget",
-  "title": "重試風暴，兩人團隊",
-  "text": "2 人團隊，兩週。每秒 600 個請求，第 20 秒起有 10 秒變成 3 倍；每一跳都重試 3 次，系統被重試塞爆，之後也沒有恢復。整場失敗率 ≤ 1%、p99 ≤ 300 ms，每月不超過 $850，複雜度不超過 7 點。",
+  "title": "A retry storm, a team of two",
+  "text": "A team of 2, two weeks. 600 requests per second, 3× for 10 s from 20 s; every hop retries 3 times, the retries choke the system, and it does not recover. Error rate ≤ 1% and p99 ≤ 300 ms for the whole run, at most $850 a month, at most 7 complexity points.",
   "example": "retry-storm",
   "scenario": {
     "schema": "loadsketch/scenario@1",
-    "name": "限制：重試風暴",
+    "name": "Constraints: a retry storm",
     "seed": 3,
     "durationS": 90,
     "warmupS": 0,
-    "traffic": {
-      "rps": 600,
-      "readRatio": 0.9,
-      "clientTimeoutMs": 1000
-    },
-    "events": [
-      {
-        "type": "spike",
-        "atS": 20,
-        "forS": 10,
-        "multiplier": 3
-      }
-    ]
+    "traffic": { "rps": 600, "readRatio": 0.9, "clientTimeoutMs": 1000 },
+    "events": [{ "type": "spike", "atS": 20, "forS": 10, "multiplier": 3 }]
   },
   "start": [],
-  "limits": {
-    "maxErrorRate": 0.01,
-    "maxP99Ms": 300,
-    "budgetPerMonth": 850,
-    "maxPoints": 7
-  },
-  "hint": "加機器能撐住，但超出預算；每一跳加重試預算又超出點數。先拿掉放大流量的重試，再把每台 API Server 的同時處理數調大一點（比加一台便宜）。",
+  "limits": { "maxErrorRate": 0.01, "maxP99Ms": 300, "budgetPerMonth": 850, "maxPoints": 7 },
+  "hint": "More machines hold the load but go over the budget; a retry budget on every hop goes over the points. First remove the retries that multiply the load, then raise each API Server's concurrency a little (cheaper than another instance).",
   "solution": [
-    {
-      "edge": "lb->api",
-      "set": {
-        "retries": 0
-      }
-    },
-    {
-      "edge": "api->cache",
-      "set": {
-        "retries": 0
-      }
-    },
-    {
-      "edge": "api->db",
-      "set": {
-        "retries": 0
-      }
-    },
-    {
-      "node": "api",
-      "params": {
-        "concurrency": 8
-      }
-    }
+    { "edge": "lb->api", "set": { "retries": 0 } },
+    { "edge": "api->cache", "set": { "retries": 0 } },
+    { "edge": "api->db", "set": { "retries": 0 } },
+    { "node": "api", "params": { "concurrency": 8 } }
   ],
-  "naive": [
-    {
-      "node": "api",
-      "params": {
-        "instances": 6
-      }
-    }
-  ]
+  "naive": [{ "node": "api", "params": { "instances": 6 } }]
 }

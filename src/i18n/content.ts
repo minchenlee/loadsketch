@@ -1,5 +1,5 @@
 // Display text that lives in design and scenario files (example names, descriptions, node labels,
-// notes). The bundled examples are written in Chinese, so their text is a message id too; a
+// notes). The bundled examples are written in English, so their text is a message id too; a
 // user's own text has no catalog entry and stays as written.
 import type { Design, Scenario } from '../schema/design.ts';
 import { t } from './index.ts';

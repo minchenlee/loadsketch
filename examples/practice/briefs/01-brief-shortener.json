@@ -1,200 +1,79 @@
 {
   "schema": "loadsketch/brief@1",
   "id": "brief-shortener",
-  "title": "需求：短網址",
-  "text": "2 人團隊，一個月後上線。做一個短網址服務。",
+  "title": "Brief: URL shortener",
+  "text": "A team of 2, live in one month. Build a URL shortener.",
   "functional": [
-    "使用者能把一個長網址換成短網址",
-    "使用者點短網址，會被帶到原本的網址"
+    "Users can turn a long URL into a short one",
+    "A user who opens a short URL is sent to the original URL"
   ],
-  "load": [
-    "每秒 20,000 個請求，95% 是點短網址（讀取），5% 是建立（寫入）"
-  ],
+  "load": ["20,000 requests a second: 95% open a short URL (reads), 5% create one (writes)"],
   "given": [
-    "你的程式處理一個請求平均 5 ms",
-    "資料庫讀一筆 3 ms、寫一筆 10 ms",
-    "快取命中率最高 90%"
+    "Your code takes 5 ms on average for one request",
+    "A database read takes 3 ms and a write 10 ms",
+    "The cache hit ratio is 90% at most"
   ],
-  "outOfScope": [
-    "登入和帳號",
-    "點擊統計",
-    "自訂短碼"
-  ],
+  "outOfScope": ["Sign-in and accounts", "Click statistics", "Custom short codes"],
   "scenario": {
     "schema": "loadsketch/scenario@1",
-    "name": "需求：短網址",
+    "name": "Brief: URL shortener",
     "seed": 1,
     "durationS": 30,
     "warmupS": 5,
-    "traffic": {
-      "rps": 20000,
-      "readRatio": 0.95
-    }
+    "traffic": { "rps": 20000, "readRatio": 0.95 }
   },
-  "limits": {
-    "maxErrorRate": 0.01,
-    "maxP99Ms": 100,
-    "budgetPerMonth": 10600,
-    "maxPoints": 6
-  },
+  "limits": { "maxErrorRate": 0.01, "maxP99Ms": 100, "budgetPerMonth": 10600, "maxPoints": 6 },
   "start": {
     "schema": "loadsketch/design@1",
-    "name": "需求：短網址",
-    "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      }
-    ],
+    "name": "Brief: URL shortener",
+    "nodes": [{ "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] }],
     "edges": []
   },
   "fixed": [],
-  "needs": [
-    {
-      "kind": "stored"
-    },
-    {
-      "kind": "looked"
-    },
-    {
-      "kind": "not-degraded"
-    }
-  ],
-  "hint": "先估容量。API 處理一個請求時，除了自己的 5 ms，還要等快取或資料庫回應，平均大約佔住位子 7 ms。每秒 20,000 個請求 × 7 ms = 同時要處理約 140 個，預設的 2 台不夠。資料庫：讀取每秒 19,000 次 × 3 ms = 57 條連線，寫入每秒 1,000 次 × 10 ms = 10 條，一共 67 條，預設只有 50 條。可以把資料庫開大，也可以在前面放快取擋掉九成的讀取；兩種都算算看，價錢差不多。",
+  "needs": [{ "kind": "stored" }, { "kind": "looked" }, { "kind": "not-degraded" }],
+  "hint": "Estimate the capacity first. While the API handles a request it also waits for the cache or the database, so it holds a slot for about 7 ms, not only its own 5 ms. 20,000 requests per second × 7 ms = about 140 in progress at one time; the default 2 instances are not enough. The database: 19,000 reads per second × 3 ms = 57 connections, and 1,000 writes per second × 10 ms = 10 more: 67 in all, and the default is 50. You can make the database larger, or put a cache in front to take 90% of the reads. Work out both; the prices are close.",
   "reference": {
     "schema": "loadsketch/design@1",
-    "name": "需求：短網址",
+    "name": "Brief: URL shortener",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
-      {
-        "id": "lb",
-        "kind": "load_balancer",
-        "label": "負載平衡器",
-        "pos": [
-          270,
-          200
-        ]
-      },
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
+      { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [270, 200] },
       {
         "id": "api",
         "kind": "service",
-        "label": "轉址 API",
-        "pos": [
-          540,
-          200
-        ],
-        "params": {
-          "instances": 5
-        }
+        "label": "Redirect API",
+        "pos": [540, 200],
+        "params": { "instances": 5 }
       },
       {
         "id": "cache",
         "kind": "cache",
-        "label": "快取（短碼 → 網址）",
-        "pos": [
-          810,
-          80
-        ],
-        "params": {
-          "instances": 2
-        }
+        "label": "Cache (code → URL)",
+        "pos": [810, 80],
+        "params": { "instances": 2 }
       },
-      {
-        "id": "db",
-        "kind": "database",
-        "label": "網址資料庫",
-        "pos": [
-          810,
-          320
-        ]
-      }
+      { "id": "db", "kind": "database", "label": "URL database", "pos": [810, 320] }
     ],
     "edges": [
-      {
-        "from": "users",
-        "to": "lb"
-      },
-      {
-        "from": "lb",
-        "to": "api"
-      },
-      {
-        "from": "api",
-        "to": "cache"
-      },
-      {
-        "from": "api",
-        "to": "db"
-      }
+      { "from": "users", "to": "lb" },
+      { "from": "lb", "to": "api" },
+      { "from": "api", "to": "cache" },
+      { "from": "api", "to": "db" }
     ]
   },
   "naive": {
     "schema": "loadsketch/design@1",
-    "name": "需求：短網址",
+    "name": "Brief: URL shortener",
     "nodes": [
-      {
-        "id": "users",
-        "kind": "client",
-        "label": "使用者",
-        "pos": [
-          0,
-          200
-        ]
-      },
-      {
-        "id": "lb",
-        "kind": "load_balancer",
-        "label": "負載平衡器",
-        "pos": [
-          270,
-          200
-        ]
-      },
-      {
-        "id": "api",
-        "kind": "service",
-        "label": "轉址 API",
-        "pos": [
-          540,
-          200
-        ]
-      },
-      {
-        "id": "db",
-        "kind": "database",
-        "label": "網址資料庫",
-        "pos": [
-          810,
-          200
-        ]
-      }
+      { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
+      { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [270, 200] },
+      { "id": "api", "kind": "service", "label": "Redirect API", "pos": [540, 200] },
+      { "id": "db", "kind": "database", "label": "URL database", "pos": [810, 200] }
     ],
     "edges": [
-      {
-        "from": "users",
-        "to": "lb"
-      },
-      {
-        "from": "lb",
-        "to": "api"
-      },
-      {
-        "from": "api",
-        "to": "db"
-      }
+      { "from": "users", "to": "lb" },
+      { "from": "lb", "to": "api" },
+      { "from": "api", "to": "db" }
     ]
   }
 }

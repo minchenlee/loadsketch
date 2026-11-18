@@ -18,15 +18,15 @@ export function PracticeItem({ title, about, best, on, onClick, testId }: { titl
         {on ? (
           <span style={{ color: 'var(--accent)' }} className="flex items-center gap-1">
             <Play size={11} />
-            {t('進行中')}
+            {t('In progress')}
           </span>
         ) : best !== undefined ? (
           <span style={{ color: 'var(--ok-ink)' }} className="flex items-center gap-1">
             <Trophy size={11} />
-            {t('最高 {n} 分', { n: best })}
+            {t('best {n}', { n: best })}
           </span>
         ) : (
-          <span className="faint">{t('還沒做')}</span>
+          <span className="faint">{t('not done')}</span>
         )}
       </span>
     </button>

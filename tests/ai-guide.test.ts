@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { GUIDE_EXAMPLE, LLMS_LINKS, REPO, SITE, SKILL_EXAMPLE, SKILL_NAME, aiGuide, aiPrompt, llmsIndex, referenceMd, skillMd } from '../src/schema/aiGuide.ts';
 import { aiGuideFiles } from '../scripts/ai-guide.ts';
 import { readStoredZip } from '../scripts/zip.ts';
-import { EN } from '../src/i18n/en.ts';
+import { ZH } from '../src/i18n/zh-TW.ts';
 import { EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { ApiSchema, DesignSchema, EdgeSchema, NodeSchema, NoteSchema, parseDesign } from '../src/schema/design.ts';
 
@@ -196,9 +196,9 @@ describe('agent skill', () => {
 
   it('the steps name the menus and buttons by their English text in the app', () => {
     const steps = part(skillMd(), '## Steps');
-    for (const zh of ['檔案', '貼上設計 JSON', '只複製設計 JSON', '存成 JSON', '換掉畫布']) {
-      const en = zh === '檔案' ? `${EN[zh]} →` : `"${EN[zh]}"`;
-      expect(steps, zh).toContain(en);
+    for (const en of ['File', 'Paste design JSON', 'Copy only the design JSON', 'Save as JSON', 'Replace the canvas']) {
+      expect(ZH[en], en).toBeTruthy();
+      expect(steps, en).toContain(en === 'File' ? `${en} →` : `"${en}"`);
     }
   });
 

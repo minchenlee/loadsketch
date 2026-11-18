@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "開賣：第 15 秒起流量變 10 倍，持續 20 秒",
+  "name": "On sale: traffic ×10 from second 15 for 20 s",
   "seed": 1,
   "durationS": 60,
   "traffic": { "rps": 400, "readRatio": 0.6 },

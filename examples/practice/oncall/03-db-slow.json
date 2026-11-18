@@ -1,54 +1,24 @@
 {
   "schema": "loadsketch/incident@1",
   "id": "db-slow",
-  "title": "值班告警：第 20 秒起，三到四成的請求失敗，p99 升到約 3 秒。",
+  "title": "Page: from 20 s, 30–40% of requests fail and p99 goes up to about 3 s.",
   "example": "three-tier",
   "scenario": {
     "schema": "loadsketch/scenario@1",
-    "name": "值班：失敗又變慢",
+    "name": "On-call: failures and slower",
     "seed": 1,
     "durationS": 60,
     "warmupS": 5,
-    "traffic": {
-      "rps": 400,
-      "readRatio": 0.9
-    },
-    "events": [
-      {
-        "type": "slow",
-        "atS": 20,
-        "node": "db",
-        "multiplier": 20
-      }
-    ]
+    "traffic": { "rps": 400, "readRatio": 0.9 },
+    "events": [{ "type": "slow", "atS": 20, "node": "db", "multiplier": 20 }]
   },
-  "answer": {
-    "node": "db",
-    "fault": "slow"
-  },
-  "explain": "資料庫整個變慢 20 倍。快取沒命中的讀取和全部寫入都要等它，等到 API → db 的逾時（500 ms）就失敗；等待的請求佔住 API 的槽，後面的請求跟著排隊。打開資料庫的指標：使用率和排隊數都比之前高很多，但它自己沒有失敗（放棄的是呼叫它的 API）。",
-  "hint": "資料庫變慢了，但沒有壞，也沒有滿。失敗是因為 500 ms 的逾時現在比一次寫入還短，而且在等的請求佔滿 API 的槽。把 API Server 的同時處理數調大（例如 64），並把逾時放寬到等得到回應（API → db 3 秒，負載平衡器 → API 4 秒）：使用者會變慢，但不會失敗。另一個做法：API → db 的逾時調短，並打開降級回應。",
+  "answer": { "node": "db", "fault": "slow" },
+  "explain": "The whole database is 20× slower. Reads that miss the cache and all writes wait for it and fail at the API → db timeout (500 ms); the waiting requests hold the API's slots, and the requests behind them queue. Open the database's metrics: utilisation and the queue are much higher than before, but it does not fail itself (the API that calls it gives up).",
+  "hint": "The database is slow, but it is not down and it is not full. Requests fail because the 500 ms timeout is now shorter than one write, and the waiting requests fill the API slots. Raise the API server's concurrency (for example 64) and make the timeouts long enough to get the reply (API → db 3 s, load balancer → API 4 s): users wait longer, but their requests do not fail. Another way: shorten the API → db timeout and turn on the fallback response.",
   "solution": [
-    {
-      "node": "api",
-      "params": {
-        "concurrency": 64
-      }
-    },
-    {
-      "edge": "api->db",
-      "set": {
-        "timeoutMs": 3000
-      }
-    },
-    {
-      "edge": "lb->api",
-      "set": {
-        "timeoutMs": 4000
-      }
-    }
+    { "node": "api", "params": { "concurrency": 64 } },
+    { "edge": "api->db", "set": { "timeoutMs": 3000 } },
+    { "edge": "lb->api", "set": { "timeoutMs": 4000 } }
   ],
-  "fixGoal": {
-    "maxErrorRate": 0.02
-  }
+  "fixGoal": { "maxErrorRate": 0.02 }
 }

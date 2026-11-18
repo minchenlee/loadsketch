@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "過載：第 20 秒起流量 2 倍，持續 40 秒",
+  "name": "Overload: traffic 2× from second 20, for 40 seconds",
   "seed": 1,
   "durationS": 80,
   "warmupS": 0,

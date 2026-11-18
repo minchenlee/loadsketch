@@ -26,16 +26,16 @@ export function stripFence(text: string): string {
 export const MAX_PASTE_CHARS = 2 * 1024 * 1024;
 
 export function readPasted(text: string): PasteResult {
-  if (text.length > MAX_PASTE_CHARS) return { ok: false, problems: [t('貼上的內容太大（{mb} MB）。一份設計最多 {max} MB：只貼設計的 JSON。', { mb: (text.length / 1024 / 1024).toFixed(1), max: MAX_PASTE_CHARS / 1024 / 1024 })] };
+  if (text.length > MAX_PASTE_CHARS) return { ok: false, problems: [t('The paste is too big ({mb} MB). A design is at most {max} MB: paste only the design\'s JSON.', { mb: (text.length / 1024 / 1024).toFixed(1), max: MAX_PASTE_CHARS / 1024 / 1024 })] };
   const src = stripFence(text);
-  if (!src) return { ok: false, problems: [t('沒有內容。貼上一份設計的 JSON。')] };
+  if (!src) return { ok: false, problems: [t('Nothing here. Paste the JSON of a design.')] };
   let value: unknown;
   try {
     value = JSON.parse(src);
   } catch (e) {
     return { ok: false, problems: [jsonProblem(src, (e as Error).message)] };
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, problems: [t('這段 JSON 不是一份設計：設計是一個物件，裡面有 schema、name、nodes 和 edges。')] };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, problems: [t('This JSON is not a design: a design is an object with schema, name, nodes and edges.')] };
   const r = DesignSchema.safeParse(value);
   if (!r.success) return { ok: false, problems: limit(r.error.issues.map((i) => schemaProblem(value as Record<string, unknown>, i))) };
   const d = value as Design;
@@ -47,7 +47,7 @@ export function readPasted(text: string): PasteResult {
 
 function limit(list: string[]): string[] {
   const uniq = [...new Set(list)];
-  return uniq.length > MAX_PROBLEMS ? [...uniq.slice(0, MAX_PROBLEMS), t('還有 {n} 個問題。先改上面這些。', { n: uniq.length - MAX_PROBLEMS })] : uniq;
+  return uniq.length > MAX_PROBLEMS ? [...uniq.slice(0, MAX_PROBLEMS), t('{n} more problems. Fix the ones above first.', { n: uniq.length - MAX_PROBLEMS })] : uniq;
 }
 
 /** A JSON syntax error: the line and column (each browser words the message differently), and a hint for the usual slips. */
@@ -61,19 +61,19 @@ export function jsonProblem(src: string, message: string): string {
     const before = src.slice(0, +pos[1]).split('\n');
     [line, col] = [before.length, before[before.length - 1].length + 1];
   }
-  const where = line ? t('第 {line} 行第 {col} 個字附近', { line, col: col ?? 1 }) : '';
+  const where = line ? t('near line {line}, column {col}', { line, col: col ?? 1 }) : '';
   // the usual slips are looked for outside the strings: a URL in a description is not a comment
   const bare = blankStrings(src);
   const hint = /,\s*[}\]]/.test(bare)
-    ? t('最後一項後面多了逗號。')
+    ? t('There is a comma after the last item.')
     : /'[^'\n]*'\s*:/.test(bare)
-      ? t('JSON 的名稱和文字要用雙引號 "，不能用單引號。')
+      ? t('Names and text in JSON take double quotes ", not single quotes.')
       : /(^|[{,]\s*)[A-Za-z_][\w-]*\s*:/m.test(bare)
-        ? t('欄位名稱要加雙引號，例如 "nodes"。')
+        ? t('Field names take double quotes, like "nodes".')
         : /\/\/|\/\*/.test(bare)
-          ? t('JSON 不能有註解（// 或 /* */）。')
+          ? t('JSON cannot have comments (// or /* */).')
           : '';
-  return [where ? t('這不是有效的 JSON：{where}有問題。', { where }) : t('這不是有效的 JSON。'), hint].filter(Boolean).join(' ');
+  return [where ? t('This is not valid JSON: something is wrong {where}.', { where }) : t('This is not valid JSON.'), hint].filter(Boolean).join(' ');
 }
 
 /**
@@ -124,27 +124,27 @@ const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.i
 /** Where a path points, in words: the component or line by its id, then the field. */
 export function wherePath(d: Obj, path: PropertyKey[]): string {
   const [top, i, ...rest] = path;
-  const field = (keys: PropertyKey[]) => (keys.length ? t('的「{field}」', { field: keys.map(String).join('.') }) : '');
+  const field = (keys: PropertyKey[]) => (keys.length ? t(', field "{field}"', { field: keys.map(String).join('.') }) : '');
   if (top === 'nodes' && typeof i === 'number') {
     const n = (d.nodes as unknown[])[i];
     const id = isObj(n) && typeof n.id === 'string' ? n.id : '';
     const keys = rest[0] === 'params' ? rest.slice(1) : rest;
-    const head = id ? t('元件「{id}」（第 {n} 個）', { id, n: i + 1 }) : t('第 {n} 個元件', { n: i + 1 });
-    return head + (rest[0] === 'params' && keys.length ? t('的設定「{field}」', { field: keys.map(String).join('.') }) : field(keys));
+    const head = id ? t('Component "{id}" (#{n})', { id, n: i + 1 }) : t('Component #{n}', { n: i + 1 });
+    return head + (rest[0] === 'params' && keys.length ? t(', setting "{field}"', { field: keys.map(String).join('.') }) : field(keys));
   }
   if (top === 'edges' && typeof i === 'number') {
     const e = (d.edges as unknown[])[i];
     const ends = isObj(e) && typeof e.from === 'string' && typeof e.to === 'string' ? `${e.from} → ${e.to}` : '';
-    return (ends ? t('第 {n} 條線（{ends}）', { n: i + 1, ends }) : t('第 {n} 條線', { n: i + 1 })) + field(rest);
+    return (ends ? t('Line #{n} ({ends})', { n: i + 1, ends }) : t('Line #{n}', { n: i + 1 })) + field(rest);
   }
   if (top === 'apis' && typeof i === 'number') {
     const a = (d.apis as unknown[])[i];
     const name = isObj(a) && typeof a.name === 'string' ? a.name : '';
-    return (name ? t('API「{name}」', { name }) : t('第 {n} 個 API', { n: i + 1 })) + field(rest);
+    return (name ? t('API "{name}"', { name }) : t('API #{n}', { n: i + 1 })) + field(rest);
   }
-  if (top === 'notes' && typeof i === 'number') return t('第 {n} 個便利貼', { n: i + 1 }) + field(rest);
-  if (top === undefined) return t('設計');
-  return t('欄位「{field}」', { field: path.map(String).join('.') });
+  if (top === 'notes' && typeof i === 'number') return t('Note #{n}', { n: i + 1 }) + field(rest);
+  if (top === undefined) return t('The design');
+  return t('Field "{field}"', { field: path.map(String).join('.') });
 }
 
 function valueAt(d: unknown, path: PropertyKey[]): unknown {
@@ -155,21 +155,21 @@ function valueAt(d: unknown, path: PropertyKey[]): unknown {
 
 /** A value, as it would be said: text "x", a number, a list… */
 function said(v: unknown): string {
-  if (v === undefined) return t('沒有填');
+  if (v === undefined) return t('missing');
   if (v === null) return 'null';
-  if (typeof v === 'string') return t('文字 "{v}"', { v: v.length > 40 ? `${v.slice(0, 40)}…` : v });
+  if (typeof v === 'string') return t('the text "{v}"', { v: v.length > 40 ? `${v.slice(0, 40)}…` : v });
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (Array.isArray(v)) return t('一個清單');
-  return t('一個物件');
+  if (Array.isArray(v)) return t('a list');
+  return t('an object');
 }
 
 const TYPE_WORD: Record<string, string> = {
-  number: tx('數字'),
-  string: tx('文字'),
-  boolean: tx('true 或 false'),
-  array: tx('清單 [...]'),
-  tuple: tx('清單 [x, y]'),
-  object: tx('物件 {...}'),
+  number: tx('a number'),
+  string: tx('text'),
+  boolean: tx('true or false'),
+  array: tx('a list [...]'),
+  tuple: tx('a list [x, y]'),
+  object: tx('an object {...}'),
 };
 
 /** Zod's own description of a schema (v4: `_zod.def`). */
@@ -246,14 +246,14 @@ function unknownKey(d: Obj, path: PropertyKey[], key: string): string {
   if (top === 'nodes' && typeof i === 'number' && path.length === 2) {
     const n = (d.nodes as unknown[])[i];
     const spec = isObj(n) && typeof n.kind === 'string' ? KINDS[n.kind] : undefined;
-    if (spec && key in spec.params) return t('{where}的「{key}」要放在 "params" 裡面：{"params": {"{key}": …}}。', { where, key });
+    if (spec && key in spec.params) return t('{where}: "{key}" goes inside "params": {"params": {"{key}": …}}.', { where, key });
   }
   const guess = closest(key, knownKeys(d, path));
-  if (guess) return t('{where}沒有「{key}」這個欄位。是不是「{guess}」？', { where, key, guess });
+  if (guess) return t('{where}: there is no field "{key}". Did you mean "{guess}"?', { where, key, guess });
   const known = knownKeys(d, path);
   return known.length
-    ? t('{where}沒有「{key}」這個欄位。可以用的有：{known}。', { where, key, known: known.join(', ') })
-    : t('{where}沒有「{key}」這個欄位。', { where, key });
+    ? t('{where}: there is no field "{key}". The fields are: {known}.', { where, key, known: known.join(', ') })
+    : t('{where}: there is no field "{key}".', { where, key });
 }
 
 /** One schema issue, in plain words. */
@@ -263,22 +263,22 @@ function schemaProblem(d: Obj, issue: z.core.$ZodIssue, prefix: PropertyKey[] = 
   const v = valueAt(d, path);
   switch (issue.code) {
     case 'invalid_type':
-      if (v === undefined) return t('{where}沒有填，這一項一定要有。', { where });
-      return t('{where}要是{type}，現在是{v}。', { where, type: t(TYPE_WORD[issue.expected] ?? issue.expected), v: said(v) });
+      if (v === undefined) return t('{where}: missing, and it is required.', { where });
+      return t('{where}: must be {type}; now it is {v}.', { where, type: t(TYPE_WORD[issue.expected] ?? issue.expected), v: said(v) });
     case 'too_small':
     case 'too_big': {
       const bound = issue.code === 'too_small' ? issue.minimum : issue.maximum;
-      if (Array.isArray(v) || issue.origin === 'array') return issue.code === 'too_small' ? t('{where}至少要有 {n} 項。', { where, n: String(bound) }) : t('{where}最多 {n} 項。', { where, n: String(bound) });
-      if (typeof v === 'string') return issue.code === 'too_small' ? t('{where}不能是空的。', { where }) : t('{where}太長了，最多 {n} 個字。', { where, n: String(bound) });
-      if (issue.code === 'too_small') return issue.inclusive ? t('{where}至少要是 {n}，現在是 {v}。', { where, n: String(bound), v: said(v) }) : t('{where}要大於 {n}，現在是 {v}。', { where, n: String(bound), v: said(v) });
-      return issue.inclusive ? t('{where}最多是 {n}，現在是 {v}。', { where, n: String(bound), v: said(v) }) : t('{where}要小於 {n}，現在是 {v}。', { where, n: String(bound), v: said(v) });
+      if (Array.isArray(v) || issue.origin === 'array') return issue.code === 'too_small' ? t('{where}: at least {n} items.', { where, n: String(bound) }) : t('{where}: at most {n} items.', { where, n: String(bound) });
+      if (typeof v === 'string') return issue.code === 'too_small' ? t('{where}: cannot be empty.', { where }) : t('{where}: too long, at most {n} characters.', { where, n: String(bound) });
+      if (issue.code === 'too_small') return issue.inclusive ? t('{where}: at least {n}; now it is {v}.', { where, n: String(bound), v: said(v) }) : t('{where}: more than {n}; now it is {v}.', { where, n: String(bound), v: said(v) });
+      return issue.inclusive ? t('{where}: at most {n}; now it is {v}.', { where, n: String(bound), v: said(v) }) : t('{where}: less than {n}; now it is {v}.', { where, n: String(bound), v: said(v) });
     }
     case 'unrecognized_keys':
       return issue.keys.map((k) => unknownKey(d, path, k)).join(' ');
     case 'invalid_value': {
       const values = issue.values.map((x) => JSON.stringify(x));
-      if (path.length === 1 && path[0] === 'schema') return t('第一行要寫 "schema": "{schema}"，說這是 loadsketch 的設計。現在是{v}。', { schema: String(issue.values[0]), v: said(v) });
-      return values.length === 1 ? t('{where}要是 {values}，現在是{v}。', { where, values: values[0], v: said(v) }) : t('{where}要是 {values} 其中一個，現在是{v}。', { where, values: values.join('、'), v: said(v) });
+      if (path.length === 1 && path[0] === 'schema') return t('Start with "schema": "{schema}", which says this is a loadsketch design. Now it is {v}.', { schema: String(issue.values[0]), v: said(v) });
+      return values.length === 1 ? t('{where}: must be {values}; now it is {v}.', { where, values: values[0], v: said(v) }) : t('{where}: one of {values}; now it is {v}.', { where, values: values.join('、'), v: said(v) });
     }
     case 'invalid_union': {
       // the kind of a component: name the kinds there are
@@ -286,19 +286,19 @@ function schemaProblem(d: Obj, issue: z.core.$ZodIssue, prefix: PropertyKey[] = 
         const kinds = (issue as { options?: unknown[] }).options?.map(String) ?? Object.keys(KINDS);
         const guess = typeof v === 'string' ? closest(v.replace(/[\s-]/g, '_'), kinds) : undefined;
         return guess
-          ? t('{where}的種類 {v} 不存在。是不是 "{guess}"？', { where: wherePath(d, path.slice(0, -1)), v: JSON.stringify(v), guess })
-          : t('{where}的種類是{v}，沒有這種元件。可以用的種類：{kinds}。', { where: wherePath(d, path.slice(0, -1)), v: said(v), kinds: kinds.join(', ') });
+          ? t('{where}: there is no kind {v}. Did you mean "{guess}"?', { where: wherePath(d, path.slice(0, -1)), v: JSON.stringify(v), guess })
+          : t('{where}: the kind is {v}, and there is no such component. The kinds are: {kinds}.', { where: wherePath(d, path.slice(0, -1)), v: said(v), kinds: kinds.join(', ') });
       }
       // a value with two forms (a number, or {mean, cv}): say what went wrong in the form it has
       const branches = issue.errors.filter((b) => b.length);
       const deepest = branches.sort((a, b) => Math.max(...b.map((x) => x.path.length)) - Math.max(...a.map((x) => x.path.length)))[0];
       if (deepest && deepest.some((x) => x.path.length)) return schemaProblem(d, deepest[0], path);
-      return t('{where}的寫法不對，現在是{v}。', { where, v: said(v) });
+      return t('{where}: not written the right way; now it is {v}.', { where, v: said(v) });
     }
     case 'invalid_format':
       return path[path.length - 1] === 'id' || path[path.length - 2] === 'apis' || ['from', 'to'].includes(String(path[path.length - 1]))
-        ? t('{where}是{v}：id 要用英數字開頭，只能有英數字、底線 _ 和連字號 -，最多 48 個字，不能有空白。', { where, v: said(v) })
-        : t('{where}的格式不對，現在是{v}。', { where, v: said(v) });
+        ? t('{where} is {v}: an id starts with a letter or digit and has only letters, digits, _ and -, at most 48 characters, no spaces.', { where, v: said(v) })
+        : t('{where}: wrong format; now it is {v}.', { where, v: said(v) });
     default:
       return `${where}：${issue.message}`;
   }

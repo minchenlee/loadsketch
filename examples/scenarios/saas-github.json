@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "第 30 秒美東資料中心斷線 43 秒",
+  "name": "At 30 s the US East data center is cut off for 43 s",
   "seed": 1,
   "durationS": 150,
   "warmupS": 10,

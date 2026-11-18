@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "第 20 秒起 shard 0 主庫幾乎不回應，持續 27 秒（把 27 分鐘壓縮成 27 秒）",
+  "name": "From second 20, the primary of shard 0 almost stops answering for 27 seconds (27 minutes compressed into 27 seconds)",
   "seed": 1,
   "durationS": 80,
   "warmupS": 10,

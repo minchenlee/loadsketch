@@ -19,8 +19,8 @@ export function fmtWhen(at: number, now = Date.now()): string {
 
 /** The scenario of a version, as one short line: its name, and the seed when it is not the default. */
 export function scenarioLine(v: Version): string {
-  const name = v.scenario.name ? t(v.scenario.name) : t('自訂');
-  return v.scenario.seed !== undefined && v.scenario.seed !== 1 ? t('{name}，種子 {seed}', { name, seed: v.scenario.seed }) : name;
+  const name = v.scenario.name ? t(v.scenario.name) : t('Custom');
+  return v.scenario.seed !== undefined && v.scenario.seed !== 1 ? t('{name}, seed {seed}', { name, seed: v.scenario.seed }) : name;
 }
 
 export function Versions() {
@@ -51,21 +51,21 @@ export function Versions() {
   const importFile = async (f: File) => {
     const r = parseVersionFile(await f.text());
     if (!r.ok) {
-      useApp.setState({ error: t('打不開 {file}：這不是 loadsketch 匯出的版本檔。', { file: f.name }) });
+      useApp.setState({ error: t('Cannot open {file}: it is not a version file exported by loadsketch.', { file: f.name }) });
       return;
     }
     useApp.getState().importVersions(r.versions);
-    if (r.skipped) useApp.setState({ error: t('{file} 裡有 {n} 個版本格式不對，沒有匯入。', { file: f.name, n: r.skipped }) });
+    if (r.skipped) useApp.setState({ error: t('{n} versions in {file} have a wrong format and were not imported.', { file: f.name, n: r.skipped }) });
   };
 
   return (
     <div data-testid="versions">
       <div className="flex items-start gap-2">
-        <p className="muted flex-1 text-[13px] leading-snug">{t('每次執行完會自動留一個版本，最多 {n} 個；釘選的不會被擠掉。版本存在這個瀏覽器裡。', { n: MAX_VERSIONS })}</p>
-        <button className="btn shrink-0 px-2" onClick={exportAll} disabled={!versions.length} title={t('把所有版本存成一個檔案')} aria-label={t('匯出版本')} data-testid="versions-export">
+        <p className="muted flex-1 text-[13px] leading-snug">{t('Every finished run keeps a version, up to {n}. Pinned versions are never pushed out. Versions are kept in this browser.', { n: MAX_VERSIONS })}</p>
+        <button className="btn shrink-0 px-2" onClick={exportAll} disabled={!versions.length} title={t('Save all versions to one file')} aria-label={t('Export versions')} data-testid="versions-export">
           <Download size={14} />
         </button>
-        <button className="btn shrink-0 px-2" onClick={() => file.current?.click()} title={t('從檔案加入版本')} aria-label={t('匯入版本')} data-testid="versions-import">
+        <button className="btn shrink-0 px-2" onClick={() => file.current?.click()} title={t('Add versions from a file')} aria-label={t('Import versions')} data-testid="versions-import">
           <FileInput size={14} />
         </button>
         <input
@@ -83,18 +83,18 @@ export function Versions() {
       </div>
       {memoryOnly && (
         <div className="card mt-2 px-2.5 py-1.5 text-[13px] leading-snug" style={{ borderColor: 'color-mix(in srgb, var(--warn) 55%, var(--line))' }} data-testid="versions-memory-only">
-          {t('這個瀏覽器不讓網頁存資料：版本只留到關閉分頁。要留下版本，先匯出成檔案。')}
+          {t('This browser does not let the page store data: versions last only until the tab closes. To keep versions, export them to a file first.')}
         </div>
       )}
       {versions.length > 1 && (
         <div className="mt-2 flex items-center gap-2">
           <button className="btn btn-primary" onClick={compare} disabled={chosen.length < 2} data-testid="versions-compare">
-            <GitCompareArrows size={14} /> {t('比較（{n}）', { n: chosen.length })}
+            <GitCompareArrows size={14} /> {t('Compare ({n})', { n: chosen.length })}
           </button>
-          <span className="faint text-[13px]">{chosen.length < 2 ? t('勾 2 到 {max} 個版本來比較。', { max: MAX_COMPARE }) : t('最舊的當基準。')}</span>
+          <span className="faint text-[13px]">{chosen.length < 2 ? t('Tick 2 to {max} versions to compare them.', { max: MAX_COMPARE }) : t('The oldest is the baseline.')}</span>
         </div>
       )}
-      {!versions.length && <div className="faint mt-6 text-center text-[14px]" data-testid="versions-empty">{t('還沒有版本。按「執行」，跑完就會出現在這裡。')}</div>}
+      {!versions.length && <div className="faint mt-6 text-center text-[14px]" data-testid="versions-empty">{t('No versions yet. Press "Run": when the run ends, it shows up here.')}</div>}
       <ul className="mt-2 space-y-2">
         {versions.map((v) => (
           <VersionRow key={v.id} v={v} picked={chosen.includes(v.id)} canPick={chosen.includes(v.id) || chosen.length < MAX_COMPARE} onPick={() => toggle(v.id)} />
@@ -110,15 +110,15 @@ function VersionRow({ v, picked, canPick, onPick }: { v: Version; picked: boolea
   return (
     <li className="card px-2.5 py-2" data-testid="version" data-version={v.id} data-pinned={v.pinned || undefined}>
       <div className="flex items-center gap-1.5">
-        <input type="checkbox" className="shrink-0" checked={picked} disabled={!canPick} onChange={onPick} aria-label={t('選來比較')} title={canPick ? t('選來比較') : t('最多比較 {n} 個', { n: MAX_COMPARE })} data-testid="version-pick" />
-        <input className="field min-w-0 flex-1 py-0.5 font-medium" value={v.name} aria-label={t('版本名稱')} onChange={(e) => st().renameVersion(v.id, e.target.value)} data-testid="version-name" />
-        <button className={`btn px-1.5 ${v.pinned ? 'btn-on' : ''}`} onClick={() => st().pinVersion(v.id, !v.pinned)} aria-pressed={v.pinned} aria-label={v.pinned ? t('取消釘選') : t('釘選')} title={v.pinned ? t('取消釘選') : t('釘選：不會被新的版本擠掉')} data-testid="version-pin">
+        <input type="checkbox" className="shrink-0" checked={picked} disabled={!canPick} onChange={onPick} aria-label={t('Pick to compare')} title={canPick ? t('Pick to compare') : t('Compare at most {n}', { n: MAX_COMPARE })} data-testid="version-pick" />
+        <input className="field min-w-0 flex-1 py-0.5 font-medium" value={v.name} aria-label={t('Version name')} onChange={(e) => st().renameVersion(v.id, e.target.value)} data-testid="version-name" />
+        <button className={`btn px-1.5 ${v.pinned ? 'btn-on' : ''}`} onClick={() => st().pinVersion(v.id, !v.pinned)} aria-pressed={v.pinned} aria-label={v.pinned ? t('Unpin') : t('Pin')} title={v.pinned ? t('Unpin') : t('Pin: new versions will not push it out')} data-testid="version-pin">
           {v.pinned ? <PinOff size={14} /> : <Pin size={14} />}
         </button>
-        <button className="btn px-1.5" onClick={() => st().loadVersion(v.id)} aria-label={t('載回畫布')} title={t('把這個版本的設計和情境放回畫布')} data-testid="version-load">
+        <button className="btn px-1.5" onClick={() => st().loadVersion(v.id)} aria-label={t('Load onto canvas')} title={t('Put this version\'s design and scenario back on the canvas')} data-testid="version-load">
           <Upload size={14} />
         </button>
-        <button className="btn px-1.5" onClick={() => st().removeVersion(v.id)} aria-label={t('刪除版本')} title={t('刪除版本')} data-testid="version-delete">
+        <button className="btn px-1.5" onClick={() => st().removeVersion(v.id)} aria-label={t('Delete version')} title={t('Delete version')} data-testid="version-delete">
           <Trash2 size={14} />
         </button>
       </div>
@@ -127,13 +127,13 @@ function VersionRow({ v, picked, canPick, onPick }: { v: Version; picked: boolea
       </div>
       <div className="mt-0.5 flex flex-wrap gap-x-3 text-[13px]" data-testid="version-numbers">
         <span>
-          {t('錯誤率')} <span className="num font-medium" style={{ color: s.errorRate > 0 ? 'var(--bad-ink)' : undefined }}>{pct(s.errorRate)}</span>
+          {t('Error rate')} <span className="num font-medium" style={{ color: s.errorRate > 0 ? 'var(--bad-ink)' : undefined }}>{pct(s.errorRate)}</span>
         </span>
         <span>
           p99 <span className="num font-medium">{fmtMs(s.p99)}</span>
         </span>
         <span>
-          {t('每月')} <span className="num font-medium">{fmtUsd(s.costPerMonth)}</span>
+          {t('Per month')} <span className="num font-medium">{fmtUsd(s.costPerMonth)}</span>
         </span>
       </div>
     </li>

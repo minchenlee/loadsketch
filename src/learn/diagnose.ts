@@ -25,10 +25,10 @@ const EXTRA = 1.5;
 const MAX_BUSY = 3;
 const MAX_AMP = 2;
 
-const WHY_BUSY = tx('忙碌率接近 100% 時，排隊時間會急劇變長：多 10% 的流量可能讓等待時間變好幾倍。');
-const WHY_RETRY = tx('逾時的呼叫被重試；重試讓排隊更長、更多呼叫逾時，又產生更多重試。這是正回饋。');
-const WHY_STUCK = tx('這叫亞穩態故障（metastable failure）：觸發的原因已經消失，但重試帶來的額外負載讓系統停在壞的狀態。要打斷這個循環，就要限制重試（重試預算、自我限流），或在過載時快速拒絕。');
-const WHY_BREAKER = tx('保險絲看到下游一直失敗，就先不打它，直接回失敗，讓下游有時間恢復。');
+const WHY_BUSY = tx('Near 100% busy, waiting time grows very fast: 10% more traffic can make the wait several times longer.');
+const WHY_RETRY = tx('Calls that time out are retried. Retries make the queues longer, so more calls time out, and that makes more retries. This is a positive feedback loop.');
+const WHY_STUCK = tx('This is a metastable failure: the trigger is gone, but the extra load from retries keeps the system in the bad state. To break the loop, limit retries (a retry budget, adaptive throttling), or reject fast when overloaded.');
+const WHY_BREAKER = tx('The circuit breaker saw the downstream fail again and again, so it stops calling it and fails at once. This gives the downstream time to recover.');
 
 const pctText = (x: number) => `${Math.round(x * 100)}%`;
 const times = (x: number) => (x >= 10 ? String(Math.round(x)) : x.toFixed(1));
@@ -60,7 +60,7 @@ export function diagnose(full: RunData): Story[] {
     seen.add(k);
     // the same thing on several instances of the node at the same time is one line that says how many
     const same = e.node === undefined ? 1 : result.timeline.filter((x) => x.type === e.type && x.node === e.node && x.t === e.t).length;
-    out.push({ t: e.t, kind: 'trigger', node: e.node, text: same > 1 ? t('{text}（同一時間共 {k} 台）', { text: e.text, k: same }) : e.text });
+    out.push({ t: e.t, kind: 'trigger', node: e.node, text: same > 1 ? t('{text} ({k} instances at the same time)', { text: e.text, k: same }) : e.text });
   }
 
   // the system's own reactions: the first of each kind on each node
@@ -83,7 +83,7 @@ export function diagnose(full: RunData): Story[] {
       t: w.t,
       kind: 'saturate',
       node: n.id,
-      text: already ? t('{name}一開始就很忙（忙碌率 {u}）', { name: label(n.id), u }) : t('{name}滿載（忙碌率 {u}），新來的請求開始排隊', { name: label(n.id), u }),
+      text: already ? t('{name} is busy from the start ({u} busy)', { name: label(n.id), u }) : t('{name} is full ({u} busy), and new requests start to queue', { name: label(n.id), u }),
       why: t(WHY_BUSY),
     });
   }
@@ -128,8 +128,8 @@ export function diagnose(full: RunData): Story[] {
         kind: 'amplify',
         node: n.id,
         text: retried
-          ? t('{name}收到的請求是平常的 {x} 倍，但使用者流量只有 {m} 倍：多出來的是重試', { name: label(n.id), x: times(x * m), m: times(m) })
-          : t('{name}收到的請求是平常的 {x} 倍，但使用者流量只有 {m} 倍', { name: label(n.id), x: times(x * m), m: times(m) }),
+          ? t('{name} receives {x} times its usual requests, but user traffic is only {m} times: the extra requests are retries', { name: label(n.id), x: times(x * m), m: times(m) })
+          : t('{name} receives {x} times its usual requests, but user traffic is only {m} times', { name: label(n.id), x: times(x * m), m: times(m) }),
         why: retried ? t(WHY_RETRY) : undefined,
       });
     }
@@ -150,8 +150,8 @@ export function diagnose(full: RunData): Story[] {
       t: firstBad.t,
       kind: 'fail',
       text: r
-        ? t('使用者開始失敗（這一秒 {p} 失敗），最多的原因：{why}', { p: pctText(failShare(firstBad)), why: t(FAIL_LABEL[r]) })
-        : t('使用者開始失敗（這一秒 {p} 失敗）', { p: pctText(failShare(firstBad)) }),
+        ? t('Users start to fail ({p} fail in this second). The most common reason: {why}', { p: pctText(failShare(firstBad)), why: t(FAIL_LABEL[r]) })
+        : t('Users start to fail ({p} fail in this second)', { p: pctText(failShare(firstBad)) }),
     });
     const lastBad = [...ws].reverse().find((w) => isBad(w))!;
     const calm = calmAt(result.timeline);
@@ -161,14 +161,14 @@ export function diagnose(full: RunData): Story[] {
         t: calm + 10,
         kind: 'stuck',
         node: worst.id,
-        text: t('觸發的原因結束 10 秒了，失敗還是沒停：{name}一直收到平常 {x} 倍的請求', { name: label(worst.id), x: times(worst.extra) }),
+        text: t('The trigger ended 10 seconds ago, but failures do not stop: {name} keeps receiving {x} times its usual requests', { name: label(worst.id), x: times(worst.extra) }),
         why: t(WHY_STUCK),
       });
     } else if (endsBad) {
-      out.push({ t: lastBad.t, kind: 'stuck', text: t('到結束時還在失敗') });
+      out.push({ t: lastBad.t, kind: 'stuck', text: t('Still failing at the end') });
     } else {
       // told at the first healthy window
-      out.push({ t: ws[ws.indexOf(lastBad) + 1].t, kind: 'recover', text: t('恢復：之後每一秒的失敗都低於 5%') });
+      out.push({ t: ws[ws.indexOf(lastBad) + 1].t, kind: 'recover', text: t('Recovered: from here on, fewer than 5% fail in every second') });
     }
   }
 
@@ -176,7 +176,7 @@ export function diagnose(full: RunData): Story[] {
   const open = ws.find((w) => Object.values(w.nodes).some((n) => n.cb === 'open'));
   if (open) {
     const id = Object.keys(open.nodes).find((k) => open.nodes[k].cb === 'open')!;
-    out.push({ t: open.t, kind: 'breaker', node: id, text: t('{name}跳開，暫時不再呼叫下游', { name: label(id) }), why: t(WHY_BREAKER) });
+    out.push({ t: open.t, kind: 'breaker', node: id, text: t('{name} opens and stops calling the downstream for a while', { name: label(id) }), why: t(WHY_BREAKER) });
   }
 
   const order: StoryKind[] = ['trigger', 'react', 'saturate', 'amplify', 'breaker', 'fail', 'recover', 'stuck'];

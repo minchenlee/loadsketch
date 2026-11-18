@@ -29,7 +29,7 @@ async function openShared(): Promise<boolean> {
   const r = await decodeLink(location.hash);
   const st = useApp.getState();
   if (!r.ok) {
-    useApp.setState({ error: t('打不開分享連結：{why}', { why: r.why }) });
+    useApp.setState({ error: t('Cannot open the share link: {why}', { why: r.why }) });
     return false;
   }
   const first = r.kind === 'one' ? r.value : r.runs[0];

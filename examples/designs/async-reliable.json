@@ -1,14 +1,14 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "可靠的非同步處理（至少一次＋DLQ）",
-  "description": "和「上傳後非同步處理」一樣，但佇列改成「做完才刪」（像 SQS）：worker 故障時訊息不會遺失，會在 visibility timeout 後重送。1% 是毒訊息，收 3 次還失敗就移到 DLQ。訊息放 10 分鐘還沒做完就過期。",
+  "name": "Reliable async processing (at-least-once + DLQ)",
+  "description": "Same as \"async processing after upload\", but the queue is delete-after-done (like SQS): if a worker fails, the message is not lost and is redelivered after the visibility timeout. 1% are poison messages: after 3 failed receives they move to the DLQ. A message expires if it is not done within 10 minutes.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     { "id": "gw", "kind": "api_gateway", "label": "API Gateway", "pos": [270, 200] },
     {
       "id": "api",
       "kind": "service",
-      "label": "上傳 API",
+      "label": "Upload API",
       "pos": [540, 200],
       "params": { "instances": 2, "concurrency": 16 }
     },
@@ -16,7 +16,7 @@
     {
       "id": "jobs",
       "kind": "queue",
-      "label": "工作佇列",
+      "label": "Work queue",
       "pos": [840, 240],
       "params": {
         "delivery": "at_least_once",
@@ -28,7 +28,7 @@
     {
       "id": "thumb",
       "kind": "worker",
-      "label": "縮圖 worker",
+      "label": "Thumbnail worker",
       "pos": [1130, 240],
       "params": {
         "instances": 2,

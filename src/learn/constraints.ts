@@ -32,21 +32,21 @@ export const KIND_POINTS: Record<string, number> = {
 
 /** Mechanisms that cost points on top of the component. */
 export const NODE_MECHANISMS: { text: string; points: number; on: (p: Record<string, unknown>, n: DesignNode) => boolean }[] = [
-  { text: tx('讀副本'), points: 1, on: (p) => typeof p.replicas === 'number' && p.replicas > 0 },
-  { text: tx('自動切換主庫'), points: 1, on: (p) => p.failover === 'on' },
-  { text: tx('自動擴充'), points: 1, on: (p) => p.autoscale === 'on' },
+  { text: tx('Read replicas'), points: 1, on: (p) => typeof p.replicas === 'number' && p.replicas > 0 },
+  { text: tx('Automatic failover@@switch'), points: 1, on: (p) => p.failover === 'on' },
+  { text: tx('Autoscaling'), points: 1, on: (p) => p.autoscale === 'on' },
   { text: tx('outlier detection'), points: 1, on: (p) => p.outlier === 'on' },
-  { text: tx('主動健康檢查'), points: 1, on: (p) => p.healthCheck === 'liveness' || p.healthCheck === 'deep' },
-  { text: tx('防擊穿'), points: 1, on: (p) => typeof p.stampede === 'string' && p.stampede !== 'none' },
+  { text: tx('Active health checks'), points: 1, on: (p) => p.healthCheck === 'liveness' || p.healthCheck === 'deep' },
+  { text: tx('Stampede protection@@short'), points: 1, on: (p) => typeof p.stampede === 'string' && p.stampede !== 'none' },
 ];
 
 export const EDGE_MECHANISMS: { text: string; points: number; on: (e: DesignEdge) => boolean }[] = [
-  { text: tx('對沖請求'), points: 1, on: (e) => (e.hedgeMs ?? 0) > 0 },
-  { text: tx('扇出'), points: 1, on: (e) => (e.fanout ?? 0) > 1 },
-  { text: tx('降級回應'), points: 1, on: (e) => e.fallback === 'on' },
-  { text: tx('隔艙'), points: 1, on: (e) => (e.bulkhead ?? 0) > 0 },
-  { text: tx('自我限流'), points: 1, on: (e) => (e.throttleK ?? 0) > 0 },
-  { text: tx('重試預算'), points: 1, on: (e) => (e.retryBudget ?? 0) > 0 },
+  { text: tx('Hedged request'), points: 1, on: (e) => (e.hedgeMs ?? 0) > 0 },
+  { text: tx('Fan-out'), points: 1, on: (e) => (e.fanout ?? 0) > 1 },
+  { text: tx('Fallback (degraded response)'), points: 1, on: (e) => e.fallback === 'on' },
+  { text: tx('Bulkhead'), points: 1, on: (e) => (e.bulkhead ?? 0) > 0 },
+  { text: tx('Adaptive throttling'), points: 1, on: (e) => (e.throttleK ?? 0) > 0 },
+  { text: tx('Retry budget'), points: 1, on: (e) => (e.retryBudget ?? 0) > 0 },
 ];
 
 /** A design in more than one region costs this much more. */
@@ -69,7 +69,7 @@ export function complexity(design: Design): { total: number; items: PointItem[] 
   }
   for (const e of design.edges) for (const m of EDGE_MECHANISMS) if (m.on(e)) items.push({ where: `${e.from}->${e.to}`, text: m.text, points: m.points });
   const regions = new Set(design.nodes.flatMap((n) => [n.region, n.replicaRegion]).filter((r): r is string => !!r));
-  if (regions.size > 1) items.push({ where: '', text: tx('多區域'), points: MULTI_REGION_POINTS });
+  if (regions.size > 1) items.push({ where: '', text: tx('More than one region'), points: MULTI_REGION_POINTS });
   return { total: items.reduce((s, i) => s + i.points, 0), items };
 }
 
@@ -121,7 +121,7 @@ export interface Broken {
 
 /** Custom services in a design: not allowed in practice problems (Q20), as they can be made as fast as wanted. */
 export function customUsed(d: Design): Broken[] {
-  return d.nodes.filter((n) => n.kind === CUSTOM_KIND).map((n) => ({ text: tx('練習題不能用自訂服務：「{name}」'), vars: { name: n.label ?? n.id } }));
+  return d.nodes.filter((n) => n.kind === CUSTOM_KIND).map((n) => ({ text: tx('Practice problems do not allow a custom service: "{name}"'), vars: { name: n.label ?? n.id } }));
 }
 
 /** Judge a run against the four limits: they are gates; past them, a cheaper design scores higher. */
@@ -157,20 +157,20 @@ export function brokenStart(start: Design, design: Design, result: SimResult): B
     const n = now.get(o.id);
     const name = o.label ?? o.id;
     if (!n || n.kind !== o.kind) {
-      out.push({ text: tx('題目給的「{name}」不見了'), vars: { name } });
+      out.push({ text: tx('"{name}", given by the brief, is gone'), vars: { name } });
       continue;
     }
-    if (o.kind !== 'client' && !(result.nodes[o.id]?.arrivals > 0)) out.push({ text: tx('「{name}」沒有收到任何請求：不能繞過原本的元件'), vars: { name } });
+    if (o.kind !== 'client' && !(result.nodes[o.id]?.arrivals > 0)) out.push({ text: tx('"{name}" got no requests: you cannot go round a component of the original design'), vars: { name } });
     const spec = KINDS[n.kind];
     for (const [k, unit] of GIVEN_TIMES) {
       const floor = meanOf(valueOf(o, k));
       const got = meanOf(valueOf(n, k));
       if (floor === undefined || got === undefined || got >= floor) continue;
-      out.push({ text: unit === 's' ? tx('「{name}」的{what}是 {got} 秒，題目給的最快是 {floor} 秒') : tx('「{name}」的{what}是 {got} ms，題目給的最快是 {floor} ms'), vars: { name, what: spec?.params[k]?.label ?? k, got, floor } });
+      out.push({ text: unit === 's' ? tx('{what} of "{name}" is {got} s; the fastest the problem gives is {floor} s') : tx('"{name}": {what} is {got} ms; the brief gives {floor} ms as the fastest'), vars: { name, what: spec?.params[k]?.label ?? k, got, floor } });
     }
     const was = valueOf(o, 'hitRatio');
     const hit = valueOf(n, 'hitRatio');
-    if (typeof was === 'number' && typeof hit === 'number' && hit > was) out.push({ text: tx('「{name}」的{what}是 {got}，題目給的最高是 {floor}'), vars: { name, what: spec?.params.hitRatio?.label ?? 'hitRatio', got: hit, floor: was } });
+    if (typeof was === 'number' && typeof hit === 'number' && hit > was) out.push({ text: tx('"{name}": {what} is {got}; the brief gives {floor} as the highest'), vars: { name, what: spec?.params.hitRatio?.label ?? 'hitRatio', got: hit, floor: was } });
   }
   return out;
 }

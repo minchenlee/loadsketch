@@ -49,10 +49,10 @@ export function NumberInput({ value, onChange, min, max, step, labelledBy, unit,
       {bad && (
         <div id={errId} className="mt-0.5 text-[12px]" style={{ color: 'var(--bad-ink)' }} data-testid="range-error">
           {integer && Number.isFinite(n) && text.trim() !== '' && !Number.isInteger(n / scale)
-            ? t('請輸入整數')
+            ? t('Enter a whole number')
             : lo !== undefined && hi !== undefined
-              ? t('請輸入 {min}–{max}', { min: show(lo), max: show(hi) })
-              : t('請輸入數字')}
+              ? t('Enter {min}–{max}', { min: show(lo), max: show(hi) })
+              : t('Enter a number')}
         </div>
       )}
     </div>
@@ -79,7 +79,7 @@ export function Help({ text }: { text: string }) {
         <>
           {' '}
           <button type="button" className="underline decoration-dotted underline-offset-2 hover:text-[var(--ink)]" onClick={() => setOpen(true)} aria-expanded={false}>
-            {t('更多')}
+            {t('More')}
           </button>
         </>
       )}

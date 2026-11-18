@@ -1,27 +1,27 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "分片資料庫與熱點",
-  "description": "寫入量大到一台主庫撐不住時，把資料按 key 分到 4 個分片。key 的熱門程度不平均（Zipf），最熱的 key 會讓某個分片特別忙。",
+  "name": "Sharded database and hotspots",
+  "description": "When the write volume is too much for one primary, split the data by key into 4 shards. Key popularity is uneven (Zipf), so the hottest key makes one shard extra busy.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [270, 200],
       "params": { "policy": "p2c" }
     },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [540, 200],
       "params": { "instances": 4, "concurrency": 16 }
     },
     {
       "id": "db",
       "kind": "sharded_db",
-      "label": "分片資料庫",
+      "label": "Sharded database",
       "pos": [860, 200],
       "params": { "shards": 4, "connections": 8, "writeMs": { "mean": 8, "cv": 1 } }
     }

@@ -1,14 +1,14 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "自訂服務：外部搜尋",
-  "description": "目錄裡沒有搜尋引擎，所以用「自訂服務」畫一個：3 台，每台同時 16 個查詢，每次約 25 ms，每台每小時 $0.30。商品 API 先查 Postgres，再呼叫搜尋（逾時 300 ms）。點搜尋元件，改它的處理時間、台數或價格，看延遲和成本怎麼變。",
+  "name": "Custom service: external search",
+  "description": "The catalog has no search engine, so a \"Custom service\" stands for one: 3 instances, 16 queries at a time each, about 25 ms each, $0.30 per instance per hour. The product API reads Postgres, then calls search (300 ms timeout). Click the search component and change its processing time, instances or price to see how latency and cost change.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
-    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [300, 200] },
     {
       "id": "api",
       "kind": "service",
-      "label": "商品 API",
+      "label": "Product API",
       "pos": [590, 200],
       "params": { "instances": 3, "concurrency": 32, "serviceMs": { "mean": 4, "cv": 0.5 } }
     },
@@ -22,7 +22,7 @@
     {
       "id": "search",
       "kind": "custom",
-      "label": "搜尋（Elasticsearch）",
+      "label": "Search (Elasticsearch)",
       "pos": [920, 320],
       "params": {
         "icon": "Search",

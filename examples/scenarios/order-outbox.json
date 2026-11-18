@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "每秒 300 張訂單，第 20 秒佇列故障 20 秒",
+  "name": "300 orders per second; the queue is down for 20 s from 20 s",
   "seed": 1,
   "durationS": 90,
   "traffic": { "rps": 300, "readRatio": 0 },

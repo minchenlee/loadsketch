@@ -16,21 +16,21 @@ export interface Category {
 }
 
 export const TIERS: { id: Tier; label: string; help: string }[] = [
-  { id: 'start', label: tx('入門'), help: tx('一個範例學一個機制：先從這裡開始。') },
-  { id: 'real', label: tx('真實系統'), help: tx('公開事故的重現，和知名服務的完整架構：好幾個機制一起出現。') },
+  { id: 'start', label: tx('Getting started'), help: tx('One mechanism per example: start here.') },
+  { id: 'real', label: tx('Real systems'), help: tx('Reproductions of public incidents and whole architectures of well-known services: several mechanisms at once.') },
 ];
 
 export const CATEGORIES: Category[] = [
-  { id: 'basics', label: tx('基礎架構'), tier: 'start', examples: ['three-tier', 'sharded', 'replica-lag', 'autoscale', 'hot-shard', 'location-writes', 'scatter-gather', 'quorum', 'custom-search'] },
-  { id: 'cache', label: tx('快取'), tier: 'start', examples: ['cache-stampede', 'cache-lease', 'url-shortener', 'cache-cold-restart', 'cdn-offload'] },
-  { id: 'overload', label: tx('過載與重試'), tier: 'start', examples: ['retry-storm', 'retry-budget', 'adaptive-throttle', 'priority-shedding', 'tenant-limits', 'lifo-codel', 'flash-sale', 'serverless-db'] },
-  { id: 'failure', label: tx('故障與韌性'), tier: 'start', examples: ['resilience', 'slow-dependency', 'bulkhead-fallback', 'gray-failure', 'gray-failure-outlier', 'hedged-reads', 'region-cutover', 'split-brain', 'bad-config-push', 'provisioning', 'blind-autoscaler'] },
-  { id: 'async', label: tx('非同步'), tier: 'start', examples: ['async-queue', 'async-reliable', 'order-outbox', 'fifo-poison', 'upload-tasks', 'timeline-fanout'] },
-  { id: 'traffic', label: tx('流量型態'), tier: 'start', examples: ['periodic'] },
+  { id: 'basics', label: tx('Basics'), tier: 'start', examples: ['three-tier', 'sharded', 'replica-lag', 'autoscale', 'hot-shard', 'location-writes', 'scatter-gather', 'quorum', 'custom-search'] },
+  { id: 'cache', label: tx('Caching'), tier: 'start', examples: ['cache-stampede', 'cache-lease', 'url-shortener', 'cache-cold-restart', 'cdn-offload'] },
+  { id: 'overload', label: tx('Overload and retries'), tier: 'start', examples: ['retry-storm', 'retry-budget', 'adaptive-throttle', 'priority-shedding', 'tenant-limits', 'lifo-codel', 'flash-sale', 'serverless-db'] },
+  { id: 'failure', label: tx('Failures and resilience'), tier: 'start', examples: ['resilience', 'slow-dependency', 'bulkhead-fallback', 'gray-failure', 'gray-failure-outlier', 'hedged-reads', 'region-cutover', 'split-brain', 'bad-config-push', 'provisioning', 'blind-autoscaler'] },
+  { id: 'async', label: tx('Async'), tier: 'start', examples: ['async-queue', 'async-reliable', 'order-outbox', 'fifo-poison', 'upload-tasks', 'timeline-fanout'] },
+  { id: 'traffic', label: tx('Traffic patterns'), tier: 'start', examples: ['periodic'] },
   // whole architectures of well-known services from their engineering blogs: 12–18 parts
-  { id: 'saas', label: tx('真實服務架構'), tier: 'real', examples: ['saas-instagram', 'saas-uber', 'saas-netflix'] },
+  { id: 'saas', label: tx('Real service architectures'), tier: 'real', examples: ['saas-instagram', 'saas-uber', 'saas-netflix'] },
   // reproductions of public postmortems: 15–20 parts, with the fix to try
-  { id: 'incident', label: tx('真實事故重現'), tier: 'real', examples: ['saas-slack', 'saas-stripe', 'saas-linkedin', 'saas-github'] },
+  { id: 'incident', label: tx('Real incidents, reproduced'), tier: 'real', examples: ['saas-slack', 'saas-stripe', 'saas-linkedin', 'saas-github'] },
 ];
 
 /** The categories with every example in one of them: unknown ones go to "Other". */
@@ -38,7 +38,7 @@ export function categorize(all: string[]): Category[] {
   const known = new Set(CATEGORIES.flatMap((c) => c.examples));
   const cats = CATEGORIES.map((c) => ({ ...c, examples: c.examples.filter((e) => all.includes(e)) })).filter((c) => c.examples.length);
   const other = all.filter((e) => !known.has(e));
-  return other.length ? [...cats, { id: 'other', label: tx('其他'), tier: 'start' as const, examples: other }] : cats;
+  return other.length ? [...cats, { id: 'other', label: tx('Other'), tier: 'start' as const, examples: other }] : cats;
 }
 
 /**

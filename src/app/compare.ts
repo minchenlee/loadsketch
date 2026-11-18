@@ -77,12 +77,12 @@ export interface Metric {
 }
 
 export const METRICS: Metric[] = [
-  { key: 'errorRate', label: tx('失敗率'), better: 'lower', fmt: pctFine },
+  { key: 'errorRate', label: tx('Error rate@@failure'), better: 'lower', fmt: pctFine },
   { key: 'p50', label: 'p50', better: 'lower', fmt: fmtMs },
   { key: 'p99', label: 'p99', better: 'lower', fmt: fmtMs },
-  { key: 'throughputRps', label: tx('每秒成功'), better: 'higher', fmt: (v) => fmtRate(v) },
-  { key: 'costPerMonth', label: tx('每月成本'), better: 'lower', fmt: fmtUsd },
-  { key: 'complexity', label: tx('複雜度'), better: 'lower', fmt: (v) => t('{n} 點', { n: v }) },
+  { key: 'throughputRps', label: tx('Successes / s'), better: 'higher', fmt: (v) => fmtRate(v) },
+  { key: 'costPerMonth', label: tx('Cost per month'), better: 'lower', fmt: fmtUsd },
+  { key: 'complexity', label: tx('Complexity'), better: 'lower', fmt: (v) => t('{n} pt', { n: v }) },
 ];
 
 /** A failure share with one decimal under 10% (0.4%, 2.5%): the compare view tells small changes apart. */
@@ -111,12 +111,12 @@ export function delta(m: Metric, base: number, v: number): Delta {
   const d = v - base;
   // a change below rounding is no change
   const tiny = m.key === 'errorRate' ? Math.abs(d) < 0.0005 : m.key === 'complexity' ? d === 0 : Math.abs(d) < Math.max(1e-9, Math.abs(base) * 0.005);
-  if (tiny) return { text: t('一樣'), tone: 'same' };
+  if (tiny) return { text: t('same'), tone: 'same' };
   const tone = (d < 0) === (m.better === 'lower') ? 'better' : 'worse';
   const rel = base > 0 && m.key !== 'errorRate' && m.key !== 'complexity' ? ` (${sign(d)}${Math.round((Math.abs(d) / base) * 100)}%)` : '';
   switch (m.key) {
     case 'errorRate':
-      return { text: t('{d} 個百分點', { d: `${sign(d)}${(Math.abs(d) * 100).toFixed(1)}` }), tone };
+      return { text: t('{d} pts', { d: `${sign(d)}${(Math.abs(d) * 100).toFixed(1)}` }), tone };
     case 'p50':
     case 'p99':
       return { text: `${sign(d)}${fmtMs(Math.abs(d))}${rel}`, tone };

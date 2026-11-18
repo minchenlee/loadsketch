@@ -97,21 +97,21 @@ export function brokenGivens(b: Brief, d: Design): Broken[] {
   // answer saved before the brief gave them) falls back to the scenario's read share, the same mix.
   const apiKey = (x: Design['apis']) => JSON.stringify((x ?? []).map((a) => [a.name, a.op, a.share ?? 1]).sort());
   if (b.start.apis?.length) {
-    if (d.apis?.length && apiKey(d.apis) !== apiKey(b.start.apis)) out.push({ text: tx('這題的 API 和流量比例是題目給的，不能增加、刪除、改名或改比例'), vars: {} });
-  } else if (d.apis?.length) out.push({ text: tx('這題的讀寫比例是題目給的，不能用 API 改掉'), vars: {} });
+    if (d.apis?.length && apiKey(d.apis) !== apiKey(b.start.apis)) out.push({ text: tx('This brief gives the APIs and their traffic shares: you cannot add, remove, rename or reweight them'), vars: {} });
+  } else if (d.apis?.length) out.push({ text: tx('The brief gives the read and write shares; APIs cannot replace them'), vars: {} });
   for (const id of b.fixed) {
     const was = b.start.nodes.find((n) => n.id === id)!;
     const n = now.get(id);
     const name = was.label ?? id;
-    if (!n || n.kind !== was.kind) out.push({ text: tx('題目給的「{name}」不見了'), vars: { name } });
-    else if (!sameSettings(n, was)) out.push({ text: tx('題目給的「{name}」不能改設定'), vars: { name } });
+    if (!n || n.kind !== was.kind) out.push({ text: tx('"{name}", given by the brief, is gone'), vars: { name } });
+    else if (!sameSettings(n, was)) out.push({ text: tx('"{name}" is given by the brief: its settings cannot change'), vars: { name } });
   }
   // the network is given too: a connection cannot be faster than its default (20 ms from the users)
   for (const e of d.edges) {
     const from = now.get(e.from);
     if (!from || e.latencyMs === undefined) continue;
     const floor = edgeLatencyMs({}, from);
-    if (e.latencyMs < floor) out.push({ text: tx('連線「{name}」的網路延遲是 {got} ms，題目給的最快是 {floor} ms'), vars: { name: edgeId(e), got: e.latencyMs, floor } });
+    if (e.latencyMs < floor) out.push({ text: tx('The network latency of connection "{name}" is {got} ms; the fastest the brief gives is {floor} ms'), vars: { name: edgeId(e), got: e.latencyMs, floor } });
   }
   for (const n of d.nodes) {
     if (b.fixed.includes(n.id)) continue;
@@ -123,13 +123,13 @@ export function brokenGivens(b: Brief, d: Design): Broken[] {
       const got = meanOf(value(n, k));
       if (def === undefined || got === undefined) continue;
       const floor = b.floors?.[n.kind]?.[k] ?? def;
-      if (got < floor) out.push({ text: tx('「{name}」的{what}是 {got} ms，題目給的最快是 {floor} ms'), vars: { name, what: spec.params[k].label ?? k, got, floor } });
+      if (got < floor) out.push({ text: tx('"{name}": {what} is {got} ms; the brief gives {floor} ms as the fastest'), vars: { name, what: spec.params[k].label ?? k, got, floor } });
     }
     for (const k of SHARES) {
       const def = spec.params[k]?.default;
       const got = value(n, k);
       if (typeof def !== 'number' || typeof got !== 'number') continue;
-      if (got > def) out.push({ text: tx('「{name}」的{what}是 {got}，題目給的最高是 {floor}'), vars: { name, what: spec.params[k].label ?? k, got, floor: def } });
+      if (got > def) out.push({ text: tx('"{name}": {what} is {got}; the brief gives {floor} as the highest'), vars: { name, what: spec.params[k].label ?? k, got, floor: def } });
     }
   }
   return out;
@@ -213,12 +213,12 @@ function misses(d: Design, run: Run): number {
 const STORES = ['database', 'sharded_db', 'object_storage'];
 
 /** What users write is stored in a database. */
-const stored: Need = { id: 'stored', text: tx('資料有存進資料庫'), check: (d, run) => reaches(d, ['database', 'sharded_db']) && arrive('write', d, run, (n) => n.kind === 'database' || n.kind === 'sharded_db') };
+const stored: Need = { id: 'stored', text: tx('Data is stored in a database'), check: (d, run) => reaches(d, ['database', 'sharded_db']) && arrive('write', d, run, (n) => n.kind === 'database' || n.kind === 'sharded_db') };
 
 /** What users read comes from somewhere: a cache or a database. An API with no store behind its reads answers with nothing. */
 const looked: Need = {
   id: 'looked',
-  text: tx('讀取有查到資料（快取或資料庫）'),
+  text: tx('Reads get their data from a cache or a database'),
   check: (d, run) => {
     // a read put on a queue is answered before anything was looked up
     const [out, queued] = calls('read', d, run, (n) => n.kind === 'queue');
@@ -237,7 +237,7 @@ const looked: Need = {
  */
 const finished: Need = {
   id: 'finished',
-  text: tx('背景工作做得完（沒做完和弄丟的不超過 1%）'),
+  text: tx('Background work is finished (at most 1% still waiting or lost)'),
   check: (_, run) => run.result.unfinished + Object.values(run.result.nodes).reduce((s, n) => s + (n.asyncFail ?? 0), 0) <= 0.01 * Math.max(1, run.result.summary.offered),
 };
 
@@ -248,7 +248,7 @@ const finished: Need = {
  */
 const notDegraded: Need = {
   id: 'not-degraded',
-  text: tx('降級回應不超過 1%'),
+  text: tx('At most 1% degraded responses'),
   check: (_, run) => {
     const max = 0.01 * Math.max(1, run.result.summary.offered);
     const fallbacks = Object.values(run.result.edges).reduce((s, e) => s + (e.fallbacks ?? 0), 0);

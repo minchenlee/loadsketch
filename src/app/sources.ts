@@ -6,10 +6,10 @@ import { paramRole } from '../import/terraform/fill.ts';
 
 export const EVIDENCE_LABEL: Record<Evidence, string> = {
   iac: tx('IaC'),
-  'aws-default': tx('AWS 預設'),
-  estimate: tx('猜的'),
-  answer: tx('使用者填'),
-  'loadsketch-default': tx('預設值'),
+  'aws-default': tx('AWS default'),
+  estimate: tx('Guessed'),
+  answer: tx('Yours'),
+  'loadsketch-default': tx('Default'),
 };
 
 /** A performance assumption nobody gave: our estimate, or the kind's default. */

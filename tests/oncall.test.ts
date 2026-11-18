@@ -7,6 +7,7 @@ import { Simulation } from '../src/engine/index.ts';
 import { parseScenario, type Design, type Scenario } from '../src/schema/design.ts';
 import { FAULTS, INCIDENTS, POINTS, applyPatches, judgeFix, nodeSamples, openCost, score, symptoms, type Incident } from '../src/learn/oncall.ts';
 import { parseIncident } from '../src/learn/practiceData.ts';
+import { t } from '../src/i18n/index.ts';
 
 const root = join(import.meta.dirname, '..');
 const example = (name: string) => JSON.parse(readFileSync(join(root, 'examples/designs', `${name}.json`), 'utf8')) as Design;
@@ -31,6 +32,12 @@ const base = (inc: Incident) => {
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
 
+// Words that name the fault instead of the symptom. "fail" is not one: the titles say that
+// requests fail, which is what users see. Each English word stands for one Chinese word.
+const LEAK_ZH = ['故障', '變慢', 'GC', '停頓', '暴增', '快取', '資料庫'];
+const LEAK_EN = [/\b(fault|outage|broken|crash\w*|down)\b/i, /\bslow(s|ed|ness|down)?\b/i, /\bGC\b|garbage/i, /\bpaus(e|es|ed)\b/i, /\b(spike|surge)\w*/i, /\bcach(e|es|ed|ing)\b/i, /\b(database|DB)s?\b/i];
+const leaks = (title: string) => [...LEAK_ZH.filter((w) => title.includes(w)), ...LEAK_EN.filter((r) => r.test(title)).map(String)];
+
 describe('incidents (Q7=A: a hand-written set of 8–10)', () => {
   it('there are 8–10, with distinct ids, and they cover every kind of fault', () => {
     expect(INCIDENTS.length).toBeGreaterThanOrEqual(8);
@@ -47,7 +54,17 @@ describe('incidents (Q7=A: a hand-written set of 8–10)', () => {
     const node = d.nodes.find((n) => n.id === inc.answer.node)!;
     expect(inc.title).not.toContain(inc.answer.node);
     if (node.label) expect(inc.title).not.toContain(node.label);
-    for (const w of ['故障', '變慢', 'GC', '停頓', '暴增', '快取', '資料庫']) expect(inc.title).not.toContain(w);
+    // the words below are checked in the English source and in the Traditional Chinese title
+    const zh = t(inc.title);
+    if (node.label) expect(zh).not.toContain(t(node.label));
+    expect(leaks(inc.title)).toEqual([]);
+    expect(leaks(zh)).toEqual([]);
+  });
+
+  it('the title check catches a title that names the fault', () => {
+    expect(leaks('Database failure')).not.toEqual([]);
+    expect(leaks('快取掛了')).not.toEqual([]);
+    expect(leaks('Page: from 20 s, about a third of user requests fail. Latency does not change.')).toEqual([]);
   });
 
   it.each(allIncidents.map((i) => [i.id, i] as const))('%s: users see it (error rate or p99 gets worse after the fault)', (_, inc) => {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EDGE, GROUPS, TOGGLES, isPercent, isVisible, layout, specsOf, splitHelp, toggleOn } from '../src/app/paramLayout.ts';
 import { EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { jsonSchemas } from '../src/schema/design.ts';
+import { t } from '../src/i18n/index.ts';
 
 const keys = (kind: string, values: Record<string, unknown> = {}) => Object.fromEntries(layout(kind, values).map((g) => [g.key, g.params]));
 
@@ -77,7 +78,7 @@ describe('"0 means off" becomes a switch', () => {
       for (const k of kinds) {
         const spec = specsOf(k)[name];
         expect(spec.default, `${k}.${name}`).toBe(0);
-        expect(spec.help, `${k}.${name}`).toMatch(/0 表示/);
+        expect(t(spec.help), `${k}.${name}`).toMatch(/0 表示/);
         const on = toggleOn(k, name)!;
         if (spec.type === 'ratio') expect(on > 0 && on <= 1).toBe(true);
         else if (spec.type === 'int' || spec.type === 'number') expect(on > 0 && on <= spec.max, `${k}.${name}`).toBe(true);
@@ -91,7 +92,7 @@ describe('"0 means off" becomes a switch', () => {
 describe('units and help text', () => {
   it('labels carry no unit: the unit sits in the field', () => {
     for (const kind of [EDGE, ...Object.keys(KINDS)]) {
-      for (const [name, p] of Object.entries(specsOf(kind))) expect(p.label, `${kind}.${name}`).not.toMatch(/（(ms|秒)/);
+      for (const [name, p] of Object.entries(specsOf(kind))) expect(t(p.label), `${kind}.${name}`).not.toMatch(/（(ms|秒)|\((ms|s)\)/);
     }
   });
 
@@ -101,8 +102,8 @@ describe('units and help text', () => {
     const schema = JSON.stringify(jsonSchemas());
     expect(schema).toContain('{ mean, cv }');
     // and the schema still names the unit
-    expect(schema).toContain('逾時（ms）');
-    expect(schema).toContain('開機時間（秒）');
+    expect(schema).toContain('Timeout (ms)');
+    expect(schema).toContain('Boot time (s)');
   });
 
   it('percent fields: every ratio, and the retry budget', () => {

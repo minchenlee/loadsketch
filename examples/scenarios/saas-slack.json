@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "第 45 秒一半快取節點被換成空節點，10 秒後回來但是冷的",
+  "name": "At second 45 half of the cache nodes are replaced by empty ones; they come back 10 seconds later, cold",
   "seed": 1,
   "durationS": 140,
   "traffic": { "rps": 8000, "readRatio": 0.85, "clientTimeoutMs": 2000 },

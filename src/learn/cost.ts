@@ -97,20 +97,20 @@ export function costOf(design: Design, run?: { result: SimResult; windows: Windo
     if (n.kind === CUSTOM_KIND) {
       const k = machines(n, run);
       const each = num(resolveParams(n.kind, n.params).pricePerHour);
-      items.push({ id: n.id, kind: n.kind, what: { text: tx('{k} 台 × 每台每小時 {p}'), vars: { k: fmtCount(k), p: `$${fmtCount(each)}` } }, perHour: money(k * each) });
+      items.push({ id: n.id, kind: n.kind, what: { text: tx('{k} × {p} per hour each'), vars: { k: fmtCount(k), p: `$${fmtCount(each)}` } }, perHour: money(k * each) });
       continue;
     }
     const m = MACHINE[n.kind];
     if (m) {
       const k = machines(n, run);
       const each = size(n) * m.perHour;
-      items.push({ id: n.id, kind: n.kind, what: { text: tx('{k} 台 × 每台每小時 {p}'), vars: { k: fmtCount(k), p: `$${fmtCount(each)}` } }, perHour: money(k * each) });
+      items.push({ id: n.id, kind: n.kind, what: { text: tx('{k} × {p} per hour each'), vars: { k: fmtCount(k), p: `$${fmtCount(each)}` } }, perHour: money(k * each) });
       continue;
     }
     const g = MANAGED[n.kind];
     if (g) {
       const arrivals = run?.result.nodes[n.id]?.arrivals ?? 0;
-      items.push({ id: n.id, kind: n.kind, what: { text: tx('每小時 {m} 百萬次'), vars: { m: fmtCount(mph(arrivals)) } }, perHour: money(g.perHour + mph(arrivals) * g.perMillion) });
+      items.push({ id: n.id, kind: n.kind, what: { text: tx('{m} million per hour'), vars: { m: fmtCount(mph(arrivals)) } }, perHour: money(g.perHour + mph(arrivals) * g.perMillion) });
       continue;
     }
     if (n.kind === 'object_storage') {
@@ -124,12 +124,12 @@ export function costOf(design: Design, run?: { result: SimResult; windows: Windo
           write += w.edges[id]?.write ?? 0;
         }
       }
-      items.push({ id: n.id, kind: n.kind, what: { text: tx('每小時讀 {r}、寫 {w} 百萬次'), vars: { r: fmtCount(mph(read)), w: fmtCount(mph(write)) } }, perHour: money(mph(read) * STORAGE.readPerMillion + mph(write) * STORAGE.writePerMillion) });
+      items.push({ id: n.id, kind: n.kind, what: { text: tx('{r} million reads and {w} million writes per hour'), vars: { r: fmtCount(mph(read)), w: fmtCount(mph(write)) } }, perHour: money(mph(read) * STORAGE.readPerMillion + mph(write) * STORAGE.writePerMillion) });
     }
   }
   if (run) {
     const gbPerHour = (((run.result.summary.offered / secs) * 3600) * EGRESS.kbPerRequest) / 1e6;
-    items.push({ id: 'egress', kind: 'egress', what: { text: tx('每小時 {gb} GB'), vars: { gb: fmtCount(gbPerHour) } }, perHour: money(gbPerHour * EGRESS.perGb) });
+    items.push({ id: 'egress', kind: 'egress', what: { text: tx('{gb} GB per hour'), vars: { gb: fmtCount(gbPerHour) } }, perHour: money(gbPerHour * EGRESS.perGb) });
     // messages between regions, as the engine counts them per edge: each copy sent to an instance in
     // another region than the caller (retries, fan-out, a replica or a moved primary there), and cache copies
     let calls = 0;
@@ -139,7 +139,7 @@ export function costOf(design: Design, run?: { result: SimResult; windows: Windo
     }
     if (calls > 0) {
       const gb = (((calls / secs) * 3600) * CROSS_REGION.kbPerCall) / 1e6;
-      items.push({ id: 'cross-region', kind: 'cross-region', what: { text: tx('每小時 {gb} GB'), vars: { gb: fmtCount(gb) } }, perHour: money(gb * CROSS_REGION.perGb) });
+      items.push({ id: 'cross-region', kind: 'cross-region', what: { text: tx('{gb} GB per hour'), vars: { gb: fmtCount(gb) } }, perHour: money(gb * CROSS_REGION.perGb) });
     }
   }
   const perHour = money(items.reduce((s, i) => s + i.perHour, 0));

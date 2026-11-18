@@ -224,8 +224,8 @@ function fmtNum(x: number): string {
 
 /** A setting's value as the inspector would show it. */
 export function fmtValue(v: Value, spec?: ParamSpec, name = ''): string {
-  if (v === undefined || v === null) return t('預設');
-  if (Array.isArray(v)) return v.length ? v.join(t('、')) : t('全部');
+  if (v === undefined || v === null) return t('default');
+  if (Array.isArray(v)) return v.length ? v.join(t(', @@list')) : t('All');
   if (spec?.type === 'enum') {
     const o = spec.options.find((x) => x.value === v);
     return o ? t(o.label) : String(v);
@@ -244,48 +244,48 @@ export function fmtValue(v: Value, spec?: ParamSpec, name = ''): string {
 }
 
 const FIELD_LABEL: Record<string, string> = {
-  kind: tx('種類'),
-  label: tx('名稱'),
-  region: tx('區域'),
-  replicaRegion: tx('副本區域'),
-  apis: tx('只走這些 API'),
-  op: tx('讀或寫'),
-  share: tx('流量比重'),
-  interRegionMs: tx('跨區域延遲'),
-  from: tx('呼叫端'),
-  to: tx('被呼叫端'),
+  kind: tx('Kind'),
+  label: tx('Name'),
+  region: tx('Region'),
+  replicaRegion: tx('Replica region'),
+  apis: tx('Only these APIs'),
+  op: tx('Read or write'),
+  share: tx('Traffic share'),
+  interRegionMs: tx('Latency between regions'),
+  from: tx('caller'),
+  to: tx('callee'),
 };
 
 /** One change as a sentence. */
 export function describeChange(c: Change): string {
   switch (c.type) {
     case 'node-added':
-      return t('新增元件「{name}」', { name: nodeName(c) });
+      return t('Added component "{name}"', { name: nodeName(c) });
     case 'node-removed':
-      return t('刪除元件「{name}」', { name: nodeName(c) });
+      return t('Removed component "{name}"', { name: nodeName(c) });
     case 'edge-added':
-      return t('新增呼叫 {from} → {to}', { from: c.fromName, to: c.toName });
+      return t('Added call {from} → {to}', { from: c.fromName, to: c.toName });
     case 'edge-removed':
-      return t('刪除呼叫 {from} → {to}', { from: c.fromName, to: c.toName });
+      return t('Removed call {from} → {to}', { from: c.fromName, to: c.toName });
     case 'api-added':
-      return t('新增 API「{api}」', { api: c.api });
+      return t('Added API "{api}"', { api: c.api });
     case 'api-removed':
-      return t('刪除 API「{api}」', { api: c.api });
+      return t('Delete API "{api}"', { api: c.api });
     case 'node-changed': {
       const { what, before, after } = fieldText(c.field, c.kind, c.before, c.after);
-      return t('「{name}」的{what}：{before} → {after}', { name: nodeName(c), what, before, after });
+      return t('"{name}" {what}: {before} → {after}', { name: nodeName(c), what, before, after });
     }
     case 'edge-changed': {
       const { what, before, after } = fieldText(c.field, 'edge', c.before, c.after);
-      return t('呼叫 {from} → {to} 的{what}：{before} → {after}', { from: c.fromName, to: c.toName, what, before, after });
+      return t('Call {from} → {to} {what}: {before} → {after}', { from: c.fromName, to: c.toName, what, before, after });
     }
     case 'api-changed': {
       const what = t(FIELD_LABEL[c.field] ?? c.field);
-      const v = (x: Value) => (c.field === 'op' ? (x === 'read' ? t('讀') : t('寫')) : fmtValue(x));
-      return t('API「{api}」的{what}：{before} → {after}', { api: c.api, what, before: v(c.before), after: v(c.after) });
+      const v = (x: Value) => (c.field === 'op' ? (x === 'read' ? t('read') : t('write')) : fmtValue(x));
+      return t('API "{api}" {what}: {before} → {after}', { api: c.api, what, before: v(c.before), after: v(c.after) });
     }
     case 'design-changed':
-      return t('設計的{what}：{before} → {after}', { what: t(FIELD_LABEL[c.field] ?? c.field), before: fmtValue(c.before, EDGE_PARAMS.latencyMs), after: fmtValue(c.after, EDGE_PARAMS.latencyMs) });
+      return t('Design {what}: {before} → {after}', { what: t(FIELD_LABEL[c.field] ?? c.field), before: fmtValue(c.before, EDGE_PARAMS.latencyMs), after: fmtValue(c.after, EDGE_PARAMS.latencyMs) });
   }
 }
 
@@ -294,45 +294,45 @@ function fieldText(field: string, kind: string, before: Value, after: Value): { 
   const spec = kind === 'edge' ? EDGE_PARAMS[name] : field.startsWith('params.') ? KINDS[kind]?.params[name] : undefined;
   if (field === 'kind') {
     const k = (x: Value) => (typeof x === 'string' && KINDS[x] ? t(KINDS[x].label) : String(x));
-    return { what: t('種類'), before: k(before), after: k(after) };
+    return { what: t('Kind'), before: k(before), after: k(after) };
   }
   if (field === 'latencyMs' && kind === 'edge') {
-    const v = (x: Value) => (x === undefined ? t('預設') : fmtValue(x, spec, name));
+    const v = (x: Value) => (x === undefined ? t('default') : fmtValue(x, spec, name));
     return { what: t(spec!.label), before: v(before), after: v(after) };
   }
   const what = spec ? t(spec.label) : t(FIELD_LABEL[name] ?? name);
-  const v = (x: Value) => (x === undefined && (field === 'label' || field === 'region' || field === 'replicaRegion') ? t('沒有') : fmtValue(x, spec, name));
+  const v = (x: Value) => (x === undefined && (field === 'label' || field === 'region' || field === 'replicaRegion') ? t('none') : fmtValue(x, spec, name));
   return { what, before: v(before), after: v(after) };
 }
 
 const SCENARIO_LABEL: Record<string, string> = {
-  'traffic.rps': tx('每秒請求'),
-  'traffic.readRatio': tx('讀取比例'),
-  'traffic.clientTimeoutMs': tx('使用者逾時'),
-  'traffic.arrivals': tx('請求到達方式'),
-  'traffic.followReads': tx('寫完接著讀的比例'),
-  'traffic.followAfterMs': tx('寫完多久接著讀'),
-  'keys.count': tx('資料筆數'),
-  'keys.zipf': tx('熱門程度（zipf）'),
-  durationS: tx('時長'),
-  warmupS: tx('暖機'),
-  windowS: tx('每個統計區間'),
-  seed: tx('隨機種子'),
-  scale: tx('縮小比例'),
-  events: tx('事件'),
+  'traffic.rps': tx('Requests per second'),
+  'traffic.readRatio': tx('Read ratio'),
+  'traffic.clientTimeoutMs': tx('Client timeout'),
+  'traffic.arrivals': tx('Arrivals'),
+  'traffic.followReads': tx('Share of writes followed by a read'),
+  'traffic.followAfterMs': tx('delay of the follow-up read'),
+  'keys.count': tx('key count'),
+  'keys.zipf': tx('key popularity (zipf)'),
+  durationS: tx('Duration'),
+  warmupS: tx('Warm-up'),
+  windowS: tx('stats window'),
+  seed: tx('Random seed'),
+  scale: tx('Scale-down'),
+  events: tx('Events'),
 };
 
 /** One scenario change as a sentence. */
 export function describeScenarioChange(c: ScenarioChange): string {
   const what = t(SCENARIO_LABEL[c.field] ?? c.field);
   const v = (x: Value): string => {
-    if (c.field === 'events') return t('{n} 個', { n: (x as unknown[]).length });
+    if (c.field === 'events') return t('{n}', { n: (x as unknown[]).length });
     if (c.field === 'traffic.readRatio' || c.field === 'traffic.followReads') return `${fmtNum((x as number) * 100)}%`;
-    if (c.field === 'durationS' || c.field === 'warmupS' || c.field === 'windowS') return t('{n} 秒', { n: fmtNum(x as number) });
+    if (c.field === 'durationS' || c.field === 'warmupS' || c.field === 'windowS') return t('{n} s', { n: fmtNum(x as number) });
     if (c.field === 'traffic.clientTimeoutMs' || c.field === 'traffic.followAfterMs') return `${fmtNum(x as number)} ms`;
-    if (c.field === 'traffic.arrivals') return x === 'constant' ? t('平均間隔') : t('隨機');
+    if (c.field === 'traffic.arrivals') return x === 'constant' ? t('evenly spaced') : t('Random');
     return fmtValue(x);
   };
-  if (c.field === 'events' && Array.isArray(c.before) && Array.isArray(c.after) && c.before.length === c.after.length) return t('情境的事件不同');
-  return t('情境的{what}：{before} → {after}', { what, before: v(c.before), after: v(c.after) });
+  if (c.field === 'events' && Array.isArray(c.before) && Array.isArray(c.after) && c.before.length === c.after.length) return t('The scenario events differ');
+  return t('Scenario {what}: {before} → {after}', { what, before: v(c.before), after: v(c.after) });
 }

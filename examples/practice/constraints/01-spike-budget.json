@@ -1,59 +1,21 @@
 {
   "schema": "loadsketch/problem@1",
   "id": "spike-budget",
-  "title": "尖峰，但預算有限",
-  "text": "3 人團隊，一個月。平常每秒 300 個請求；第 2 分鐘起有 2 分鐘變成 3 倍。目前固定 2 台 API Server，尖峰時大量失敗。整場失敗率 ≤ 1%、p99 ≤ 500 ms，每月不超過 $800，複雜度不超過 6 點。",
+  "title": "A peak on a small budget",
+  "text": "A team of 3, one month. 300 requests per second normally; 3× for 2 minutes from minute 2. Now there are 2 fixed API Server instances, and many requests fail at the peak. Error rate ≤ 1% and p99 ≤ 500 ms for the whole run, at most $800 a month, at most 6 complexity points.",
   "example": "autoscale",
   "scenario": {
     "schema": "loadsketch/scenario@1",
-    "name": "限制：尖峰 3 倍",
+    "name": "Constraints: a 3× peak",
     "seed": 1,
     "durationS": 600,
     "warmupS": 5,
-    "traffic": {
-      "rps": 300,
-      "readRatio": 0.9,
-      "clientTimeoutMs": 2000
-    },
-    "events": [
-      {
-        "type": "spike",
-        "atS": 120,
-        "forS": 120,
-        "multiplier": 3
-      }
-    ]
+    "traffic": { "rps": 300, "readRatio": 0.9, "clientTimeoutMs": 2000 },
+    "events": [{ "type": "spike", "atS": 120, "forS": 120, "multiplier": 3 }]
   },
-  "start": [
-    {
-      "node": "api",
-      "params": {
-        "autoscale": "off"
-      }
-    }
-  ],
-  "limits": {
-    "maxErrorRate": 0.01,
-    "maxP99Ms": 500,
-    "budgetPerMonth": 800,
-    "maxPoints": 6
-  },
-  "hint": "先算要幾台。尖峰每秒 900 個請求 × 每個 20 ms = 同時有 18 個在處理；每台同時處理 8 個，所以要 3 台，不是 6 台。自動擴充在這裡幫不上忙：新機器開機要 2 分鐘，尖峰也只有 2 分鐘，機器好了尖峰已經過了，還多 1 點複雜度。固定開 3 台就夠。",
-  "solution": [
-    {
-      "node": "api",
-      "params": {
-        "instances": 3
-      }
-    }
-  ],
-  "naive": [
-    {
-      "node": "api",
-      "params": {
-        "autoscale": "off",
-        "instances": 6
-      }
-    }
-  ]
+  "start": [{ "node": "api", "params": { "autoscale": "off" } }],
+  "limits": { "maxErrorRate": 0.01, "maxP99Ms": 500, "budgetPerMonth": 800, "maxPoints": 6 },
+  "hint": "Count the instances first. The peak is 900 requests per second × 20 ms each = 18 in progress at one time. Each instance handles 8 at a time, so you need 3 instances, not 6. Autoscaling does not help here: a new machine takes 2 minutes to start and the peak lasts 2 minutes, so the machines are ready when the peak is over, and autoscaling costs 1 more complexity point. 3 fixed instances are enough.",
+  "solution": [{ "node": "api", "params": { "instances": 3 } }],
+  "naive": [{ "node": "api", "params": { "autoscale": "off", "instances": 6 } }]
 }

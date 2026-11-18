@@ -37,7 +37,7 @@ describe('complexity points', () => {
     );
     const pts = complexity(more);
     expect(pts.total).toBe(4 + 2 + 1 + 1 + 1 + 1 + 1);
-    expect(pts.items.map((i) => i.text)).toEqual(expect.arrayContaining(['outlier detection', '自動擴充', '讀副本', '對沖請求', '降級回應']));
+    expect(pts.items.map((i) => i.text)).toEqual(expect.arrayContaining(['outlier detection', 'Autoscaling', 'Read replicas', 'Hedged request', 'Fallback (degraded response)']));
   });
 
   it('more than one region costs extra', () => {

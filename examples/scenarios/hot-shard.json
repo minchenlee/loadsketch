@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "大型伺服器發公告：少數頻道非常熱",
+  "name": "A large server posts an announcement: a few channels get very hot",
   "seed": 1,
   "durationS": 60,
   "traffic": { "rps": 3500, "readRatio": 0.8 },

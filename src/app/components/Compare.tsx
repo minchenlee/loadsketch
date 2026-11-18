@@ -40,7 +40,7 @@ function useRunsAgain(items: CompareItem[]): (Again | undefined)[] {
       // a worker that cannot start or load: that version's line says so, the others go on
       w.onerror = (ev) => {
         ev.preventDefault();
-        setAgain((a) => a.map((y, j) => (j === i ? { error: ev.message || t('無法啟動') } : y)));
+        setAgain((a) => a.map((y, j) => (j === i ? { error: ev.message || t('could not start') } : y)));
         w.terminate();
       };
       const req: CompareRequest = { lang: getLang(), i, design: x.design, scenario: x.scenario };
@@ -86,7 +86,7 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
   // A, B, C, D: versions often share the design's name
   const letter = (i: number) => String.fromCharCode(65 + i);
   const title = (i: number) => `${letter(i)} · ${items[i].name}`;
-  const chartSeries = items.map((x, i) => ({ label: x === base ? t('{name}（基準）', { name: letter(i) }) : letter(i), color: colors[i], dash: x === base }));
+  const chartSeries = items.map((x, i) => ({ label: x === base ? t('{name} (baseline)', { name: letter(i) }) : letter(i), color: colors[i], dash: x === base }));
   const stale = items.some((x, i) => {
     const a = again[i];
     return x.summary && a && 'summary' in a && rerunDiffers(x.summary, a.summary);
@@ -109,31 +109,31 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
 
   return createPortal(
     <div className="sd-backdrop fixed inset-0 z-50 flex items-center justify-center p-6" data-closing={closing || undefined} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div ref={box} role="dialog" aria-modal="true" aria-label={t('比較版本')} className="panel sd-dialog flex max-h-[92vh] w-[min(1200px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="compare">
+      <div ref={box} role="dialog" aria-modal="true" aria-label={t('Compare versions')} className="panel sd-dialog flex max-h-[92vh] w-[min(1200px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="compare">
         <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-3">
           <GitCompareArrows size={18} className="muted" />
-          <div className="text-[16px] font-semibold">{t('比較版本')}</div>
-          <div className="muted sd-desk text-[13px]">{t('標著「基準」的那一欄是起點；其他欄顯示和它差多少。')}</div>
+          <div className="text-[16px] font-semibold">{t('Compare versions')}</div>
+          <div className="muted sd-desk text-[13px]">{t('The column marked "Baseline" is the starting point; the others show how much they differ from it.')}</div>
           <button
             className="btn ml-auto"
             onClick={() => void share()}
             disabled={!canShare}
-            title={canShare ? t('複製一個連結，打開就是這組比較') : t('分享連結最多帶 {n} 個版本：只勾 {n} 個再比較，就能分享。', { n: MAX_SHARE_COMPARE })}
+            title={canShare ? t('Copy a link that opens this comparison') : t('A share link holds at most {n} versions: compare only {n} to share.', { n: MAX_SHARE_COMPARE })}
             data-testid="compare-share"
           >
-            {shared ? <Check size={14} /> : <Link size={14} />} <span className="sd-desk">{shared ? t('已複製') : t('分享')}</span>
+            {shared ? <Check size={14} /> : <Link size={14} />} <span className="sd-desk">{shared ? t('Copied') : t('Share')}</span>
           </button>
-          <button className="btn" onClick={close} aria-label={t('關閉')} autoFocus>
+          <button className="btn" onClick={close} aria-label={t('Close')} autoFocus>
             <X size={16} />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {link && (!link.copied || link.long) && (
             <div className="card mb-3 px-3 py-2 text-[14px]" style={{ borderColor: 'color-mix(in srgb, var(--warn) 55%, var(--line))' }} data-testid="compare-share-note">
-              {!link.copied && <div>{t('不能寫入剪貼簿：選取下面的連結，自己複製。')}</div>}
-              {link.long && <div>{t('分享連結很長（{n} 個字元），有些聊天軟體會截斷。大的設計建議用「存成 JSON」分享。', { n: link.url.length })}</div>}
+              {!link.copied && <div>{t('Cannot write to the clipboard: select the link below and copy it yourself.')}</div>}
+              {link.long && <div>{t('The share link is long ({n} characters); some chat apps cut it. For a big design, share the file from "Save as JSON".', { n: link.url.length })}</div>}
               {!link.copied && (
-                <input className="field mt-1.5 w-full font-mono text-[12px]" readOnly value={link.url} aria-label={t('分享連結')} onFocus={(e) => e.currentTarget.select()} autoFocus data-testid="compare-share-link" />
+                <input className="field mt-1.5 w-full font-mono text-[12px]" readOnly value={link.url} aria-label={t('Share link')} onFocus={(e) => e.currentTarget.select()} autoFocus data-testid="compare-share-link" />
               )}
             </div>
           )}
@@ -141,7 +141,7 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
             <div className="card mb-3 flex items-start gap-2 px-3 py-2 text-[14px]" style={{ borderColor: 'color-mix(in srgb, var(--warn) 55%, var(--line))' }} data-testid="compare-mixed">
               <TriangleAlert size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--warn-ink)' }} />
               <div>
-                <span className="font-semibold">{t('情境不同，數字不能直接比。')}</span> {t('差異是設計和情境一起造成的；下面列出每個版本的情境改了什麼。')}
+                <span className="font-semibold">{t('The scenarios differ: the numbers are not like for like.')}</span> {t('The differences come from the design and the scenario together. Each version\'s scenario changes are listed below.')}
               </div>
             </div>
           )}
@@ -158,13 +158,13 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
                       </div>
                       <div className="faint mt-0.5 text-[12px]">
                         {x.at !== undefined ? <span className="num">{fmtWhen(x.at)} · </span> : null}
-                        {x.scenario.name ? t(x.scenario.name) : t('自訂')}
+                        {x.scenario.name ? t(x.scenario.name) : t('Custom')}
                       </div>
                       <div className="mt-1">
                         {x === base ? (
-                          <span className="sd-pill" style={{ '--pill': 'var(--accent)' } as React.CSSProperties} data-testid="compare-base">{t('基準')}</span>
+                          <span className="sd-pill" style={{ '--pill': 'var(--accent)' } as React.CSSProperties} data-testid="compare-base">{t('Baseline')}</span>
                         ) : (
-                          <button className="faint text-[12px] hover:underline" onClick={() => setBase(x.key)} data-testid="compare-set-base">{t('設為基準')}</button>
+                          <button className="faint text-[12px] hover:underline" onClick={() => setBase(x.key)} data-testid="compare-set-base">{t('Make baseline')}</button>
                         )}
                       </div>
                     </th>
@@ -180,7 +180,7 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
                       const d = s && baseSummary && x !== base ? delta(m, baseSummary[m.key], s[m.key]) : null;
                       return (
                         <td key={x.key} className="border-b border-[var(--line)] px-2 py-1.5 align-top">
-                          <span className="num font-medium">{s ? m.fmt(s[m.key]) : t('計算中…')}</span>
+                          <span className="num font-medium">{s ? m.fmt(s[m.key]) : t('Working…')}</span>
                           {d && (
                             <span className="num ml-2 text-[13px]" style={{ color: d.tone === 'better' ? 'var(--ok-ink)' : d.tone === 'worse' ? 'var(--bad-ink)' : 'var(--ink-3)' }} data-tone={d.tone}>
                               {d.text}
@@ -193,12 +193,12 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
                 ))}
                 {!hidden && (
                   <tr data-testid="compare-row-bottleneck">
-                    <th className="muted whitespace-nowrap py-1.5 pr-3 text-left align-top font-normal">{t('瓶頸')}</th>
+                    <th className="muted whitespace-nowrap py-1.5 pr-3 text-left align-top font-normal">{t('Bottleneck')}</th>
                     {items.map((x, i) => {
                       const s = summaryOf(i);
                       return (
                         <td key={x.key} className="px-2 py-1.5 align-top text-[13px] leading-snug">
-                          {s ? (s.bottleneck ? s.bottleneck.label : t('沒有')) : t('計算中…')}
+                          {s ? (s.bottleneck ? s.bottleneck.label : t('none')) : t('Working…')}
                         </td>
                       );
                     })}
@@ -210,13 +210,13 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
 
           {!phone && (
             <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2" data-testid="compare-charts">
-              <Chart testId="compare-chart-fail" title={t('失敗率（每秒）')} data={overlay(series, 'failShare')} series={chartSeries} height={180} yMax={1.05} unit="%" />
-              <Chart testId="compare-chart-p99" title={t('p99（成功的請求）')} data={overlay(series, 'p99')} series={chartSeries} height={180} unit="ms" />
+              <Chart testId="compare-chart-fail" title={t('Failure rate (per second)')} data={overlay(series, 'failShare')} series={chartSeries} height={180} yMax={1.05} unit="%" />
+              <Chart testId="compare-chart-p99" title={t('p99 (successful requests)')} data={overlay(series, 'p99')} series={chartSeries} height={180} unit="ms" />
             </div>
           )}
-          {!phone && again.some((a) => a === undefined) && <div className="faint mt-1 text-[13px]" data-testid="compare-running">{t('重跑每個版本來畫圖…')}</div>}
-          {stale && <div className="faint mt-1 text-[13px]" data-testid="compare-stale">{t('有的版本是舊版模擬器跑的：圖是現在重跑的結果，可能和表上的數字略有不同。')}</div>}
-          {again.map((a, i) => a && 'error' in a ? <div key={i} className="mt-1 text-[13px]" style={{ color: 'var(--bad-ink)' }}>{t('「{name}」重跑失敗：{why}', { name: title(i), why: a.error })}</div> : null)}
+          {!phone && again.some((a) => a === undefined) && <div className="faint mt-1 text-[13px]" data-testid="compare-running">{t('Running each version again to draw the charts…')}</div>}
+          {stale && <div className="faint mt-1 text-[13px]" data-testid="compare-stale">{t('Some versions were made by an older simulator: the charts come from running them again now, and can differ a little from the numbers in the table.')}</div>}
+          {again.map((a, i) => a && 'error' in a ? <div key={i} className="mt-1 text-[13px]" style={{ color: 'var(--bad-ink)' }}>{t('Running "{name}" again failed: {why}', { name: title(i), why: a.error })}</div> : null)}
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="compare-diffs">
             {items.map((x, i) => {
@@ -227,10 +227,10 @@ function CompareDialog({ items, onClose }: { items: CompareItem[]; onClose: () =
                 <section key={x.key} data-testid="compare-diff">
                   <h3 className="mb-1 flex items-center gap-1.5 text-[14px] font-semibold">
                     <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: colors[i] }} />
-                    {t('「{name}」和基準比，改了哪裡', { name: title(i) })}
+                    {t('What "{name}" changed from the baseline', { name: title(i) })}
                   </h3>
                   {!dd.length && !sd.length ? (
-                    <div className="faint text-[13px]">{t('設計和情境都一樣。')}</div>
+                    <div className="faint text-[13px]">{t('The design and the scenario are the same.')}</div>
                   ) : (
                     <ul className="list-disc space-y-0.5 pl-5 text-[13px] leading-snug">
                       {dd.map((c, j) => (

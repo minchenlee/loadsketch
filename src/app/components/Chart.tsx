@@ -72,7 +72,7 @@ function showTip(tip: HTMLDivElement, u: uPlot, specs: SeriesSpec[], unit: strin
   if (more) {
     const rest = document.createElement('div');
     rest.className = 'faint';
-    rest.textContent = t('（只列最高的 {n} 個）', { n: TIP_ROWS });
+    rest.textContent = t('(top {n} only)', { n: TIP_ROWS });
     tip.append(rest);
   }
   tip.style.display = 'block';
@@ -181,7 +181,7 @@ export function Chart(props: ChartProps) {
         {...props}
         cardRef={card}
         action={
-          <button ref={expand} className="sd-chart-btn" onClick={() => morph(card.current, name, true, () => setOpen(true))} aria-label={t('放大「{title}」', { title: props.title })} title={t('放大')} data-testid={props.testId ? `${props.testId}-expand` : undefined}>
+          <button ref={expand} className="sd-chart-btn" onClick={() => morph(card.current, name, true, () => setOpen(true))} aria-label={t('Enlarge "{title}"', { title: props.title })} title={t('Enlarge')} data-testid={props.testId ? `${props.testId}-expand` : undefined}>
             <Maximize2 size={14} />
           </button>
         }
@@ -216,7 +216,7 @@ function ChartDialog({ name, onClose, ...props }: ChartProps & { name: string; o
           testId={props.testId ? `${props.testId}-big` : undefined}
           transitionName={name}
           action={
-            <button ref={closeBtn} className="sd-chart-btn" onClick={onClose} aria-label={t('關閉')} title={t('關閉')}>
+            <button ref={closeBtn} className="sd-chart-btn" onClick={onClose} aria-label={t('Close')} title={t('Close')}>
               <X size={16} />
             </button>
           }
@@ -322,7 +322,7 @@ function ChartCard({ title, series, data, height = 150, yMax, unit, testId, big,
         <div ref={box} />
         <div ref={tip} className="sd-tip" role="tooltip" data-testid={testId ? `${testId}-tip` : undefined} />
         {(data[0]?.length ?? 0) === 0 && (
-          <div className="faint pointer-events-none absolute inset-0 flex items-center justify-center pb-6 text-[14px]">{t('還沒有資料')}</div>
+          <div className="faint pointer-events-none absolute inset-0 flex items-center justify-center pb-6 text-[14px]">{t('No data yet')}</div>
         )}
       </div>
     </div>

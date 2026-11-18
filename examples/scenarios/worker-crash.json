@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "Worker 故障：第 20 秒一台 worker 壞掉 20 秒",
+  "name": "Worker failure: one worker fails at second 20 for 20 s",
   "seed": 1,
   "durationS": 90,
   "warmupS": 0,

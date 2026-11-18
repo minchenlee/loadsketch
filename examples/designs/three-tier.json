@@ -1,20 +1,20 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "三層式網站（快取＋讀取副本）",
-  "description": "最常見的起點：負載平衡器把請求分給 3 台 API 伺服器；讀取先查快取（cache-aside），沒命中才查資料庫副本；寫入進主庫，再讓快取失效。",
+  "name": "Three-tier site (cache + read replicas)",
+  "description": "The most common starting point: the load balancer spreads requests over 3 API servers; reads check the cache first (cache-aside) and go to the database replica only on a miss; writes go to the primary, then the cache is invalidated.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [300, 200],
       "params": { "policy": "least_conn" }
     },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [590, 200],
       "params": { "instances": 3, "concurrency": 4, "serviceMs": { "mean": 6, "cv": 1 } }
     },

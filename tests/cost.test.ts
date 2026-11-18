@@ -41,7 +41,7 @@ describe('machines', () => {
     expect(item(c, 'api').perHour).toBeCloseTo(3 * MACHINE.service.perHour, 9);
     expect(item(c, 'db').perHour).toBeCloseTo(3 * MACHINE.database.perHour, 9);
     expect(item(c, 's').perHour).toBeCloseTo(8 * MACHINE.sharded_db.perHour, 9);
-    expect(item(c, 'api').what).toEqual({ text: '{k} 台 × 每台每小時 {p}', vars: { k: '3', p: '$0.08' } });
+    expect(item(c, 'api').what).toEqual({ text: '{k} × {p} per hour each', vars: { k: '3', p: '$0.08' } });
     expect(c.perMonth).toBeCloseTo(c.perHour * HOURS_PER_MONTH, 6);
     // without a run there are no request prices
     expect(c.withRequests).toBe(false);
@@ -155,7 +155,7 @@ describe('requests and traffic', () => {
     const blob = item(costOf(d, r), 'blob');
     // api -> blob carries the writes only: 30% of 200/s = 0.216 million per hour
     expect(blob.perHour).toBeCloseTo(0.216 * STORAGE.writePerMillion, 1);
-    expect(blob.what.text).toBe('每小時讀 {r}、寫 {w} 百萬次');
+    expect(blob.what.text).toBe('{r} million reads and {w} million writes per hour');
     expect(blob.what.vars.r).toBe('0');
   });
 });

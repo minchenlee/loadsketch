@@ -25,10 +25,10 @@ export function Palette() {
     addNode(kind, p.x - NODE_W / 2 + (Math.random() - 0.5) * 60, p.y - 24 + (Math.random() - 0.5) * 60, init);
   };
   return (
-    <aside className="panel flex w-[232px] shrink-0 flex-col overflow-y-auto border-r" aria-label={t('元件')}>
+    <aside className="panel flex w-[232px] shrink-0 flex-col overflow-y-auto border-r" aria-label={t('Component')}>
       <div className="px-3 pt-3 pb-1">
-        <div className="text-[15px] font-semibold">{t('元件')}</div>
-        <div className="faint text-[13px]">{t('拖到畫布上，或點一下加到中間。')}</div>
+        <div className="text-[15px] font-semibold">{t('Component')}</div>
+        <div className="faint text-[13px]">{t('Drag onto the canvas, or click to add it in the middle.')}</div>
       </div>
       {CATEGORY_ORDER.map((cat) => {
         const kinds = KIND_NAMES.filter((k) => KINDS[k].category === cat && !(practice && k === CUSTOM_KIND));
@@ -64,7 +64,7 @@ export function Palette() {
       })}
       <PresetList practice={practice} add={(p) => addAtCenter(p.kind, { label: p.name, params: p.params })} />
       <div className="faint mt-auto px-3 py-3 text-[13px] leading-relaxed">
-        {t('從節點右邊的點拖到另一個節點左邊的點，就是一條呼叫。選取後按 Delete 刪除。')}
+        {t('Drag from the dot on the right of a node to the dot on the left of another node to make a call. Select it and press Delete to remove it.')}
       </div>
     </aside>
   );
@@ -91,27 +91,27 @@ function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => 
   const importFile = async (f: File) => {
     const r = parsePresetFile(await f.text());
     if (!r.ok) {
-      useApp.setState({ error: t('打不開 {file}：這不是 loadsketch 匯出的樣板檔。', { file: f.name }) });
+      useApp.setState({ error: t('Cannot open {file}: it is not a preset file exported from loadsketch.', { file: f.name }) });
       return;
     }
     const { full, refused } = usePresets.getState().importPresets(r.presets);
     // refused: the palette says why (presets-refused)
     if (refused) return;
     const why = [
-      r.skipped ? t('{n} 個樣板格式不對', { n: r.skipped }) : '',
-      full ? t('{n} 個樣板放不下（最多 {max} 個）', { n: full, max: MAX_PRESETS }) : '',
+      r.skipped ? t('{n} are not in the right format', { n: r.skipped }) : '',
+      full ? t('{n} did not fit (at most {max})', { n: full, max: MAX_PRESETS }) : '',
     ].filter(Boolean);
-    if (why.length) useApp.setState({ error: t('{file} 有些樣板沒有匯入：{why}。', { file: f.name, why: why.join(t('、')) }) });
+    if (why.length) useApp.setState({ error: t('Some presets in {file} were not imported: {why}.', { file: f.name, why: why.join(t(', @@list')) }) });
   };
 
   return (
     <div className="px-2 pt-3" data-testid="presets">
       <div className="flex items-center gap-1 px-1.5 pb-1">
-        <div className="faint flex-1 text-[13px] font-medium tracking-wide">{t('我的樣板')}</div>
-        <button className="btn px-1.5 py-0.5" onClick={exportAll} disabled={!all.length} title={t('把所有樣板存成一個檔案')} aria-label={t('匯出樣板')} data-testid="presets-export">
+        <div className="faint flex-1 text-[13px] font-medium tracking-wide">{t('My presets')}</div>
+        <button className="btn px-1.5 py-0.5" onClick={exportAll} disabled={!all.length} title={t('Save all presets to one file')} aria-label={t('Export presets')} data-testid="presets-export">
           <Download size={13} />
         </button>
-        <button className="btn px-1.5 py-0.5" onClick={() => file.current?.click()} title={t('從檔案加入樣板')} aria-label={t('匯入樣板')} data-testid="presets-import">
+        <button className="btn px-1.5 py-0.5" onClick={() => file.current?.click()} title={t('Add presets from a file')} aria-label={t('Import presets')} data-testid="presets-import">
           <FileInput size={13} />
         </button>
         <input
@@ -127,9 +127,9 @@ function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => 
           }}
         />
       </div>
-      {!presets.length && <div className="faint px-1.5 pb-1 text-[13px] leading-snug">{t('選一個元件，在右邊按「存成樣板」：它和它的設定會出現在這裡，可以再拖到畫布上。')}</div>}
-      {refused && <div className="px-1.5 pb-1 text-[13px] leading-snug" style={{ color: 'var(--bad-ink)' }} role="status" data-testid="presets-refused">{t('瀏覽器存不了樣板，還沒存的改動太多：這次的改動沒有做。先匯出樣板。')}</div>}
-      {memoryOnly && <div className="faint px-1.5 pb-1 text-[13px] leading-snug" data-testid="presets-memory-only">{t('這個瀏覽器不讓網頁存資料：樣板只留到關閉分頁。要留下樣板，先匯出成檔案。')}</div>}
+      {!presets.length && <div className="faint px-1.5 pb-1 text-[13px] leading-snug">{t('Select a component and press "Save as preset" on the right: it appears here with its settings, ready to drag onto the canvas.')}</div>}
+      {refused && <div className="px-1.5 pb-1 text-[13px] leading-snug" style={{ color: 'var(--bad-ink)' }} role="status" data-testid="presets-refused">{t('This browser cannot save presets, and too many changes are waiting: this change was not made. Export your presets first.')}</div>}
+      {memoryOnly && <div className="faint px-1.5 pb-1 text-[13px] leading-snug" data-testid="presets-memory-only">{t('This browser does not let pages keep data: presets last until you close the tab. To keep them, export them to a file first.')}</div>}
       {presets.map((p) => {
         const spec = KINDS[p.kind];
         const Icon = iconOf(p);
@@ -142,7 +142,7 @@ function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => 
                 e.dataTransfer.effectAllowed = 'move';
               }}
               onClick={() => add(p)}
-              title={t('{kind}：{name}', { kind: t(spec.label), name: p.name })}
+              title={t('{kind}: {name}', { kind: t(spec.label), name: p.name })}
               className="sd-pal flex min-w-0 flex-1 cursor-grab items-center gap-2 px-1.5 py-1 text-left active:cursor-grabbing"
               data-testid="preset-item"
               data-adds
@@ -152,7 +152,7 @@ function PresetList({ practice, add }: { practice: boolean; add: (p: Preset) => 
               </span>
               <span className="truncate">{p.name}</span>
             </button>
-            <button className="faint shrink-0 rounded px-1 py-1 hover:text-[var(--text)]" onClick={() => remove(p.id)} title={t('刪除樣板')} aria-label={t('刪除樣板「{name}」', { name: p.name })} data-testid="preset-remove">
+            <button className="faint shrink-0 rounded px-1 py-1 hover:text-[var(--text)]" onClick={() => remove(p.id)} title={t('Delete preset')} aria-label={t('Delete preset "{name}"', { name: p.name })} data-testid="preset-remove">
               <X size={13} />
             </button>
           </div>

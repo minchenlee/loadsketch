@@ -22,10 +22,10 @@ import { Versions } from './Versions.tsx';
 import { MAX_PRESET_NAME, usePresets } from '../presets.ts';
 
 const CV_PRESETS = [
-  { value: 0, label: tx('固定（cv 0）') },
-  { value: 0.5, label: tx('小幅變動（cv 0.5）') },
-  { value: 1, label: tx('指數分布（cv 1）') },
-  { value: 2, label: tx('長尾（cv 2）') },
+  { value: 0, label: tx('Fixed (cv 0)') },
+  { value: 0.5, label: tx('Small variation (cv 0.5)') },
+  { value: 1, label: tx('Exponential (cv 1)') },
+  { value: 2, label: tx('Long tail (cv 2)') },
 ];
 
 
@@ -60,7 +60,7 @@ function ParamField({ kind, name, spec, value, onChange, placeholder, origin }: 
         input = (
           <div className="grid grid-cols-[1fr_5.5rem] items-start gap-2">
             <input type="range" min={0} max={1} step={0.01} value={v} onChange={(e) => onChange(Number(e.target.value))} className="mt-1.5" aria-labelledby={id} />
-            <NumberInput value={v} min={on !== undefined ? 0.001 : 0} max={1} scale={100} unit="%" label={t('{label}（百分比）', { label: t(spec.label) })} onChange={onChange} />
+            <NumberInput value={v} min={on !== undefined ? 0.001 : 0} max={1} scale={100} unit="%" label={t('{label} (percent)', { label: t(spec.label) })} onChange={onChange} />
           </div>
         );
         break;
@@ -73,7 +73,7 @@ function ParamField({ kind, name, spec, value, onChange, placeholder, origin }: 
             <NumberInput value={d.mean} min={0} max={spec.max} unit="ms" labelledBy={id} onChange={(v) => onChange({ mean: v, cv })} />
             <Select
               className="w-full"
-              aria-label={t('{label}的變動', { label: t(spec.label) })}
+              aria-label={t('Change in {label}', { label: t(spec.label) })}
               value={cv}
               menuWidth={190}
               options={[...CV_PRESETS.map((p) => ({ value: p.value, label: t(p.label) })), ...(CV_PRESETS.some((p) => p.value === cv) ? [] : [{ value: cv, label: `cv ${cv}` }])]}
@@ -106,13 +106,13 @@ function ParamField({ kind, name, spec, value, onChange, placeholder, origin }: 
           </span>
         )}
         {isSet && (
-          <button className="faint ml-auto text-[13px] hover:underline" onClick={() => onChange(undefined)} title={t('改回預設值')}>
-            {t('用預設')}
+          <button className="faint ml-auto text-[13px] hover:underline" onClick={() => onChange(undefined)} title={t('Reset to default')}>
+            {t('Use default')}
           </button>
         )}
         {on !== undefined && (
           <span className={`flex items-center gap-1.5 ${isSet ? '' : 'ml-auto'}`}>
-            <span className="faint text-[13px]">{off ? t('關') : t('開')}</span>
+            <span className="faint text-[13px]">{off ? t('Off') : t('On')}</span>
             <Switch on={!off} label={t(spec.label)} onChange={(v) => onChange(v ? (spec.default === on ? undefined : on) : spec.default === 0 ? undefined : 0)} />
           </span>
         )}
@@ -137,7 +137,7 @@ function ParamGroups({ kind, values, onChange, placeholder, hide, sources }: { k
     <div>
       {groups.map((g) => {
         const isOpen = open[g.key] ?? !g.folded;
-        const summary = g.changed.length ? g.changed.map((l) => t(l)).join(t('、')) : g.folded ? t('關') : '';
+        const summary = g.changed.length ? g.changed.map((l) => t(l)).join(t(', @@list')) : g.folded ? t('Off') : '';
         return (
           <section key={g.key} className="mt-2 border-t pt-2" style={{ borderColor: 'var(--line)' }} data-testid={`group-${g.key}`}>
             <button type="button" className="flex w-full items-baseline gap-2 text-left" aria-expanded={isOpen} onClick={() => setOpen({ ...open, [g.key]: !isOpen })}>
@@ -198,40 +198,40 @@ function LiveNodeStats({ id, kind }: { id: string; kind: string }) {
   return (
     <div className="card mt-3 p-2.5" data-testid="live-stats">
       <div className="mb-1 flex items-center gap-2">
-        <span className="font-semibold">{t('現在')}</span>
+        <span className="font-semibold">{t('Now')}</span>
         {allDown && (
           <span className="sd-pill text-[12px]" style={{ '--pill': 'var(--bad)', color: 'var(--bad-ink)' } as React.CSSProperties} data-testid="live-down">
-            {t('故障')}
+            {t('Down')}
           </span>
         )}
         {!allDown && s && s.down > 0 && (
           <span className="sd-pill text-[12px]" style={{ '--pill': 'var(--warn)', color: 'var(--warn-ink)' } as React.CSSProperties} data-testid="live-down">
-            {t('{n} 台故障', { n: s.down })}
+            {t('{n} down', { n: s.down })}
           </span>
         )}
         {s?.cb && s.cb !== 'closed' && (
           <span className="sd-pill text-[12px]" style={{ '--pill': s.cb === 'open' ? 'var(--bad)' : 'var(--warn)' } as React.CSSProperties}>
-            {s.cb === 'open' ? t('跳開') : t('試探中')}
+            {s.cb === 'open' ? t('Tripped') : t('Half-open probe')}
           </span>
         )}
       </div>
-      {hasCapacity && <Stat testId="live-busy" k={t('處理中／容量')} v={s ? `${fmtN(s.busy)}／${fmtN(s.slots)}` : '–'} />}
+      {hasCapacity && <Stat testId="live-busy" k={t('In flight / capacity')} v={s ? `${fmtN(s.busy)}／${fmtN(s.slots)}` : '–'} />}
       {hasQueue && (
         <Stat
           testId="live-queued"
-          k={t('排隊中')}
+          k={t('Queued')}
           v={queued !== undefined ? <span style={queued > 0 ? { color: 'var(--warn-ink)' } : undefined}>{fmtN(queued)}</span> : '–'}
-          hint={nw?.queue !== undefined ? t('最近一秒平均排隊 {n}', { n: fmtN(nw.queue) }) : undefined}
+          hint={nw?.queue !== undefined ? t('Avg queued in the last second: {n}', { n: fmtN(nw.queue) }) : undefined}
         />
       )}
-      <Stat testId="live-arrivals" k={t('每秒進來')} v={nw ? fmtN(nw.arrivals / dt) : '–'} />
-      <Stat testId="live-ok" k={t('每秒完成')} v={nw ? fmtN(nw.ok / dt) : '–'} />
-      <Stat testId="live-err" k={t('錯誤率')} v={nw ? <span style={errRate > 0 ? { color: 'var(--bad-ink)' } : undefined}>{pct(errRate)}</span> : '–'} />
-      {hasCapacity && <Stat testId="live-util" k={t('忙碌比例')} v={nw || s ? pct(util) : '–'} />}
-      {hasWait && <Stat testId="live-wait" k={t('平均等待')} v={nw?.waitMs !== undefined ? fmtMs(nw.waitMs) : '–'} />}
+      <Stat testId="live-arrivals" k={t('Incoming / s')} v={nw ? fmtN(nw.arrivals / dt) : '–'} />
+      <Stat testId="live-ok" k={t('Completed / s')} v={nw ? fmtN(nw.ok / dt) : '–'} />
+      <Stat testId="live-err" k={t('Error rate')} v={nw ? <span style={errRate > 0 ? { color: 'var(--bad-ink)' } : undefined}>{pct(errRate)}</span> : '–'} />
+      {hasCapacity && <Stat testId="live-util" k={t('Busy share')} v={nw || s ? pct(util) : '–'} />}
+      {hasWait && <Stat testId="live-wait" k={t('Avg wait')} v={nw?.waitMs !== undefined ? fmtMs(nw.waitMs) : '–'} />}
       <Stat
         testId="live-total"
-        k={t('累計完成／失敗')}
+        k={t('Total ok / failed')}
         v={
           w ? (
             <>
@@ -244,7 +244,7 @@ function LiveNodeStats({ id, kind }: { id: string; kind: string }) {
       />
       {live.scale > 1 && (
         <div className="faint mt-1 text-[12px]" data-testid="live-scale-note">
-          {t('模擬 1/{k}，數字已換算', { k: live.scale })}
+          {t('Simulated at 1/{k}; numbers scaled back', { k: live.scale })}
         </div>
       )}
     </div>
@@ -255,69 +255,69 @@ function NodeStats({ r }: { r: NodeResult }) {
   const th = r.theory;
   return (
     <div className="card mt-3 p-2.5">
-      <div className="mb-1 font-semibold">{t('上次執行的結果')}</div>
-      <Stat k={t('每秒請求')} v={fmtN(r.rps)} />
+      <div className="mb-1 font-semibold">{t('Result of the last run')}</div>
+      <Stat k={t('Requests per second')} v={fmtN(r.rps)} />
       {r.kind === 'client' && r.arrivals > 0 && (
-        <Stat k={t('這個使用者的失敗')} v={t('{n}／{total}（{pct}）', { n: fmtN(r.fail), total: fmtN(r.arrivals), pct: pct(r.fail / r.arrivals) })} hint={t('它送出的請求裡，最後失敗的數量（任何原因）')} />
+        <Stat k={t('Failures for this user')} v={t('{n}/{total} ({pct})', { n: fmtN(r.fail), total: fmtN(r.arrivals), pct: pct(r.fail / r.arrivals) })} hint={t('Number of requests it sent that ended in failure (any reason)')} />
       )}
-      {r.utilization !== undefined && <Stat k={t('平均忙碌')} v={pct(r.utilization)} />}
-      {r.peakUtilization !== undefined && <Stat k={t('最忙的一秒')} v={t('{pct}（第 {s} 秒）', { pct: pct(r.peakUtilization), s: Math.round(r.peakAtS ?? 0) })} />}
-      {r.waitMs !== undefined && <Stat k={t('平均排隊時間')} v={fmtMs(r.waitMs)} />}
-      {r.holdMs !== undefined && <Stat k={t('每個請求佔用時間')} v={fmtMs(r.holdMs)} hint={t('包括等下游回應的時間')} />}
-      {r.hitRatio !== undefined && <Stat k={t('命中率')} v={pct(r.hitRatio)} />}
-      {r.coalesced !== undefined && <Stat k={t('合併的查詢')} v={fmtN(r.coalesced)} hint={t('沒命中、但等別人查 DB 的結果，自己沒有去查')} />}
-      {r.leaseWaits !== undefined && <Stat k={t('Lease 等待次數')} v={fmtN(r.leaseWaits)} hint={t('沒拿到 lease、稍後再問一次快取的次數')} />}
-      {r.hcRemoved !== undefined && <Stat k={t('Health check 移出')} v={fmtN(r.hcRemoved)} hint={t('health check 把實例移出輪替的次數')} />}
-      {r.blindChecks !== undefined && <Stat k={t('看不到監控')} v={t('{n} 次', { n: r.blindChecks })} hint={t('控制面呼叫失敗，自動擴充、failover 或 DNS 檢查這次沒有動作')} />}
-      {r.ejections !== undefined && <Stat k={t('自動剔除')} v={fmtN(r.ejections)} hint={t('連續失敗、被暫時剔除的次數')} />}
-      {r.queueDepthEnd !== undefined && <Stat k={t('結束時佇列長度')} v={fmtN(r.queueDepthEnd)} />}
-      {r.circuitOpens !== undefined && <Stat k={t('保險絲跳開次數')} v={r.circuitOpens} />}
+      {r.utilization !== undefined && <Stat k={t('Avg busy')} v={pct(r.utilization)} />}
+      {r.peakUtilization !== undefined && <Stat k={t('Busiest second')} v={t('{pct} (second {s})', { pct: pct(r.peakUtilization), s: Math.round(r.peakAtS ?? 0) })} />}
+      {r.waitMs !== undefined && <Stat k={t('Avg queue time')} v={fmtMs(r.waitMs)} />}
+      {r.holdMs !== undefined && <Stat k={t('Hold time per request')} v={fmtMs(r.holdMs)} hint={t('Includes time waiting for the downstream response')} />}
+      {r.hitRatio !== undefined && <Stat k={t('Hit rate')} v={pct(r.hitRatio)} />}
+      {r.coalesced !== undefined && <Stat k={t('Coalesced reads')} v={fmtN(r.coalesced)} hint={t('Misses that waited for another request\'s DB read instead of reading the DB')} />}
+      {r.leaseWaits !== undefined && <Stat k={t('Lease waits')} v={fmtN(r.leaseWaits)} hint={t('Times a request without the lease waited and asked the cache again')} />}
+      {r.hcRemoved !== undefined && <Stat k={t('Health check removals')} v={fmtN(r.hcRemoved)} hint={t('Times the health check took an instance out of rotation')} />}
+      {r.blindChecks !== undefined && <Stat k={t('Blind checks')} v={t('{n}@@times', { n: r.blindChecks })} hint={t('Times a control call failed, so the autoscaler, failover or DNS check did not act')} />}
+      {r.ejections !== undefined && <Stat k={t('Outlier ejections')} v={fmtN(r.ejections)} hint={t('Times an instance was ejected for a while after failing in a row')} />}
+      {r.queueDepthEnd !== undefined && <Stat k={t('Queue length at the end')} v={fmtN(r.queueDepthEnd)} />}
+      {r.circuitOpens !== undefined && <Stat k={t('Circuit breaker trips')} v={r.circuitOpens} />}
       {r.autoscale && (
         <>
-          <Stat k={t('自動擴充台數')} v={t('最多 {peak} 台，結束時 {end} 台', { peak: r.autoscale.peakActive, end: r.autoscale.endActive })} hint={t('可用範圍 {min}–{max} 台', { min: r.autoscale.min, max: r.autoscale.max })} />
-          <Stat k={t('加機器／減機器')} v={t('{up} 台／{down} 台', { up: r.autoscale.launches, down: r.autoscale.retires })} />
-          {r.autoscale.bootFails !== undefined && <Stat k={t('開機失敗')} v={t('{n} 次', { n: r.autoscale.bootFails })} hint={t('開機時要呼叫的元件失敗，新機器重開')} />}
+          <Stat k={t('Autoscaling instance count')} v={t('Up to {peak} instances, {end} at the end', { peak: r.autoscale.peakActive, end: r.autoscale.endActive })} hint={t('Range {min}–{max} instances', { min: r.autoscale.min, max: r.autoscale.max })} />
+          <Stat k={t('Added / removed')} v={t('+{up} / −{down}', { up: r.autoscale.launches, down: r.autoscale.retires })} />
+          {r.autoscale.bootFails !== undefined && <Stat k={t('Boot failures')} v={t('{n}@@times', { n: r.autoscale.bootFails })} hint={t('A component called at boot failed; the new instance boots again')} />}
         </>
       )}
-      {r.asyncOk !== undefined && <Stat k={t('訊息處理完成／失敗')} v={`${fmtN(r.asyncOk)}／${fmtN(r.asyncFail ?? 0)}`} />}
-      {r.holBlocked !== undefined && <Stat k={t('排在同組後面等')} v={fmtN(r.holBlocked)} hint={t('FIFO：同一組前一則還沒做完，這則只能等（head-of-line blocking）')} />}
-      {r.dualWriteGaps !== undefined && <Stat k={t('資料和訊息不一致')} v={fmtN(r.dualWriteGaps)} hint={t('寫 DB 和送 queue 一個成功一個失敗的寫入（dual write）；outbox 打開就不會有')} />}
-      {r.outboxRetries !== undefined && <Stat k={t('outbox 重送')} v={fmtN(r.outboxRetries)} hint={t('relay 送訊息到 queue 失敗、之後再送的次數')} />}
+      {r.asyncOk !== undefined && <Stat k={t('Message processed / failed')} v={`${fmtN(r.asyncOk)}／${fmtN(r.asyncFail ?? 0)}`} />}
+      {r.holBlocked !== undefined && <Stat k={t('Waited behind its group')} v={fmtN(r.holBlocked)} hint={t('FIFO: messages that waited because an earlier one of their group was not done (head-of-line blocking)')} />}
+      {r.dualWriteGaps !== undefined && <Stat k={t('Data and message disagree')} v={fmtN(r.dualWriteGaps)} hint={t('Writes where saving to the database and sending to the queue disagreed (dual write); none with the outbox on')} />}
+      {r.outboxRetries !== undefined && <Stat k={t('Outbox resends')} v={fmtN(r.outboxRetries)} hint={t('Times the relay failed to send a message to the queue and sent it again later')} />}
       {r.redelivered !== undefined && (
         <>
-          <Stat k={t('重送')} v={fmtN(r.redelivered)} hint={t('沒有在 visibility timeout 內做完（失敗、故障或太慢），訊息重新出現')} />
-          <Stat k={t('重複處理')} v={fmtN(r.duplicates ?? 0)} hint={t('同一則訊息被做了兩次：worker 要冪等')} />
-          <Stat k={t('移到 DLQ')} v={fmtN(r.dlq ?? 0)} hint={t('收了「最多接收次數」還失敗，不再重試')} />
+          <Stat k={t('Redelivery')} v={fmtN(r.redelivered)} hint={t('Not done within the visibility timeout (failed, crashed or too slow), so the message comes back')} />
+          <Stat k={t('Duplicate processing')} v={fmtN(r.duplicates ?? 0)} hint={t('The same message is processed twice: the worker must be idempotent')} />
+          <Stat k={t('Moved to the DLQ')} v={fmtN(r.dlq ?? 0)} hint={t('Failed after the max receive count, so no more retries')} />
         </>
       )}
       {r.replicaReads !== undefined && (
         <>
           <Stat
-            k={t('讀到舊資料')}
-            v={r.replicaReads ? t('{n}／{total}（{pct}）', { n: fmtN(r.staleReads ?? 0), total: fmtN(r.replicaReads), pct: pct((r.staleReads ?? 0) / r.replicaReads) }) : `${fmtN(r.staleReads ?? 0)}／${fmtN(r.replicaReads)}`}
-            hint={t('讀副本時，這個 key 有主庫已寫入、副本還沒套用的資料')}
+            k={t('Stale read')}
+            v={r.replicaReads ? t('{n}/{total} ({pct})', { n: fmtN(r.staleReads ?? 0), total: fmtN(r.replicaReads), pct: pct((r.staleReads ?? 0) / r.replicaReads) }) : `${fmtN(r.staleReads ?? 0)}／${fmtN(r.replicaReads)}`}
+            hint={t('On a replica read, this key has data that the primary already wrote and the replica has not applied yet')}
           />
-          <Stat k={t('最大複製延遲')} v={fmtMs(r.maxReplLagMs ?? 0)} hint={t('每秒結束時，最落後的副本落後多久')} />
+          <Stat k={t('Max replication lag@@detail')} v={fmtMs(r.maxReplLagMs ?? 0)} hint={t('At the end of each second, how far behind the slowest replica is')} />
         </>
       )}
       {r.rywMisses !== undefined && (
-        <Stat k={t('看不到自己的寫入')} v={<span style={{ color: r.rywMisses ? 'var(--bad-ink)' : undefined }}>{fmtN(r.rywMisses)}</span>} hint={t('使用者寫入後馬上讀，讀到的副本還沒套用那筆寫入（read-your-writes 失敗）')} />
+        <Stat k={t('Missed own writes')} v={<span style={{ color: r.rywMisses ? 'var(--bad-ink)' : undefined }}>{fmtN(r.rywMisses)}</span>} hint={t('The user read right after writing, and the replica had not applied that write yet (read-your-writes failed)')} />
       )}
-      {r.lockWaits !== undefined && <Stat k={t('等鎖的寫入')} v={fmtN(r.lockWaits)} hint={t('寫入時這個 key 的列鎖被別的寫入拿著，排隊等它')} />}
+      {r.lockWaits !== undefined && <Stat k={t('Writes waiting for locks')} v={fmtN(r.lockWaits)} hint={t('The key\'s row lock was held by another write, so this write waited for it')} />}
       {r.failovers !== undefined && (
         <>
-          <Stat k={t('failover 次數')} v={fmtN(r.failovers)} hint={t('副本升為主庫的次數')} />
-          <Stat k={t('遺失的寫入')} v={<span style={{ color: r.lostWrites ? 'var(--bad-ink)' : undefined }}>{fmtN(r.lostWrites ?? 0)}</span>} hint={t('主庫已回覆成功、但新主庫沒收到的寫入（非同步複製）')} />
+          <Stat k={t('Failovers')} v={fmtN(r.failovers)} hint={t('Times a replica became the primary')} />
+          <Stat k={t('Lost writes')} v={<span style={{ color: r.lostWrites ? 'var(--bad-ink)' : undefined }}>{fmtN(r.lostWrites ?? 0)}</span>} hint={t('Writes the primary acknowledged that the new primary never received (asynchronous replication)')} />
           {r.divergentWrites !== undefined && (
-            <Stat k={t('分歧寫入')} v={<span style={{ color: 'var(--bad-ink)' }}>{fmtN(r.divergentWrites)}</span>} hint={t('網路分區時，舊主庫在新主庫升起後收的寫入（split brain）：新主庫沒有這些資料')} />
+            <Stat k={t('Divergent writes')} v={<span style={{ color: 'var(--bad-ink)' }}>{fmtN(r.divergentWrites)}</span>} hint={t('Writes the old primary took after the new one was promoted during a network partition (split brain): the new primary does not have them')} />
           )}
         </>
       )}
       {r.expired !== undefined &&
         (r.queueDepthEnd !== undefined ? (
-          <Stat k={t('訊息過期')} v={fmtN(r.expired)} hint={t('放超過保留時間還沒做完，被丟掉')} />
+          <Stat k={t('Message expired')} v={fmtN(r.expired)} hint={t('Not done before the retention time, so it is dropped')} />
         ) : (
-          <Stat k={t('過期丟掉')} v={fmtN(r.expired)} hint={t('排到時 deadline 已經過了，直接丟掉，沒有白做')} />
+          <Stat k={t('Drop when expired')} v={fmtN(r.expired)} hint={t('The deadline had passed when it was dequeued, so it was dropped with no wasted work')} />
         ))}
       {FAIL_REASONS.filter((k) => r.origin[k]).map((k) => (
         <Stat key={k} k={t(FAIL_LABEL[k])} v={<span style={{ color: 'var(--bad)' }}>{fmtN(r.origin[k])}</span>} />
@@ -325,12 +325,12 @@ function NodeStats({ r }: { r: NodeResult }) {
       {th && (
         <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
           <div className="mb-1 font-medium">
-            {t('和排隊理論對照（{model}，c = {c}）', { model: th.model, c: th.servers })}
+            {t('Compared with queueing theory ({model}, c = {c})', { model: th.model, c: th.servers })}
           </div>
-          <Stat k={t('使用率 ρ')} v={th.rho.toFixed(2)} />
-          <Stat k={t('要排隊的機率')} v={t('模擬 {sim}　理論 {theory}', { sim: pct(th.simPWait), theory: pct(th.pWait) })} />
-          <Stat k={t('平均排隊時間')} v={t('模擬 {sim}　理論 {theory}', { sim: fmtMs(th.simWaitMs), theory: th.waitMs === null ? t('無上限') : fmtMs(th.waitMs) })} />
-          {th.waitMs === null && <div className="faint text-[13px]">{t('ρ ≥ 1：進來的比處理得快，排隊會一直變長。')}</div>}
+          <Stat k={t('Utilization ρ')} v={th.rho.toFixed(2)} />
+          <Stat k={t('Probability of queuing')} v={t('Sim {sim}  Theory {theory}', { sim: pct(th.simPWait), theory: pct(th.pWait) })} />
+          <Stat k={t('Avg queue time')} v={t('Sim {sim}  Theory {theory}', { sim: fmtMs(th.simWaitMs), theory: th.waitMs === null ? t('No limit') : fmtMs(th.waitMs) })} />
+          {th.waitMs === null && <div className="faint text-[13px]">{t('ρ ≥ 1: arrivals are faster than service, so the queue keeps growing.')}</div>}
           {th.note && <div className="faint mt-1 text-[13px]">{th.note}</div>}
         </div>
       )}
@@ -348,14 +348,14 @@ function RegionField({ id, region, field = 'region' }: { id: string; region: str
   return (
     <div className="py-1.5">
       <label className="mb-1 block font-medium" htmlFor={`node-${field}`}>
-        {field === 'region' ? t('區域') : t('副本所在區域')}
+        {field === 'region' ? t('Region') : t('Replica region@@detail')}
       </label>
       <input
         id={`node-${field}`}
         className="field w-full"
         list={`region-list-${field}`}
         value={region ?? ''}
-        placeholder={field === 'region' ? t('不分區域') : t('和主庫同一區')}
+        placeholder={field === 'region' ? t('No region') : t('Same as the primary')}
         onChange={(e) => updateNode(id, { [field]: cleanRegion(e.target.value) })}
         data-testid={field === 'region' ? 'region' : 'replica-region'}
       />
@@ -366,8 +366,8 @@ function RegionField({ id, region, field = 'region' }: { id: string; region: str
       </datalist>
       <div className="faint mt-1 text-[13px] leading-snug">
         {field === 'region'
-          ? t('元件在哪個區域（資料中心），例如 us-east。不同區域之間的呼叫要多花跨區延遲；「整區故障」事件會讓同一區的元件一起故障。')
-          : t('讀副本放在另一個區域時填這裡。複製到那裡要多一段跨區延遲；主庫的區域整區故障時，副本還活著，可以 failover 過去。')}
+          ? t('The region (data center) the component runs in, for example us-east. A call between two regions takes the inter-region latency; a region outage takes all components of the region down together.')
+          : t('Set this when the read replicas are in another region. Replication to them takes one inter-region trip longer; when the primary\'s region fails, the replicas stay up and can take over.')}
       </div>
     </div>
   );
@@ -406,10 +406,10 @@ function NodeInspector({ id }: { id: string }) {
             {spec.labelEn} · id <code>{node.id}</code>
           </div>
         </div>
-        <button className="btn" onClick={() => setSaving(saving === null ? (node.label?.trim() || t(spec.label)).slice(0, MAX_PRESET_NAME) : null)} title={t('存成樣板：之後可以從左邊「我的樣板」拖出一樣的元件')} aria-label={t('存成樣板')} aria-expanded={saving !== null} data-testid="preset-save">
+        <button className="btn" onClick={() => setSaving(saving === null ? (node.label?.trim() || t(spec.label)).slice(0, MAX_PRESET_NAME) : null)} title={t('Save as preset: then drag the same component from "My presets" on the left')} aria-label={t('Save as preset')} aria-expanded={saving !== null} data-testid="preset-save">
           <BookmarkPlus size={14} />
         </button>
-        <button className="btn" onClick={() => remove({ type: 'node', id })} title={t('刪除元件')}>
+        <button className="btn" onClick={() => remove({ type: 'node', id })} title={t('Delete component')}>
           <Trash2 size={14} />
         </button>
       </div>
@@ -425,29 +425,29 @@ function NodeInspector({ id }: { id: string }) {
             setSaved(saving.trim());
           }}
         >
-          <input className="field min-w-0 flex-1" value={saving} maxLength={MAX_PRESET_NAME} autoFocus aria-label={t('樣板名稱')} onChange={(e) => setSaving(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setSaving(null)} data-testid="preset-name" />
-          <button className="btn btn-primary" type="submit" disabled={!saving.trim()} title={t('存成樣板')} aria-label={t('存成樣板')} data-testid="preset-save-confirm">
+          <input className="field min-w-0 flex-1" value={saving} maxLength={MAX_PRESET_NAME} autoFocus aria-label={t('Preset name')} onChange={(e) => setSaving(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setSaving(null)} data-testid="preset-name" />
+          <button className="btn btn-primary" type="submit" disabled={!saving.trim()} title={t('Save as preset')} aria-label={t('Save as preset')} data-testid="preset-save-confirm">
             <Check size={14} />
           </button>
-          <button className="btn" type="button" onClick={() => setSaving(null)} title={t('取消')} aria-label={t('取消')}>
+          <button className="btn" type="button" onClick={() => setSaving(null)} title={t('Cancel')} aria-label={t('Cancel')}>
             <X size={14} />
           </button>
         </form>
       )}
       {refused && saving !== null && (
         <p className="mt-2 text-[13px]" style={{ color: 'var(--bad-ink)' }} role="status" data-testid="preset-refused">
-          {t('瀏覽器存不了樣板，還沒存的改動太多：這次的改動沒有做。先匯出樣板。')}
+          {t('This browser cannot save presets, and too many changes are waiting: this change was not made. Export your presets first.')}
         </p>
       )}
       {saved !== null && saving === null && (
         <p className="muted mt-2 text-[13px]" role="status" data-testid="preset-saved">
-          {t('存成樣板「{name}」了：在左邊「我的樣板」。', { name: saved })}
+          {t('Saved as preset "{name}": it is under "My presets" on the left.', { name: saved })}
         </p>
       )}
       <p className="muted mt-2 text-[14px] leading-relaxed">{t(spec.summary)}</p>
       {active && <LiveNodeStats id={id} kind={node.kind} />}
       <div className="py-1.5">
-        <label className="mb-1 block font-medium">{t('名稱')}</label>
+        <label className="mb-1 block font-medium">{t('Name')}</label>
         <input className="field w-full" value={node.label ?? ''} placeholder={t(spec.label)} onChange={(e) => updateNode(id, { label: e.target.value })} />
       </div>
       {node.kind !== 'client' && <RegionField id={id} region={node.region} />}
@@ -479,18 +479,18 @@ function EdgeInspector({ id }: { id: string }) {
     <div>
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <div className="font-semibold">{t('呼叫')}</div>
+          <div className="font-semibold">{t('Call')}</div>
           <div className="faint text-[13px]">
             <code>{edge.from}</code> → <code>{edge.to}</code>
           </div>
         </div>
-        <button className="btn" onClick={() => remove({ type: 'edge', id })} title={t('刪除這條呼叫')}>
+        <button className="btn" onClick={() => remove({ type: 'edge', id })} title={t('Delete this call')}>
           <Trash2 size={14} />
         </button>
       </div>
       {from?.kind === 'cache' && to && STORE_KINDS.has(to.kind) && (
         <p className="muted mt-2 text-[13px] leading-snug" data-testid="edge-through-note">
-          {t('快取直接接資料庫：這條線是 read-through／write-through。讀取沒命中時，由快取自己去資料庫讀，再填進快取；寫入時，快取先寫進資料庫，再更新自己。呼叫快取的那一方不用另外連資料庫。')}
+          {t('A cache connected straight to a database: this edge is read-through / write-through. On a read miss, the cache itself reads the database and fills itself; on a write, the cache writes the database first, then updates itself. The caller of the cache does not need its own edge to the database.')}
         </p>
       )}
       <ParamGroups
@@ -503,19 +503,19 @@ function EdgeInspector({ id }: { id: string }) {
       {apis?.length ? <EdgeApis apis={apis} value={edge.apis} onChange={(v) => updateEdge(id, { apis: v })} /> : null}
       {result && (
         <div className="card mt-3 p-2.5">
-          <div className="mb-1 font-semibold">{t('上次執行的結果')}</div>
-          <Stat k={t('每秒呼叫')} v={fmtN(result.rps)} />
-          <Stat k={t('失敗')} v={fmtN(result.fail)} />
-          <Stat k={t('重試')} v={fmtN(result.retries)} />
-          <Stat k={t('放棄後才回來')} v={fmtN(result.late)} hint={t('呼叫方已經逾時放棄，下游之後才做完：白做的工')} />
-          {result.denied !== undefined && <Stat k={t('重試預算擋下')} v={fmtN(result.denied)} hint={t('想重試，但最近 10 秒的重試已經用完預算')} />}
-          {result.throttled !== undefined && <Stat k={t('自我限流擋下')} v={fmtN(result.throttled)} hint={t('呼叫端看到下游最近很少成功，自己在本地擋掉、沒有送出的呼叫')} />}
-          {result.bulkhead !== undefined && <Stat k={t('隔艙擋下')} v={fmtN(result.bulkhead)} hint={t('呼叫端同時呼叫的名額滿了，直接失敗的呼叫')} />}
-          {result.fallbacks !== undefined && <Stat k={t('改用備用回應')} v={fmtN(result.fallbacks)} hint={t('呼叫失敗後，呼叫端改用備用回應（降級），請求照樣成功')} />}
-          {result.hedges !== undefined && <Stat k={t('對沖多送')} v={fmtN(result.hedges)} hint={t('等太久沒回應，多送給另一台的第二份（算在每秒呼叫裡）')} />}
-          {result.hedges !== undefined && <Stat k={t('對沖先成功')} v={fmtN(result.hedgeWins ?? 0)} hint={t('第二份比原本的那份先成功回來的次數')} />}
-          {result.connects !== undefined && <Stat k={t('新開連線')} v={fmtN(result.connects)} hint={t('要先做 TCP＋TLS 握手的呼叫數；其他呼叫重用留著的連線')} />}
-          {result.copies !== undefined && <Stat k={t('扇出送出的份數')} v={fmtN(result.copies)} hint={t('每個呼叫同時送給幾個分片或實例，全部加起來的份數；終點的負載是呼叫數的這麼多倍')} />}
+          <div className="mb-1 font-semibold">{t('Result of the last run')}</div>
+          <Stat k={t('Calls per second')} v={fmtN(result.rps)} />
+          <Stat k={t('Failures')} v={fmtN(result.fail)} />
+          <Stat k={t('Retry')} v={fmtN(result.retries)} />
+          <Stat k={t('Comes back only after it is abandoned')} v={fmtN(result.late)} hint={t('The caller already timed out and gave up, and the downstream finishes later: wasted work')} />
+          {result.denied !== undefined && <Stat k={t('Blocked by retry budget')} v={fmtN(result.denied)} hint={t('Wanted to retry, but the retry budget for the last 10 s is used up')} />}
+          {result.throttled !== undefined && <Stat k={t('Throttled by caller')} v={fmtN(result.throttled)} hint={t('Calls the caller rejected locally and did not send, because few recent calls succeeded')} />}
+          {result.bulkhead !== undefined && <Stat k={t('Rejected by bulkhead')} v={fmtN(result.bulkhead)} hint={t('Calls that failed at once because the caller\'s concurrent-call slots were full')} />}
+          {result.fallbacks !== undefined && <Stat k={t('Fallback responses')} v={fmtN(result.fallbacks)} hint={t('After a failed call, the caller used a fallback response (degraded); the request still succeeds')} />}
+          {result.hedges !== undefined && <Stat k={t('Hedges sent')} v={fmtN(result.hedges)} hint={t('Second copies sent to another instance after no reply for too long (included in calls per second)')} />}
+          {result.hedges !== undefined && <Stat k={t('Hedge won')} v={fmtN(result.hedgeWins ?? 0)} hint={t('How many times the second copy succeeded before the original')} />}
+          {result.connects !== undefined && <Stat k={t('New connections')} v={fmtN(result.connects)} hint={t('Calls that first did the TCP + TLS handshakes; the other calls reused an open connection')} />}
+          {result.copies !== undefined && <Stat k={t('Fan-out copies sent')} v={fmtN(result.copies)} hint={t('Copies sent to shards or instances, over all calls. The target\'s load is the calls times this factor.')} />}
         </div>
       )}
     </div>
@@ -528,7 +528,7 @@ function EdgeApis({ apis, value, onChange }: { apis: DesignApi[]; value: string[
   return (
     <div className="py-1.5" data-testid="edge-apis">
       <div className="mb-1 font-medium" id="p-apis">
-        {t('走哪些 API')}
+        {t('APIs on this edge')}
       </div>
       <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="p-apis">
         {apis.map((a) => (
@@ -545,7 +545,7 @@ function EdgeApis({ apis, value, onChange }: { apis: DesignApi[]; value: string[
           </button>
         ))}
       </div>
-      <div className="faint mt-1 text-[13px] leading-snug">{value?.length ? t('只有呼叫這些 API 的請求走這條線。') : t('沒有選：每個 API 的請求都走這條線。選幾個，這條線就只給它們走（依 API 路徑路由）。')}</div>
+      <div className="faint mt-1 text-[13px] leading-snug">{value?.length ? t('Only requests to these APIs take this edge.') : t('None chosen: requests to every API take this edge. Choose some, and only they take it (routing by API path).')}</div>
     </div>
   );
 }
@@ -571,25 +571,25 @@ function ApiEditor() {
     <div className="mt-4" data-testid="api-editor">
       <div className="flex items-center gap-2">
         <div className="font-semibold">API</div>
-        <button className="btn ml-auto" onClick={add} title={t('加一個 API')} aria-label={t('加一個 API')}>
+        <button className="btn ml-auto" onClick={add} title={t('Add an API')} aria-label={t('Add an API')}>
           <Plus size={14} />
         </button>
       </div>
       {apis.length === 0 ? (
-        <div className="faint mt-1 text-[13px] leading-snug">{t('沒有分 API：每個請求依情境的讀取比例，決定是讀還是寫。加上 API 後，可以讓一條線只走某些 API。')}</div>
+        <div className="faint mt-1 text-[13px] leading-snug">{t('No APIs: the scenario\'s read share decides whether each request reads or writes. Add APIs to let an edge carry only some of them.')}</div>
       ) : (
         <>
-        <div className="faint mt-1 text-[13px] leading-snug">{t('名稱、讀或寫、比例。每個使用者只呼叫它連出去的線能走的 API，依比例抽；所以實際佔比也看使用者的權重。')}</div>
+        <div className="faint mt-1 text-[13px] leading-snug">{t('Name, read or write, share. Each client calls only the APIs its edges carry, drawn by share; so the real share also depends on the client weights.')}</div>
         <ul className="mt-1 space-y-1.5">
           {apis.map((a, i) => (
             <li key={i} className="grid grid-cols-[1fr_5.5rem_3.5rem_auto] items-center gap-1.5">
               <ApiName value={a.name} taken={apis.filter((_, k) => k !== i).map((x) => x.name)} onCommit={(name) => setApis(apis.map((x, k) => (k === i ? { ...x, name } : x)), { [a.name]: name })} />
-              <Select className="w-full" aria-label={t('「{api}」讀或寫', { api: a.name })} value={a.op} options={[{ value: 'read', label: t('讀取') }, { value: 'write', label: t('寫入') }]} onChange={(v) => patch(i, { op: v as DesignApi['op'] })} />
+              <Select className="w-full" aria-label={t('"{api}": read or write', { api: a.name })} value={a.op} options={[{ value: 'read', label: t('Read') }, { value: 'write', label: t('Write') }]} onChange={(v) => patch(i, { op: v as DesignApi['op'] })} />
               <NumberInput value={a.share ?? 1} min={0} max={1000} onChange={(v) => patch(i, { share: v })} />
-              <button className="btn" onClick={() => setApis(apis.filter((_, k) => k !== i))} title={t('刪除這個 API')} aria-label={t('刪除 API「{api}」', { api: a.name })}>
+              <button className="btn" onClick={() => setApis(apis.filter((_, k) => k !== i))} title={t('Delete this API')} aria-label={t('Delete API "{api}"', { api: a.name })}>
                 <X size={14} />
               </button>
-              <div className="faint col-span-4 -mt-1 text-[12px]">{t('佔全部流量 {p}', { p: pct(traffic[a.name] ?? 0) })}</div>
+              <div className="faint col-span-4 -mt-1 text-[12px]">{t('{p} of all traffic', { p: pct(traffic[a.name] ?? 0) })}</div>
             </li>
           ))}
         </ul>
@@ -609,7 +609,7 @@ function ApiName({ value, taken, onCommit }: { value: string; taken: string[]; o
   }
   const ok = ID_RE.test(text) && !taken.includes(text);
   const commit = () => (ok && text !== value ? onCommit(text) : setText(value));
-  return <input className="field w-full" value={text} aria-label={t('API 名稱')} aria-invalid={!ok} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()} />;
+  return <input className="field w-full" value={text} aria-label={t('API name')} aria-invalid={!ok} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()} />;
 }
 
 function DesignInfo() {
@@ -636,11 +636,11 @@ function DesignInfo() {
       ))}
       {result && (
         <>
-          <div className="mt-4 font-semibold">{t('上次執行')}</div>
+          <div className="mt-4 font-semibold">{t('Last run')}</div>
           <div className="mt-1">
-            <Stat k={t('送出')} v={fmtN(result.summary.offered)} />
-            <Stat k={t('成功')} v={fmtN(result.summary.ok)} />
-            <Stat k={t('錯誤率')} v={pct(result.summary.errorRate)} />
+            <Stat k={t('Offered')} v={fmtN(result.summary.offered)} />
+            <Stat k={t('Success')} v={fmtN(result.summary.ok)} />
+            <Stat k={t('Error rate')} v={pct(result.summary.errorRate)} />
             <Stat k="p50 / p99" v={`${fmtMs(result.summary.latencyMs.p50)} / ${fmtMs(result.summary.latencyMs.p99)}`} />
           </div>
           {result.apis && (
@@ -648,8 +648,8 @@ function DesignInfo() {
               <thead className="faint text-left">
                 <tr>
                   <th className="font-normal">API</th>
-                  <th className="text-right font-normal">{t('送出')}</th>
-                  <th className="text-right font-normal">{t('錯誤率')}</th>
+                  <th className="text-right font-normal">{t('Offered')}</th>
+                  <th className="text-right font-normal">{t('Error rate')}</th>
                   <th className="text-right font-normal">p99</th>
                 </tr>
               </thead>
@@ -670,9 +670,9 @@ function DesignInfo() {
         </>
       )}
       <ApiEditor />
-      <div className="mt-4 font-semibold">{t('設計檢查')}</div>
+      <div className="mt-4 font-semibold">{t('Design check')}</div>
       {issues.length === 0 ? (
-        <div className="faint mt-1">{t('沒有問題。')}</div>
+        <div className="faint mt-1">{t('No problems.')}</div>
       ) : (
         <ul className="mt-1 space-y-1.5">
           {issues.map((i, k) => (
@@ -683,7 +683,7 @@ function DesignInfo() {
           ))}
         </ul>
       )}
-      <div className="faint mt-4 text-[13px] leading-relaxed">{t('點一個元件或一條呼叫，可以改它的設定。執行後再點元件，可以看它的結果和排隊理論的對照。')}</div>
+      <div className="faint mt-4 text-[13px] leading-relaxed">{t('Click a component or a call to change its settings. After a run, click the component again to see its results next to the queuing theory values.')}</div>
     </div>
   );
 }
@@ -739,12 +739,12 @@ function usePanelWidth() {
       className="sd-resize"
       role="separator"
       aria-orientation="vertical"
-      aria-label={t('調整設定面板寬度')}
+      aria-label={t('Resize the settings panel')}
       aria-valuenow={w}
       aria-valuemin={MIN_W}
       aria-valuemax={maxW()}
       tabIndex={0}
-      title={t('拖曳調整寬度，連按兩下恢復預設')}
+      title={t('Drag to change the width; double-click for the default')}
       data-testid="right-resize"
       onPointerDown={(e) => {
         e.preventDefault();
@@ -812,18 +812,18 @@ export function Inspector() {
       data-testid={`tab-${x}`}
     >
       {label}
-      {x === 'learn' && !seen && tab !== 'learn' && <span className="absolute top-2 ml-1 inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} aria-label={t('有新的說明')} />}
+      {x === 'learn' && !seen && tab !== 'learn' && <span className="absolute top-2 ml-1 inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} aria-label={t('New explanation')} />}
     </button>
   );
   return (
-    <aside className="panel relative flex shrink-0 flex-col border-l" style={{ width }} aria-label={t('設定')} data-testid="right-panel">
+    <aside className="panel relative flex shrink-0 flex-col border-l" style={{ width }} aria-label={t('Settings')} data-testid="right-panel">
       {handle}
       <div role="tablist" className="flex shrink-0 border-b border-[var(--line)] px-3">
-        {tabBtn('design', t('設定'))}
-        {tabBtn('scenario', t('情境'))}
-        {tabBtn('learn', t('結果'))}
-        {tabBtn('versions', t('版本'))}
-        {hasChecks && tabBtn('checks', t('檢查'))}
+        {tabBtn('design', t('Settings'))}
+        {tabBtn('scenario', t('Scenario'))}
+        {tabBtn('learn', t('Results'))}
+        {tabBtn('versions', t('Versions'))}
+        {hasChecks && tabBtn('checks', t('Check'))}
       </div>
       <div className="flex-1 overflow-y-auto p-3" role="tabpanel">
         {tab === 'checks' && hasChecks ? (

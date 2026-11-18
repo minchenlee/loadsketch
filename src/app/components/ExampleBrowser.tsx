@@ -53,21 +53,21 @@ export function ExampleBrowser({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="sd-backdrop fixed inset-0 z-50 flex items-center justify-center p-6" data-closing={closing || undefined} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div role="dialog" aria-modal="true" aria-label={t('範例')} className="panel sd-dialog flex h-[min(680px,90vh)] w-[min(980px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="example-browser">
+      <div role="dialog" aria-modal="true" aria-label={t('Examples')} className="panel sd-dialog flex h-[min(680px,90vh)] w-[min(980px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl" data-testid="example-browser">
         <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-3">
           <BookOpen size={18} className="muted" />
-          <div className="text-[16px] font-semibold">{t('範例')}</div>
+          <div className="text-[16px] font-semibold">{t('Examples')}</div>
           <label className="field ml-1 flex sm:ml-4 max-w-[360px] flex-1 items-center gap-2">
             <Search size={14} className="faint shrink-0" />
-            <input ref={search} className="w-full bg-transparent outline-none" placeholder={t('搜尋範例')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t('搜尋範例')} />
+            <input ref={search} className="w-full bg-transparent outline-none" placeholder={t('Search examples')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t('Search examples')} />
           </label>
-          <button className="btn ml-auto" onClick={close} aria-label={t('關閉')}>
+          <button className="btn ml-auto" onClick={close} aria-label={t('Close')}>
             <X size={16} />
           </button>
         </div>
         <div className="sd-ex-body flex min-h-0 flex-1">
-          <nav className="sd-ex-nav w-[200px] shrink-0 space-y-0.5 overflow-y-auto border-r border-[var(--line)] p-2" aria-label={t('分類')}>
-            {navBtn(ALL, t('全部'), cats.reduce((a, c) => a + c.examples.length, 0))}
+          <nav className="sd-ex-nav w-[200px] shrink-0 space-y-0.5 overflow-y-auto border-r border-[var(--line)] p-2" aria-label={t('Categories')}>
+            {navBtn(ALL, t('All'), cats.reduce((a, c) => a + c.examples.length, 0))}
             <div className="sd-ex-rule my-1.5 border-t border-[var(--line)]" />
             {TIERS.map((tier) => {
               const own = cats.filter((c) => c.tier === tier.id);
@@ -83,8 +83,8 @@ export function ExampleBrowser({ onClose }: { onClose: () => void }) {
             })}
           </nav>
           <div className="min-w-0 flex-1 overflow-y-auto p-4">
-            {needle && <div className="muted mb-2 text-[13px]">{t('找到 {n} 個', { n: shown.length })}</div>}
-            {shown.length === 0 && <div className="muted text-[14px]">{t('沒有符合的範例。')}</div>}
+            {needle && <div className="muted mb-2 text-[13px]">{t('{n} found', { n: shown.length })}</div>}
+            {shown.length === 0 && <div className="muted text-[14px]">{t('No example matches.')}</div>}
             {TIERS.map((tier) => {
               const part = shown.filter((k) => catOf(k)?.tier === tier.id);
               if (!part.length) return null;
@@ -115,17 +115,17 @@ export function ExampleBrowser({ onClose }: { onClose: () => void }) {
                     <div className="muted line-clamp-3 text-[13px] leading-relaxed">{about(k)}</div>
                     <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[12px]">
                       {(needle || cat === ALL) && <span className="faint">{t(catOf(k)?.label ?? '')}</span>}
-                      <span className="faint">{t('情境：{name}', { name: sc?.name ? t(sc.name) : t('平穩流量') })}</span>
+                      <span className="faint">{t('Scenario: {name}', { name: sc?.name ? t(sc.name) : t('Steady traffic') })}</span>
                       {lesson && (
                         <span className="flex items-center gap-1 font-medium" style={{ color: 'var(--accent)' }}>
                           <GraduationCap size={13} />
-                          {t('題目＋挑戰')}
+                          {t('Questions + challenges')}
                         </span>
                       )}
                       {lesson && won > 0 && (
                         <span className="flex items-center gap-1" style={{ color: 'var(--ok-ink)' }}>
                           <Trophy size={12} />
-                          {t('過關 {n}/{m}', { n: won, m: lesson.challenges.length })}
+                          {t('Passed {n}/{m}', { n: won, m: lesson.challenges.length })}
                         </span>
                       )}
                     </div>
@@ -138,11 +138,11 @@ export function ExampleBrowser({ onClose }: { onClose: () => void }) {
                         useApp.getState().compareExamples(pair[0], pair[1], k);
                         close();
                       }}
-                      title={t('兩個範例用同一個情境跑，並排看差在哪裡')}
+                      title={t('Runs both examples with the same scenario and shows them side by side')}
                       data-testid={`pair-compare-${k}`}
                     >
                       <GitCompareArrows size={13} className="shrink-0" />
-                      {t('和「{name}」比較', { name: t(EXAMPLES[other].name) })}
+                      {t('Compare with “{name}”', { name: t(EXAMPLES[other].name) })}
                     </button>
                   )}
                   </div>

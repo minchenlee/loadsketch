@@ -16,55 +16,55 @@ export interface GroupDef {
 }
 
 const g = (key: string, label: string, params: string[], fold = false): GroupDef => ({ key, label, params, fold });
-const CAP = g('capacity', tx('容量'), ['shards', 'instances', 'concurrency', 'connections', 'queueLimit']);
-const TIME = g('time', tx('處理時間'), ['serviceMs', 'readMs', 'writeMs', 'opMs', 'getMs', 'putMs']);
-const CALLS = g('calls', tx('呼叫下游'), ['calls', 'outbox', 'outboxRetryMs']);
-const OVERLOAD = g('overload', tx('過載保護'), ['shedAt', 'queueOrder', 'codelTargetMs'], true);
-const SCALE = g('scale', tx('自動擴充'), ['autoscale', 'maxInstances', 'targetUtil', 'scaleEveryS', 'scaleDownS', 'bootS', 'warmS', 'coldFactor'], true);
-const FAULT = g('fault', tx('故障注入'), ['errorRate', 'poisonRate'], true);
-const REPL = g('replicas', tx('副本'), ['replicas', 'readFrom', 'replicaApplyRatio', 'replicaDelayMs', 'maxLagMs', 'localReplicas', 'failover', 'failoverS', 'fencing', 'readYourWrites', 'rywWindowMs']);
-const LOCKS = g('locks', tx('鎖'), ['locks', 'lockHoldMs'], true);
+const CAP = g('capacity', tx('Capacity'), ['shards', 'instances', 'concurrency', 'connections', 'queueLimit']);
+const TIME = g('time', tx('Process time'), ['serviceMs', 'readMs', 'writeMs', 'opMs', 'getMs', 'putMs']);
+const CALLS = g('calls', tx('Downstream calls'), ['calls', 'outbox', 'outboxRetryMs']);
+const OVERLOAD = g('overload', tx('Overload protection'), ['shedAt', 'queueOrder', 'codelTargetMs'], true);
+const SCALE = g('scale', tx('Autoscaling'), ['autoscale', 'maxInstances', 'targetUtil', 'scaleEveryS', 'scaleDownS', 'bootS', 'warmS', 'coldFactor'], true);
+const FAULT = g('fault', tx('Fault injection'), ['errorRate', 'poisonRate'], true);
+const REPL = g('replicas', tx('Replicas'), ['replicas', 'readFrom', 'replicaApplyRatio', 'replicaDelayMs', 'maxLagMs', 'localReplicas', 'failover', 'failoverS', 'fencing', 'readYourWrites', 'rywWindowMs']);
+const LOCKS = g('locks', tx('Locks'), ['locks', 'lockHoldMs'], true);
 const SERVER = [CAP, TIME, CALLS, OVERLOAD, SCALE, FAULT];
 const DB = [CAP, TIME, REPL, LOCKS, FAULT];
 const FUNCTION = [
-  g('capacity', tx('容量'), ['maxConcurrency', 'provisioned', 'scalePer10s']),
-  g('time', tx('處理時間'), ['serviceMs', 'coldStartMs', 'idleS']),
-  g('calls', tx('呼叫下游'), ['calls']),
+  g('capacity', tx('Capacity'), ['maxConcurrency', 'provisioned', 'scalePer10s']),
+  g('time', tx('Process time'), ['serviceMs', 'coldStartMs', 'idleS']),
+  g('calls', tx('Downstream calls'), ['calls']),
   FAULT,
 ];
 
 /** Groups per kind, in order. A parameter no group lists lands in "其他" (tests keep that empty). */
 export const GROUPS: Record<string, GroupDef[]> = {
   [EDGE]: [
-    g('route', tx('路由'), ['on', 'weight']),
-    g('network', tx('網路'), ['latencyMs', 'timeoutMs']),
-    g('retry', tx('重試'), ['retries', 'backoffMs', 'retryBudget'], true),
-    g('protect', tx('保護'), ['throttleK', 'bulkhead', 'hedgeMs', 'fallback'], true),
-    g('fanout', tx('扇出'), ['fanout', 'quorum'], true),
-    g('conn', tx('連線'), ['connectMs', 'keepAlive', 'idleS'], true),
+    g('route', tx('Routing'), ['on', 'weight']),
+    g('network', tx('Network'), ['latencyMs', 'timeoutMs']),
+    g('retry', tx('Retry'), ['retries', 'backoffMs', 'retryBudget'], true),
+    g('protect', tx('Protection'), ['throttleK', 'bulkhead', 'hedgeMs', 'fallback'], true),
+    g('fanout', tx('Fan-out'), ['fanout', 'quorum'], true),
+    g('conn', tx('Edge'), ['connectMs', 'keepAlive', 'idleS'], true),
   ],
-  client: [g('traffic', tx('流量'), ['weight', 'deadline', 'priority'])],
-  dns: [g('lookup', tx('查詢'), ['lookupMs', 'resolverCacheHit']), g('failover', tx('故障切換'), ['failover', 'detectS', 'ttlS'], true)],
-  cdn: [g('cache', tx('快取'), ['hitRatio', 'edgeMs'])],
+  client: [g('traffic', tx('Traffic'), ['weight', 'deadline', 'priority'])],
+  dns: [g('lookup', tx('Lookup'), ['lookupMs', 'resolverCacheHit']), g('failover', tx('Failover'), ['failover', 'detectS', 'ttlS'], true)],
+  cdn: [g('cache', tx('Caching'), ['hitRatio', 'edgeMs'])],
   api_gateway: SERVER,
   service: SERVER,
   worker: SERVER,
   function: FUNCTION,
-  custom: [g('look', tx('外觀'), ['icon']), CAP, TIME, g('calls', tx('呼叫下游'), ['calls']), g('cost', tx('成本'), ['pricePerHour']), FAULT],
+  custom: [g('look', tx('Look'), ['icon']), CAP, TIME, g('calls', tx('Downstream calls'), ['calls']), g('cost', tx('Cost'), ['pricePerHour']), FAULT],
   load_balancer: [
-    g('route', tx('轉送'), ['policy', 'latencyMs']),
+    g('route', tx('Forwarding'), ['policy', 'latencyMs']),
     g('health', tx('Health check'), ['healthCheck', 'hcIntervalS', 'hcThreshold', 'hcTimeoutMs'], true),
-    g('outlier', tx('自動剔除'), ['outlier', 'outlierErrors', 'ejectS'], true),
+    g('outlier', tx('Outlier ejections'), ['outlier', 'outlierErrors', 'ejectS'], true),
   ],
-  rate_limiter: [g('limit', tx('限流'), ['limit', 'ratePerSec', 'burst', 'maxConcurrent', 'scope', 'appliesTo'])],
-  circuit_breaker: [g('breaker', tx('保險絲'), ['failureRatio', 'minCalls', 'windowS', 'openMs', 'halfOpenCalls'])],
-  cache: [g('cache', tx('快取'), ['mode', 'hitRatio', 'capacityKeys', 'ttlS', 'ttlJitter', 'stampede', 'leaseMs', 'leaseWaitMs']), CAP, g('time', tx('處理時間'), ['opMs'])],
+  rate_limiter: [g('limit', tx('Rate limit'), ['limit', 'ratePerSec', 'burst', 'maxConcurrent', 'scope', 'appliesTo'])],
+  circuit_breaker: [g('breaker', tx('Circuit breaker'), ['failureRatio', 'minCalls', 'windowS', 'openMs', 'halfOpenCalls'])],
+  cache: [g('cache', tx('Caching'), ['mode', 'hitRatio', 'capacityKeys', 'ttlS', 'ttlJitter', 'stampede', 'leaseMs', 'leaseWaitMs']), CAP, g('time', tx('Process time'), ['opMs'])],
   database: DB,
   sharded_db: DB,
-  queue: [g('queue', tx('佇列'), ['maxDepth', 'enqueueMs', 'messageTtlS', 'ordering', 'groups']), g('delivery', tx('交付'), ['delivery', 'visibilityTimeoutMs', 'maxReceives'])],
+  queue: [g('queue', tx('Queue'), ['maxDepth', 'enqueueMs', 'messageTtlS', 'ordering', 'groups']), g('delivery', tx('Delivery'), ['delivery', 'visibilityTimeoutMs', 'maxReceives'])],
   object_storage: [TIME, CAP, FAULT],
 };
-const OTHER = tx('其他');
+const OTHER = tx('Other');
 
 /**
  * "0 means not used" parameters: shown as a switch. The number is the value a parameter takes
@@ -169,4 +169,4 @@ export function splitHelp(s: string): [string, string] {
 }
 
 /** A unit as shown next to a field. */
-export const unitLabel = (unit: string | undefined): string => (unit === 's' ? tx('秒') : (unit ?? ''));
+export const unitLabel = (unit: string | undefined): string => (unit === 's' ? tx('s') : (unit ?? ''));

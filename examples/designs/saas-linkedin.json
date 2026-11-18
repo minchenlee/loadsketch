@@ -1,21 +1,21 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "LinkedIn 風格：Feed 的重試死亡螺旋（2018 負載測試）",
-  "description": "開首頁 feed：client → API 前門（Voyager-API）→ Feed Mixer（排序、混合）→ FollowFeed broker → D2（client 端負載平衡）→ FollowFeed 儲存節點（一個分區的 4 個副本，每台約 1,200 QPS，節點內有 read-through 快取，資料在 RocksDB）。Mixer 再去 hydrate（Espresso + 快取）和讀排序特徵（Venice）。發文走 Kafka → Partitioner → 索引寫入。2018-02 負載測試時，一台儲存主機記憶體吃緊、延遲飆高；broker 400 ms 逾時後 150 ms 改送其他副本，其他 3 台跟著過載；Jetty 排隊上限 5,000 讓請求排到早就逾時還在做（白工）。修法：排隊上限降到 500、逾時對齊 400 ms、重試限流改成每台主機（約峰值的 2.5%）、伺服器回 429。來源：https://www.linkedin.com/blog/engineering/optimization/making-linkedin-s-organic-feed-handle-peak-traffic 、https://www.linkedin.com/blog/engineering/feed/followfeed-linkedin-s-feed-made-faster-and-smarter 。這裡只放一個分區的副本組，其他分區的扇出沒有畫出來。",
+  "name": "LinkedIn style: the feed's retry death spiral (2018 load test)",
+  "description": "Opening the home feed: client → API front door (Voyager-API) → Feed Mixer (ranking, blending) → FollowFeed broker → D2 (client-side load balancing) → FollowFeed storage nodes (4 replicas of one partition, about 1,200 QPS each, with an in-node read-through cache and the data in RocksDB). The Mixer also hydrates (Espresso + cache) and reads ranking features (Venice). Posting goes Kafka → Partitioner → index writes. In a load test in 2018-02, memory ran short on one storage host and its latency soared; the broker timed out after 400 ms and sent to another replica after 150 ms, and the other 3 replicas overloaded too; Jetty's queue limit of 5,000 let requests wait until they had long timed out and still be done (wasted work). The fix: a queue limit of 500, timeouts aligned at 400 ms, retry limits per host (about 2.5% of the peak), and servers answering 429. Sources: https://www.linkedin.com/blog/engineering/optimization/making-linkedin-s-organic-feed-handle-peak-traffic , https://www.linkedin.com/blog/engineering/feed/followfeed-linkedin-s-feed-made-faster-and-smarter . Only the replica set of one partition is drawn; the fan-out to the other partitions is not.",
   "nodes": [
-    { "id": "members", "kind": "client", "label": "會員（App、網頁）", "pos": [0, 260] },
+    { "id": "members", "kind": "client", "label": "Members (app, web)", "pos": [0, 260] },
     { "id": "dns", "kind": "dns", "label": "DNS / edge PoP", "pos": [250, 260] },
     {
       "id": "voyager",
       "kind": "api_gateway",
-      "label": "Voyager-API（前門）",
+      "label": "Voyager-API (front door)",
       "pos": [480, 260],
       "params": { "instances": 6, "concurrency": 256 }
     },
     {
       "id": "mixer",
       "kind": "service",
-      "label": "Feed Mixer（排序、混合）",
+      "label": "Feed Mixer (ranking, blending)",
       "pos": [730, 140],
       "params": {
         "instances": 8,
@@ -27,7 +27,7 @@
     {
       "id": "broker",
       "kind": "service",
-      "label": "FollowFeed broker（查分區、合併）",
+      "label": "FollowFeed broker (queries partitions, merges)",
       "pos": [980, 140],
       "params": {
         "instances": 6,
@@ -39,14 +39,14 @@
     {
       "id": "d2",
       "kind": "load_balancer",
-      "label": "D2（client 端 LB）",
+      "label": "D2 (client-side LB)",
       "pos": [1230, 140],
       "params": { "policy": "p2c" }
     },
     {
       "id": "storage",
       "kind": "service",
-      "label": "FollowFeed 儲存節點（1 分區 × 4 副本）",
+      "label": "FollowFeed storage (1 partition × 4 replicas)",
       "pos": [1480, 140],
       "params": {
         "instances": 4,
@@ -58,14 +58,14 @@
     {
       "id": "nodecache",
       "kind": "cache",
-      "label": "節點內 read-through 快取",
+      "label": "In-node read-through cache",
       "pos": [1730, 40],
       "params": { "hitRatio": 0.85, "instances": 4, "concurrency": 16 }
     },
     {
       "id": "rocksdb",
       "kind": "database",
-      "label": "RocksDB（timeline）",
+      "label": "RocksDB (timeline)",
       "pos": [1730, 220],
       "params": {
         "connections": 64,
@@ -77,7 +77,7 @@
     {
       "id": "hydrate",
       "kind": "service",
-      "label": "Hydration（展開成完整內容）",
+      "label": "Hydration (expands to full content)",
       "pos": [980, 380],
       "params": {
         "instances": 6,
@@ -89,63 +89,63 @@
     {
       "id": "couchbase",
       "kind": "cache",
-      "label": "內容快取",
+      "label": "Content cache",
       "pos": [1230, 320],
       "params": { "hitRatio": 0.9, "instances": 4, "concurrency": 32 }
     },
     {
       "id": "espresso",
       "kind": "sharded_db",
-      "label": "Espresso（會員、文章）",
+      "label": "Espresso (members, posts)",
       "pos": [1230, 460],
       "params": { "shards": 8, "replicas": 2, "connections": 32, "readMs": { "mean": 3, "cv": 1 } }
     },
     {
       "id": "venice",
       "kind": "sharded_db",
-      "label": "Venice（排序特徵，衍生資料）",
+      "label": "Venice (ranking features, derived data)",
       "pos": [980, 0],
       "params": { "shards": 8, "replicas": 1, "connections": 32, "readMs": { "mean": 2, "cv": 1 } }
     },
     {
       "id": "share",
       "kind": "service",
-      "label": "發文服務",
+      "label": "Share service",
       "pos": [730, 600],
       "params": { "instances": 2, "concurrency": 64, "serviceMs": { "mean": 5, "cv": 1 } }
     },
     {
       "id": "posts",
       "kind": "database",
-      "label": "文章主庫",
+      "label": "Posts primary",
       "pos": [980, 720],
       "params": { "replicas": 1, "connections": 32, "writeMs": { "mean": 5, "cv": 1 } }
     },
     {
       "id": "kafka",
       "kind": "queue",
-      "label": "Kafka（內容事件）",
+      "label": "Kafka (content events)",
       "pos": [980, 600],
       "params": { "delivery": "at_least_once", "visibilityTimeoutMs": 30000, "maxReceives": 5 }
     },
     {
       "id": "partitioner",
       "kind": "worker",
-      "label": "Partitioner（依索引分區重發）",
+      "label": "Partitioner (re-publishes by index partition)",
       "pos": [1230, 600],
       "params": { "instances": 2, "concurrency": 16, "serviceMs": { "mean": 2, "cv": 0.5 } }
     },
     {
       "id": "idxq",
       "kind": "queue",
-      "label": "Kafka（分區對齊 topic）",
+      "label": "Kafka (partition-aligned topic)",
       "pos": [1480, 600],
       "params": { "delivery": "at_least_once", "visibilityTimeoutMs": 30000, "maxReceives": 5 }
     },
     {
       "id": "ingest",
       "kind": "worker",
-      "label": "索引寫入 worker",
+      "label": "Indexing worker",
       "pos": [1730, 600],
       "params": { "instances": 2, "concurrency": 16, "serviceMs": { "mean": 3, "cv": 0.5 } }
     }
@@ -174,13 +174,13 @@
   "notes": [
     {
       "id": "n1",
-      "text": "試試看：1) 跑情境：第 20–50 秒負載測試把流量推到 1.25 倍，同時儲存節點 #0 變慢 10 倍（記憶體吃緊、一直 GC）。其他 3 台接不住，d2→storage 的重試再加壓，排隊上限 5,000 讓請求排到逾時還在做（這段約 52% 失敗、p99 約 2 秒）。單有尖峰或單有一台變慢都不會出事。2) 把儲存節點的排隊上限改成 500（LinkedIn 的修法）：失敗約 27%。3) 再給 d2→storage 加重試預算 0.025（約峰值的 2.5%）：失敗約 16%，p99 降到約 630 ms。4) 打開會員的 deadline 傳遞，或打開 D2 的自動剔除，比較差異。",
+      "text": "Try this: 1) Run the scenario: in seconds 20–50 a load test pushes traffic to 1.25 times, and storage node #0 becomes 10 times slower (memory pressure, constant GC). The other 3 cannot take its load, retries on d2→storage add more, and a queue limit of 5,000 lets requests wait until they have timed out and still be done (about 52% fail here, p99 about 2 seconds). The spike alone, or one slow node alone, causes no trouble. 2) Set the storage nodes' queue limit to 500 (LinkedIn's fix): about 27% fail. 3) Also give d2→storage a retry budget of 0.025 (about 2.5% of the peak): about 16% fail, p99 down to about 630 ms. 4) Turn on deadline propagation for the members, or outlier ejection on D2, and compare.",
       "pos": [0, 860],
       "width": 560
     },
     {
       "id": "n2",
-      "text": "簡化：真實 broker 會同時扇出到很多分區、取全部結果合併，延遲由最慢的分區決定；模擬器的 service 會呼叫每個下游，但同一種下游只有一條線，所以這裡只畫一個分區的副本組。Jetty 的 accept queue 和 request queue 兩層，這裡合成一個排隊上限。",
+      "text": "Simplified: a real broker fans out to many partitions at once and merges all the results, so the slowest partition sets the latency. A service in the simulator calls each downstream, but one kind of downstream has one connection, so only the replica set of one partition is drawn. Jetty has two queues (accept and request); here they are one queue limit.",
       "pos": [620, 860],
       "width": 560
     }

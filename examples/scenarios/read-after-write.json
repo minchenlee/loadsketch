@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "熱門資料一直被改又被讀",
+  "name": "Hot data is written and read all the time",
   "seed": 1,
   "durationS": 60,
   "traffic": { "rps": 800, "readRatio": 0.8 },

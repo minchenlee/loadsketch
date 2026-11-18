@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "每日週期：尖峰離峰＋整點排程＋GC",
+  "name": "Daily cycle: peak and trough + scheduled jobs + GC",
   "seed": 1,
   "durationS": 240,
   "warmupS": 0,

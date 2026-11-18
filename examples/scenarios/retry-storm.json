@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "重試風暴：第 20 秒流量 3 倍，持續 10 秒",
+  "name": "Retry storm: traffic ×3 at second 20 for 10 s",
   "seed": 3,
   "durationS": 90,
   "warmupS": 0,

@@ -1,20 +1,20 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "自動擴充（開機要時間）",
-  "description": "API 伺服器平常 2 台，忙碌率超過 60% 就自動加機器（最多 12 台）。每 1 分鐘看一次；新機器開機要 2 分鐘，上線後前 20 秒處理比較慢（冷啟動）。第 5 分鐘流量變 3 倍，加的機器 3 分鐘後才追上，這段時間約三成請求失敗。開機期間還在判斷「不夠」，所以會多加幾台；之後要連續 5 分鐘都用不到，才減回去（縮減穩定窗）。試試把開機時間改成 10 秒（預熱好的機器）或 5 分鐘。",
+  "name": "Autoscaling (boot takes time)",
+  "description": "The API servers normally run 2 instances and add more when they are over 60% busy (up to 12). They check once a minute; a new instance takes 2 minutes to boot and is slower for its first 20 seconds (cold start). At minute 5 the traffic triples; the new instances catch up only 3 minutes later, and about 30% of requests fail in that time. While instances boot, the checks still see \"not enough\", so a few too many are added; they are removed only after 5 minutes in a row of not needing them (the scale-down stabilization window). Try a boot time of 10 seconds (pre-warmed instances) or 5 minutes.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [300, 200],
       "params": { "policy": "least_conn" }
     },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [590, 200],
       "params": {
         "instances": 2,

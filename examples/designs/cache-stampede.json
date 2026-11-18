@@ -1,14 +1,14 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "快取擊穿（熱門 key 過期）",
-  "description": "cache-aside：API 先查 Redis，沒命中才查 Postgres，再寫回 Redis。TTL 10 秒。最熱門的 key 每秒約 1,000 次讀取，Postgres 查一次要 100 ms、只有 16 個連線。熱門 key 一過期，查 DB 的 100 ms 內所有讀取都沒命中，上百個請求一起去查同一筆資料，DB 排隊、API 跟著滿載，約 7% 的請求失敗。對照「快取 lease＋TTL jitter」範例。",
+  "name": "Cache stampede (hot key expires)",
+  "description": "Cache-aside: the API reads Redis first; on a miss it reads Postgres and writes the value back to Redis. TTL is 10 s. The hottest key gets about 1,000 reads per second, and a Postgres query takes 100 ms with only 16 connections. When the hot key expires, every read in the 100 ms the DB query takes is a miss, so over a hundred requests read the same row at once. The DB queues, the API fills up, and about 7% of requests fail. Compare with the \"Cache lease + TTL jitter\" example.",
   "nodes": [
     { "id": "users", "kind": "client", "pos": [0, 200] },
-    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [300, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [300, 200] },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [600, 200],
       "params": {
         "instances": 4,

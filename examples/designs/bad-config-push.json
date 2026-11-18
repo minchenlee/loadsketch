@@ -1,28 +1,28 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "壞設定一次推到全部（全域推送）",
-  "description": "使用者經過 API 閘道和負載平衡器到 8 台 API 伺服器。情境在第 20 秒部署一份壞設定：新版本有 60% 的請求出錯，而且一次推到全部閘道和伺服器（像 2019 年 Cloudflare 的 WAF 規則、2025 年的設定檔推送）。全站一起壞，直到跑完。試試看：在情境裡把「部署新版本」改成 4 波、每波觀察 10 秒，打開「自動回滾門檻」5%。第一波只更新四分之一的機器，觀察期發現失敗就自動回滾：受影響的只有第一波那 10 秒的一小部分請求（爆炸半徑小）。",
+  "name": "A bad config pushed everywhere at once (global push)",
+  "description": "Users go through an API gateway and a load balancer to 8 API servers. At 20 s the scenario deploys a bad config: the new version fails 60% of its requests, and it goes to every gateway and server at once (like Cloudflare's WAF rule in 2019 and its config file push in 2025). The whole site fails together until the end. Try this: in the scenario, set \"Deploy a new version\" to 4 waves, 10 s of watching per wave, and turn on \"Automatic rollback threshold\" at 5%. The first wave updates only a quarter of the machines, and the check rolls it back when it sees failures: only a small share of the requests in those first 10 s are hit (a small blast radius).",
   "nodes": [
-    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
     {
       "id": "gw",
       "kind": "api_gateway",
-      "label": "API 閘道",
+      "label": "API gateway",
       "pos": [250, 200],
       "params": { "instances": 4, "concurrency": 200, "serviceMs": { "mean": 1, "cv": 0.3 } }
     },
-    { "id": "lb", "kind": "load_balancer", "label": "負載平衡器", "pos": [500, 200] },
+    { "id": "lb", "kind": "load_balancer", "label": "Load balancer", "pos": [500, 200] },
     {
       "id": "api",
       "kind": "service",
-      "label": "API 伺服器",
+      "label": "API server",
       "pos": [750, 200],
       "params": { "instances": 8, "concurrency": 32, "serviceMs": { "mean": 8, "cv": 0.5 } }
     },
     {
       "id": "db",
       "kind": "database",
-      "label": "資料庫",
+      "label": "Database",
       "pos": [1000, 200],
       "params": {
         "connections": 64,

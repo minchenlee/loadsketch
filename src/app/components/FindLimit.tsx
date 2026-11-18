@@ -15,7 +15,7 @@ import { importMessage } from '../../i18n/importMessages.ts';
 import { getLang, t, tx } from '../../i18n/index.ts';
 import type { LimitReply, LimitRequest } from '../../worker/limit.worker.ts';
 
-const VERDICT = { pass: tx('撐得住'), fail: tx('撐不住'), insufficient: tx('結果不足') } as const;
+const VERDICT = { pass: tx('Holds'), fail: tx('Does not hold'), insufficient: tx('Insufficient data') } as const;
 
 type State = LimitState;
 /** Why a search was cancelled by something else than its Cancel button. */
@@ -80,7 +80,7 @@ export function FindLimit() {
     // a worker that cannot start or load: say why (as the compare view does), not an unhandled page error
     w.onerror = (ev) => {
       ev.preventDefault();
-      setS((x) => (x.phase === 'running' ? { ...x, phase: 'error', error: ev.message || t('無法啟動') } : x));
+      setS((x) => (x.phase === 'running' ? { ...x, phase: 'error', error: ev.message || t('could not start') } : x));
       stop(w);
     };
     const req: LimitRequest = { lang: getLang(), design, scenario };
@@ -152,7 +152,7 @@ export function FindLimit() {
   const assumptions = useMemo(() => assumptionsOf(design), [design]);
   const name = (id: string) => {
     const n = design.nodes.find((x) => x.id === id);
-    return n?.label && n.label !== id ? t('{label}（{id}）', { label: n.label, id }) : id;
+    return n?.label && n.label !== id ? t('{label} ({id})', { label: n.label, id }) : id;
   };
   const sorted = [...s.steps].sort((a, b) => a.rps - b.rps);
   // the steps that ran scaled down (src/engine/scale.ts): near full load they wait longer than full size
@@ -160,46 +160,46 @@ export function FindLimit() {
 
   return (
     // not a dialog: the canvas stays in use; Escape inside the panel closes it, as it closed the dialog
-    <aside role="region" aria-label={t('找上限')} className="flex h-full w-[380px] flex-col border-l border-[var(--line)] bg-[var(--chrome)]" data-testid="find-limit" onKeyDown={(e) => e.key === 'Escape' && close()}>
+    <aside role="region" aria-label={t('Find limit')} className="flex h-full w-[380px] flex-col border-l border-[var(--line)] bg-[var(--chrome)]" data-testid="find-limit" onKeyDown={(e) => e.key === 'Escape' && close()}>
       <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-3">
         <TrendingUp size={18} className="muted" />
-        <div className="text-[16px] font-semibold">{t('找上限')}</div>
-        <button ref={first} className="btn ml-auto" onClick={close} aria-label={t('關閉')}>
+        <div className="text-[16px] font-semibold">{t('Find limit')}</div>
+        <button ref={first} className="btn ml-auto" onClick={close} aria-label={t('Close')}>
           <X size={16} />
         </button>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 text-[14px] leading-relaxed">
-          <p>{t('用穩定的流量，從每秒 1 個請求開始加倍，撐不住以後再往回找。每一步都先暖機，量測一段時間，再停掉流量看能不能做完。')}</p>
+          <p>{t('Steady traffic, doubled from 1 request per second, then narrowed down after the first step that does not hold. Each step warms up, measures for a while, then stops the traffic to see if all the work gets done.')}</p>
           <div data-testid="find-limit-conditions">
-            <div className="mb-1 font-medium">{t('達標條件：')}</div>
+            <div className="mb-1 font-medium">{t('Limits:')}</div>
             <ul className="list-disc space-y-0.5 pl-5">
-              <li>{t('前台 p99 ≤ {ms} ms', { ms: slo.p99Ms })}</li>
-              <li>{t('前台失敗率 ≤ {p}%', { p: slo.errorRate * 100 })}</li>
-              {background && <li>{t('背景失敗率 ≤ {p}%（進 DLQ 或過期都算失敗）', { p: slo.asyncFailRate * 100 })}</li>}
-              <li>{t('流量停止後 {s} 秒內做完', { s: slo.drainS })}</li>
+              <li>{t('Front-end p99 ≤ {ms} ms', { ms: slo.p99Ms })}</li>
+              <li>{t('Front-end failures ≤ {p}%', { p: slo.errorRate * 100 })}</li>
+              {background && <li>{t('Background failures ≤ {p}% (a message moved to the DLQ or expired is a failure)', { p: slo.asyncFailRate * 100 })}</li>}
+              <li>{t('All work done within {s} s after the traffic stops', { s: slo.drainS })}</li>
             </ul>
           </div>
           <p className="muted" data-testid="find-limit-traffic">
-            {t('流量：沿用目前情境「{name}」的設定（讀取比例、逾時、seed 等），每秒請求數由搜尋決定。不含情境裡的事件（尖峰、漸增、故障等）。', { name: t(scenario.name || '自訂') })}
-            {events > 0 && ` ${t('這個情境有 {n} 個事件，找上限時都拿掉。', { n: events })}`}
+            {t('Traffic: the settings of the current scenario "{name}" (read share, timeout, seed and so on); the search sets the requests per second. The scenario\'s events (spikes, ramps, failures and so on) are not included.', { name: t(scenario.name || 'Custom') })}
+            {events > 0 && ` ${t('This scenario has {n} events; the limit search leaves them all out.', { n: events })}`}
           </p>
 
           <div className="border-t border-[var(--line)] pt-3" aria-live="polite" data-testid="find-limit-progress">
             {s.phase === 'running' && (
               <div className="flex items-center gap-1.5" data-testid="find-limit-running">
                 <Hourglass size={14} className="muted shrink-0" />
-                {t('第 {n} 步執行中…', { n: s.steps.length + 1 })}
+                {t('Running step {n}…', { n: s.steps.length + 1 })}
               </div>
             )}
             {s.phase === 'cancelled' && (
               <p data-testid="find-limit-cancelled">
-                {why === 'edit' ? t('設計改了，搜尋已取消。') + ' ' : why === 'run' ? t('開始執行模擬，搜尋已取消。') + ' ' : ''}
-                {t('已取消：跑完 {n} 步，沒有結論。', { n: s.steps.length })}
+                {why === 'edit' ? t('The design changed, so the search was cancelled.') + ' ' : why === 'run' ? t('A run started, so the search was cancelled.') + ' ' : ''}
+                {t('Cancelled after {n} steps: no conclusion.', { n: s.steps.length })}
               </p>
             )}
             {s.phase === 'invalid' && (
               <div data-testid="find-limit-problems">
-                <div className="mb-1 font-medium">{t('不能找上限，要先改：')}</div>
+                <div className="mb-1 font-medium">{t('The limit cannot be searched yet. Fix these first:')}</div>
                 <ul className="space-y-1">
                   {s.problems!.map((p, i) => (
                     <li key={i} className="flex gap-1.5">
@@ -212,7 +212,7 @@ export function FindLimit() {
             )}
             {s.phase === 'error' && (
               <p style={{ color: 'var(--bad-ink)' }} data-testid="find-limit-error">
-                {t('找上限失敗：{e}', { e: s.error ?? '' })}
+                {t('The limit search failed: {e}', { e: s.error ?? '' })}
               </p>
             )}
             {s.noWork && (
@@ -227,7 +227,7 @@ export function FindLimit() {
                 ))}
                 {s.result.firstFailRps === undefined && !s.result.stopped && (
                   <p className="font-normal" data-testid="find-limit-no-fail">
-                    {t('搜尋到 {rps}/秒就停了，這不是上限：設計可能撐得更多，也可能是有會壞的地方沒有被模擬到。', { rps: Math.max(...s.result.steps.map((x) => x.rps)) })}
+                    {t('The search stopped at {rps}/s. This is not a limit: the design may hold more, or something that would break is not simulated.', { rps: Math.max(...s.result.steps.map((x) => x.rps)) })}
                   </p>
                 )}
               </div>
@@ -239,14 +239,14 @@ export function FindLimit() {
                     {/* the rate and the verdict never wrap; the reason goes on its own line and wraps */}
                     <div className="flex items-center gap-1.5 whitespace-nowrap" data-testid="find-limit-step-head">
                       {x.verdict === 'pass' ? <CircleCheck size={14} className="shrink-0" style={{ color: 'var(--ok)' }} /> : x.verdict === 'fail' ? <CircleX size={14} className="shrink-0" style={{ color: 'var(--bad)' }} /> : <TriangleAlert size={14} className="shrink-0" style={{ color: 'var(--warn)' }} />}
-                      <span className="num" data-testid="find-limit-step-rps">{t('{rps}/秒', { rps: x.rps })}</span>
+                      <span className="num" data-testid="find-limit-step-rps">{t('{rps}/s', { rps: x.rps })}</span>
                       <span data-testid="find-limit-step-verdict">{t(VERDICT[x.verdict])}</span>
-                      {x.k > 1 && <span className="faint num" title={t('這一步用 1/{k} 的流量和容量模擬，再把數字乘回來', { k: x.k })}>1/{x.k}</span>}
+                      {x.k > 1 && <span className="faint num" title={t('This step ran at 1/{k} of the traffic and capacity, then multiplied the numbers back', { k: x.k })}>1/{x.k}</span>}
                     </div>
                     {x.verdict === 'fail' && (
                       <div className="faint pl-5 [overflow-wrap:anywhere]" data-testid="find-limit-step-why">
-                        {x.failed.map(criterionName).join(t('、'))}
-                        {x.bottleneck ? ` · ${t('最忙的是 {node}', { node: name(x.bottleneck) })}` : ''}
+                        {x.failed.map(criterionName).join(t(', @@list'))}
+                        {x.bottleneck ? ` · ${t('busiest: {node}', { node: name(x.bottleneck) })}` : ''}
                       </div>
                     )}
                   </li>
@@ -258,7 +258,7 @@ export function FindLimit() {
           <div className="space-y-2 border-t border-[var(--line)] pt-3" data-testid="find-limit-assumptions">
             {ks.length > 0 && (
               <p data-testid="find-limit-scale">
-                {t('這次用縮小比例模擬（{ks}）：流量和容量都縮成 1/k 再把數字乘回來。接近滿載時，縮小後的等待時間比原尺寸長，所以上限可能偏保守。', { ks: ks.map((k) => `1/${k}`).join(t('、')) })}
+                {t('This search ran scaled down ({ks}): traffic and capacity at 1/k, the numbers multiplied back. Near full load a scaled-down run waits longer than full size, so the limit may be on the low side.', { ks: ks.map((k) => `1/${k}`).join(t(', @@list')) })}
               </p>
             )}
             {assumptions.length ? (
@@ -277,18 +277,18 @@ export function FindLimit() {
                 </ul>
               </>
             ) : (
-              <p className="muted">{t('假設：每個元件的速度和容量就是畫布上填的值。實際系統的數字不同，上限也會不同。')}</p>
+              <p className="muted">{t('Assumption: each component\'s speed and capacity are the values on the canvas. A real system has other numbers, and another limit.')}</p>
             )}
           </div>
         </div>
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--line)] px-4 py-3">
         {s.phase === 'running' ? (
           <button className="btn" onClick={() => cancel()} data-testid="find-limit-cancel">
-            {t('取消')}
+            {t('Cancel')}
           </button>
         ) : (
           <button className="btn btn-primary" onClick={close} data-testid="find-limit-close">
-            {t('關閉')}
+            {t('Close')}
           </button>
         )}
       </div>
@@ -297,12 +297,12 @@ export function FindLimit() {
 }
 
 const CRITERION: Record<string, string> = {
-  'simulate.p99': tx('p99 太慢'),
-  'simulate.errorRate': tx('失敗太多'),
-  'simulate.asyncFail': tx('背景失敗'),
-  'simulate.asyncP99': tx('背景太慢'),
-  'simulate.asyncNoSample': tx('背景沒有成功的訊息'),
-  'simulate.drain': tx('停掉流量後做不完'),
+  'simulate.p99': tx('p99 too slow'),
+  'simulate.errorRate': tx('too many failures'),
+  'simulate.asyncFail': tx('background failures'),
+  'simulate.asyncP99': tx('background too slow'),
+  'simulate.asyncNoSample': tx('no successful background message'),
+  'simulate.drain': tx('work left after the traffic stopped'),
 };
 const criterionName = (id: string) => (CRITERION[id] ? t(CRITERION[id]) : id);
 

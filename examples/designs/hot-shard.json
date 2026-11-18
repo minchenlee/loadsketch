@@ -1,13 +1,13 @@
 {
   "schema": "loadsketch/design@1",
-  "name": "熱門頻道造成熱分片（參考 Discord）",
-  "description": "Discord 把訊息依頻道（和時間區段）分到資料庫的分割區；一個超大伺服器在發公告時，所有人讀同一個頻道，這個分割區所在的節點就變成熱點，連帶拖慢同節點上的其他查詢。這個模型用 8 個分片和很集中的 key，看一個分片忙到滿、其他分片很閒。",
+  "name": "A hot channel makes a hot shard (after Discord)",
+  "description": "Discord splits messages into database partitions by channel (and time range); when a very large server posts an announcement, everyone reads the same channel, so the node that holds that partition becomes a hot spot and slows other queries on the same node. This model uses 8 shards with very concentrated keys, so one shard stays fully busy while the others sit idle.",
   "nodes": [
-    { "id": "users", "kind": "client", "label": "使用者", "pos": [0, 200] },
+    { "id": "users", "kind": "client", "label": "Users", "pos": [0, 200] },
     {
       "id": "lb",
       "kind": "load_balancer",
-      "label": "負載平衡器",
+      "label": "Load balancer",
       "pos": [270, 200],
       "params": { "policy": "p2c" }
     },
@@ -28,7 +28,7 @@
     {
       "id": "messages",
       "kind": "sharded_db",
-      "label": "訊息資料庫（分片）",
+      "label": "Message database (sharded)",
       "pos": [1080, 200],
       "params": {
         "shards": 8,

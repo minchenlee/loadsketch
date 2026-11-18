@@ -9,16 +9,16 @@ import { Palette } from './Palette.tsx';
 import { t, tx } from '../../i18n/index.ts';
 
 const TABS: { key: Exclude<Drawer, null>; label: string; Icon: typeof Shapes }[] = [
-  { key: 'palette', label: tx('元件'), Icon: Shapes },
-  { key: 'inspector', label: tx('設定'), Icon: SlidersHorizontal },
-  { key: 'metrics', label: tx('圖表'), Icon: ChartLine },
+  { key: 'palette', label: tx('Component'), Icon: Shapes },
+  { key: 'inspector', label: tx('Settings'), Icon: SlidersHorizontal },
+  { key: 'metrics', label: tx('Charts'), Icon: ChartLine },
 ];
 
 export function PhoneTabs() {
   const drawer = useApp((s) => s.drawer);
   const setDrawer = useApp((s) => s.setDrawer);
   return (
-    <nav className="sd-tabs panel shrink-0 border-t" aria-label={t('面板')}>
+    <nav className="sd-tabs panel shrink-0 border-t" aria-label={t('Panel')}>
       {TABS.map(({ key, label, Icon }) => (
         <button key={key} className="sd-tab" aria-pressed={drawer === key} onClick={() => setDrawer(drawer === key ? null : key)} data-testid={`phone-tab-${key}`}>
           <Icon size={18} />
@@ -71,7 +71,7 @@ export function PhoneDrawer() {
     <div ref={el} className="sd-drawer" data-open={drawer ? '' : undefined} inert={!drawer} role="region" aria-label={label ? t(label) : undefined} data-testid="phone-drawer">
       <div className="sd-drawer-head" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} data-testid="phone-drawer-grip">
         <span className="sd-drawer-grip" aria-hidden />
-        <button className="sd-chart-btn" onClick={() => setDrawer(null)} aria-label={t('關閉')} title={t('關閉')} data-testid="phone-drawer-close">
+        <button className="sd-chart-btn" onClick={() => setDrawer(null)} aria-label={t('Close')} title={t('Close')} data-testid="phone-drawer-close">
           <X size={16} />
         </button>
       </div>

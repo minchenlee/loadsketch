@@ -74,7 +74,7 @@ describe('givens', () => {
   const b = BRIEF_BY_ID['brief-shortener'];
 
   it('a part cannot be faster than the brief says', () => {
-    expect(brokenGivens(b, edit(b.reference, 'api', { serviceMs: { mean: 1, cv: 1 } })).map((x) => x.vars.name)).toEqual(['轉址 API']);
+    expect(brokenGivens(b, edit(b.reference, 'api', { serviceMs: { mean: 1, cv: 1 } })).map((x) => x.vars.name)).toEqual(['Redirect API']);
     expect(brokenGivens(b, edit(b.reference, 'db', { readMs: { mean: 1, cv: 1 } }))).toHaveLength(1);
     expect(brokenGivens(b, edit(b.reference, 'cache', { hitRatio: 0.99 }))).toHaveLength(1);
     // slower, or more of them, is the learner's choice

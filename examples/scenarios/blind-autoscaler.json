@@ -1,6 +1,6 @@
 {
   "schema": "loadsketch/scenario@1",
-  "name": "第 20 秒流量 3 倍，監控服務同時被擠爆（慢 100 倍）60 秒",
+  "name": "Traffic triples at 20 s; the metrics service is swamped (100 times slower) for 60 s",
   "seed": 1,
   "durationS": 120,
   "traffic": { "rps": 1200, "readRatio": 0.8 },
