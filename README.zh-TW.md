@@ -186,6 +186,20 @@ npm run schema                             # 改了元件目錄後重新產生 s
 
 ## 參與貢獻
 
+### 最需要幫忙的地方
+
+下面每張 issue 說明一個方向：
+
+- [#4 Turn real incidents into examples](https://github.com/minchenlee/loadsketch/issues/4)
+- [#5 A new learning path: caches, queues, or your topic](https://github.com/minchenlee/loadsketch/issues/5)
+- [#6 Check one class of model behaviour against theory or measurements](https://github.com/minchenlee/loadsketch/issues/6)
+- [#7 A new kind of component](https://github.com/minchenlee/loadsketch/issues/7)
+- [#8 English is the source text](https://github.com/minchenlee/loadsketch/issues/8)
+- [#9 Importer: cover the AWS services your stack uses](https://github.com/minchenlee/loadsketch/issues/9)
+- [#10 Tell us where the simulation does not match reality (no code)](https://github.com/minchenlee/loadsketch/issues/10)
+
+所有需要幫忙的 issue：[`help wanted`](https://github.com/minchenlee/loadsketch/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)。
+
 請看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 授權
