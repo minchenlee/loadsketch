@@ -6,7 +6,7 @@ import type { Design } from '../../src/schema/design.ts';
 import { judge, runOf as runOfLesson, type Challenge, type Lesson } from '../../src/learn/lesson.ts';
 import { COURSE } from '../../src/learn/course.ts';
 import type { RunData } from '../../src/learn/metrics.ts';
-import { design, runOf, setParam, SLOW, type Change } from './run.ts';
+import { design, runOf, setParam, setScenario, SLOW, type Change } from './run.ts';
 
 const clone = (d: Design): Design => JSON.parse(JSON.stringify(d));
 const without = (d: Design, id: string): Design => ({ ...d, nodes: d.nodes.filter((n) => n.id !== id), edges: d.edges.filter((e) => e.from !== id && e.to !== id) });
@@ -19,6 +19,16 @@ const renamed = (d: Design, id: string): Design => {
   }
   return x;
 };
+/**
+ * The "Removed" check of judge() reads only run.design, so the run under the changed design only
+ * has to be a run: two seconds of the scenario, no events. (6.2 takes about 20 s a full run, a lot
+ * more when the course suite runs many files at once.)
+ */
+const short = setScenario('short', (s) => {
+  s.durationS = 2;
+  s.warmupS = 0;
+  s.events = [];
+});
 const all: [Lesson, Challenge][] = COURSE.flatMap((l) => l.challenges.map((c) => [l, c] as [Lesson, Challenge]));
 
 describe('removing or renaming a component of the original design breaks every challenge', () => {
@@ -26,7 +36,7 @@ describe('removing or renaming a component of the original design breaks every c
     it(`${l.id} ${c.id}`, () => {
       const r = runOfLesson(l, c);
       const original = design(r.example);
-      const base = runOf(r.example, r.scenario);
+      const base = runOf(r.example, r.scenario, short);
       for (const n of original.nodes) {
         if (c.mayRemove?.includes(n.id)) continue;
         for (const d of [without(original, n.id), renamed(original, n.id)]) {
@@ -61,24 +71,30 @@ describe('async work that never finishes or expires fails', () => {
   for (const [l, c] of all) {
     const fix = PASSING[c.id];
     if (!fix) continue;
-    it(`${l.id} ${c.id}`, () => {
-      const r = runOfLesson(l, c);
-      const original = design(r.example);
-      const ok = runOf(r.example, r.scenario, ...fix);
-      expect(judge(c, ok, original).passed, 'the fix passes').toBe(true);
-      const slow = kindIds(original, 'worker').map((id) => setParam(id, 'serviceMs', { mean: 1e6, cv: 0 }));
-      const expire = kindIds(original, 'queue').map((id) => setParam(id, 'messageTtlS', 0.001));
+    // One run per test: a long scenario (6.2) run three times in one test timed out when the
+    // course suite ran many files at once. Runs are cached, so the last test reads them again.
+    const r = runOfLesson(l, c);
+    const original = design(r.example);
+    const cheats = {
+      'workers never finish': kindIds(original, 'worker').map((id) => setParam(id, 'serviceMs', { mean: 1e6, cv: 0 })),
+      'messages expire at once': kindIds(original, 'queue').map((id) => setParam(id, 'messageTtlS', 0.001)),
+    };
+    const cheated = (cheat: Change[]) => runOf(r.example, r.scenario, ...fix, ...cheat);
+    describe(`${l.id} ${c.id}`, () => {
+      it('the fix passes', () => {
+        expect(judge(c, runOf(r.example, r.scenario, ...fix), original).passed).toBe(true);
+      }, 2 * SLOW);
       // A cheat that leaves work unfinished or expired must fail. TTL can have no effect when no
       // message waits long (saas-slack), so it only counts where it bites; at least one cheat must.
-      let bites = 0;
-      for (const cheat of [slow, expire]) {
-        const x = runOf(r.example, r.scenario, ...fix, ...cheat);
-        if (unfinished(x) <= 0.01) continue;
-        bites++;
-        expect(judge(c, x, original).passed).toBe(false);
-      }
-      expect(bites).toBeGreaterThan(0);
-    }, 4 * SLOW);
+      for (const [name, cheat] of Object.entries(cheats))
+        it(name, () => {
+          const x = cheated(cheat);
+          if (unfinished(x) > 0.01) expect(judge(c, x, original).passed).toBe(false);
+        }, 2 * SLOW);
+      it('at least one cheat leaves work unfinished', () => {
+        expect(Object.values(cheats).some((cheat) => unfinished(cheated(cheat)) > 0.01)).toBe(true);
+      }, 4 * SLOW);
+    });
   }
 });
 
