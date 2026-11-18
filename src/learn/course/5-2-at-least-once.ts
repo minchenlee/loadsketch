@@ -48,7 +48,9 @@ const atLeastOnce: Lesson = {
       ],
       answer: (run) => (asyncP99(run) < 1000 ? 'same' : 'seconds'),
       measured: (run) => t('Async p99: {v}', { v: ms(asyncP99(run)) }),
-      explain: tx('About 100 uploads a second arrive, and each holds a slot for about 50 ms: about 5 slots busy on average. One machine has 4. For 20 s the worker is slower than the uploads, and the queue grows to hundreds of messages. Nothing is lost, but the thumbnails are seconds late. Spare capacity is what lets the others take over.'),
+      explain: tx('The one machine left has fewer slots than the uploads keep busy. For 20 s the worker is slower than the uploads, and the queue grows to hundreds of messages. Nothing is lost, but the thumbnails are seconds late. Spare capacity is what lets the others take over.'),
+      calc: [tx('Busy slots: about 100 uploads a second × 0.05 s = 5'), tx('One machine left: 4 slots')],
+      look: { panel: 'bottom' },
       explainFor: {
         same: tx('The async p99 stayed short: the machines left have enough slots for all the uploads.'),
       },
@@ -68,6 +70,7 @@ const atLeastOnce: Lesson = {
       },
       measured: (run) => t('{p} of the messages in the DLQ ({n} messages)', { p: pct(dlqShare(run)), n: jobs(run).dlq ?? 0 }),
       explain: tx('Only the poison messages: each fails 3 times and then moves to the DLQ, where someone can look at it. The messages in the worker’s hands when it crashed appear again after 2 s, and the other machine finishes them. The crash costs time, not messages. Without a DLQ, a poison message would come back forever and waste a slot each time.'),
+      look: { node: 'jobs' },
       explainFor: {
         none: tx('Nothing went to the DLQ: there are no poison messages, or there is no limit on tries, and a poison message comes back forever.'),
         more: tx('More than the poison messages: normal messages also failed 3 times. Look at the visibility timeout and the number of tries.'),
@@ -88,6 +91,7 @@ const atLeastOnce: Lesson = {
       },
       measured: (run) => t('{n} messages processed twice', { n: duplicates(run) }),
       explain: tx('A duplicate happens when a message appears again while its first worker is still working on it: the job takes longer than the visibility timeout. Here a job takes about 50 ms and the timeout is 2 s, so that does not happen. A crashed worker never finishes, so its retry is not a duplicate. Set the timeout well above the longest job, and still make the work idempotent: a real network can lose the “done”.'),
+      look: { node: 'jobs' },
       explainFor: {
         some: tx('Some messages were processed twice: some jobs took longer than the visibility timeout, and the message appeared again while the first worker was still busy.'),
         many: tx('Many messages were processed twice: the visibility timeout is about as short as a job, so many jobs outlive it.'),
@@ -113,14 +117,19 @@ const atLeastOnce: Lesson = {
       hint: tx('The crash takes away half the slots, and the half left is fewer than the uploads need. Size the worker so that what is left after a crash still keeps up: N + 1. A shorter visibility timeout gets a crashed job back sooner, but if it is shorter than a job, messages are processed twice.'),
     },
   ],
+  learn: [tx('How at-least-once delivery brings a message back after a crash'), tx('When a message is processed twice: a job longer than the visibility timeout'), tx('What the DLQ is for: poison messages'), tx('Why the machines left after a crash must still keep up (N + 1)')],
+  learnAt: [4, 5, 6, 7],
+  recap: [tx('A crash costs time, not messages: what the worker held appears again after the visibility timeout.'), tx('Set the visibility timeout well above the longest job, and still make the work idempotent.'), tx('A DLQ stops a poison message from coming back forever.'), tx('Size the worker so that what is left after a crash still keeps up: N + 1.')],
   steps: [
-    { kind: 'read', text: tx('The upload service again, now with a queue that deletes a message only when the worker says it is done (like SQS). A message a worker takes is hidden for 2 s (the visibility timeout); if the worker does not finish, the message appears again for another try. 1% of the messages are “poison”: they fail every time. After 3 tries a message moves to the dead-letter queue (DLQ). At second 20 one of the two worker machines crashes for 20 s. Guess, then press Run.') },
-    { kind: 'guess', questions: ['crash-wait', 'dlq-share', 'duplicates'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Set “Visibility timeout” to 100 ms and run again. Some jobs take longer than that: their message appears again while the first worker is still busy, and about 170 messages are processed twice.'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 100 } }] },
-    { kind: 'try', text: tx('Set “Visibility timeout” back to 2 s, and set “Max receive count (DLQ)” to 0 (no DLQ, retry forever). Run again. Nothing goes to the DLQ, but the poison messages come back again and again: the worker fails about seven times as many jobs, and the async p99 gets worse.'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 2000, maxReceives: 0 } }] },
-    { kind: 'challenge', challenges: ['async-reliable/crash-safe'] },
-    { kind: 'practice', items: [{ kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },
+    { kind: 'read', title: tx('At-least-once'), text: tx('The upload service again, now with a queue that deletes a message only when the worker says it is done (like SQS). A message a worker takes is hidden for 2 s (the visibility timeout); if the worker does not finish, the message appears again for another try.'), key: tx('A message is deleted only when the worker says it is done.') },
+    { kind: 'read', title: tx('Poison messages and the DLQ'), text: tx('1% of the messages are “poison”: they fail every time. After 3 tries a message moves to the dead-letter queue (DLQ), where someone can look at it later.') },
+    { kind: 'read', title: tx('The crash'), text: tx('At second 20 one of the two worker machines crashes for 20 s. Guess, then press Run.') },
+    { kind: 'guess', title: tx('Guess: crash, DLQ, duplicates'), questions: ['crash-wait', 'dlq-share', 'duplicates'] },
+    { kind: 'run', title: tx('Run the crash'), look: { panel: 'bottom' }, show: ['asyncP99', 'dlq', 'duplicates'] },
+    { kind: 'try', title: tx('A short visibility timeout'), text: tx('Set “Visibility timeout” to 100 ms and run again. Are any messages processed twice now? Why would a job outlive 100 ms?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 100 } }], show: ['duplicates', 'asyncP99'] },
+    { kind: 'try', title: tx('No DLQ'), text: tx('Set “Visibility timeout” back to 2 s, and set “Max receive count (DLQ)” to 0 (no DLQ, retry forever). Run again. Does anything go to the DLQ? What do the poison messages do to the worker and to the async p99?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 2000, maxReceives: 0 } }], look: { node: 'thumb' }, show: ['dlq', 'asyncP99', 'busiest'] },
+    { kind: 'challenge', title: tx('Crash-safe and on time'), challenges: ['async-reliable/crash-safe'] },
+    { kind: 'practice', title: tx('Practice'), items: [{ kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },
   ],
 };
 
