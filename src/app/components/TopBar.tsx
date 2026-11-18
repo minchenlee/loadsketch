@@ -214,8 +214,9 @@ export function TopBar() {
         </button>
         {practice && <PracticeDialog onClose={() => setPractice(false)} />}
         {!EMBEDDED && (
-          <a className="btn sd-desk" href={COURSE_URL} title={t('Lessons: guess, run, read why, change the design')} data-testid="open-course">
-            <GraduationCap size={14} /> {t('Course')}
+          <a className="btn sd-desk" href={COURSE_URL} aria-label={t('Course')} title={t('Lessons: guess, run, read why, change the design')} data-testid="open-course">
+            {/* the label only where the bar has room for a fourth one (docs/design-system.md section 6) */}
+            <GraduationCap size={14} /> <span className="hidden lg:inline">{t('Course')}</span>
           </a>
         )}
         <div className="sd-desk mx-1 h-5 w-px" style={{ background: 'var(--line)' }} />
