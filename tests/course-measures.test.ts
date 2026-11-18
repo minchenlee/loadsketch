@@ -1,23 +1,27 @@
 // What a run or try step shows after its run (src/course/measures.ts).
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_SHOW, MEASURES, readings } from '../src/course/measures.ts';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { setLang } from '../src/i18n/index.ts';
+import { DEFAULT_SHOW, measureOf, readings } from '../src/course/measures.ts';
 import { ALL_LESSONS } from '../src/course/catalog.ts';
 import { stepsOf } from '../src/learn/lesson.ts';
 import type { RunData } from '../src/learn/metrics.ts';
 
 const lat = (p99: number, n = 100) => ({ count: n, mean: p99 / 2, p50: p99 / 3, p90: p99 * 0.8, p95: p99 * 0.9, p99, p999: p99, max: p99 });
-const run = (p99: number, err: number, util: Record<string, number>, extra: Record<string, Record<string, number>> = {}): RunData =>
+type Extra = Record<string, Record<string, number | string>>;
+const run = (p99: number, err: number, util: Record<string, number>, extra: Extra = {}): RunData =>
   ({
     design: { nodes: [], edges: [] },
     scenario: {},
     windows: [],
     result: {
       summary: { errorRate: err, throughputRps: 100, latencyMs: lat(p99), asyncLatencyMs: lat(0, 0) },
-      nodes: Object.fromEntries(Object.entries(util).map(([id, u]) => [id, { label: id.toUpperCase(), utilization: u, ...(extra[id] ?? {}) }])),
+      nodes: Object.fromEntries([...new Set([...Object.keys(util), ...Object.keys(extra)])].map((id) => [id, { label: id.toUpperCase(), ...(id in util ? { utilization: util[id] } : {}), ...(extra[id] ?? {}) }])),
     },
   }) as unknown as RunData;
 
 describe('course measures', () => {
+  beforeAll(() => setLang('en'));
+
   it('without a show: p99, failed requests and the busiest component', () => {
     const r = readings(undefined, run(1230, 0.25, { api: 0.97, db: 0.4 }));
     expect(r.map((x) => x.key)).toEqual(DEFAULT_SHOW);
@@ -46,7 +50,57 @@ describe('course measures', () => {
   it('every show key in the course lessons is a measure', () => {
     for (const l of ALL_LESSONS) {
       if (!l.lesson) continue;
-      for (const s of stepsOf(l.lesson)) if ('show' in s && s.show) for (const k of s.show) expect(MEASURES[k], `${l.id} ${k}`).toBeDefined();
+      for (const s of stepsOf(l.lesson)) if ('show' in s && s.show) for (const k of s.show) expect(measureOf(k), `${l.id} ${k}`).toBeDefined();
     }
+  });
+  it('recovery: seconds after the spike until every later second has fewer than 5% failed', () => {
+    const w = (t: number, fail: number) => ({ t, dt: 1, measured: true, offered: 100, ok: 100 - fail, fail: { timeout: fail }, targetRps: 100, nodes: {} });
+    const r = (fails: number[], spike = true) =>
+      ({
+        ...run(10, 0, {}),
+        scenario: { durationS: fails.length, events: spike ? [{ type: 'spike', atS: 2, forS: 2, factor: 3 }] : [] },
+        windows: fails.map((f, k) => w(k + 1, f)),
+        result: { ...run(10, 0, {}).result, measuredFromS: 0, measuredToS: fails.length, scenario: { durationS: fails.length, warmupS: 0 }, timeline: [] },
+      }) as unknown as RunData;
+    // the spike ends at 4 s; the last bad second ends at 7 s: 3 s after it
+    const slow = r([0, 0, 50, 50, 50, 20, 10, 0, 0, 0, 0, 0]);
+    const fast = r([0, 0, 50, 50, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(readings(['recovery'], fast, slow)[0]).toMatchObject({ before: '3 s', now: '0 s', change: 'better' });
+    expect(readings(['recovery'], r([0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]))[0].now).toBe('not before the end');
+    expect(readings(['recovery'], r([0, 0, 0, 0], false))).toEqual([]);
+  });
+
+  it('degraded: share of all requests answered by a fallback; absent without a fallback', () => {
+    const d = run(10, 0, {});
+    (d.result.summary as { degraded?: number; offered: number }).degraded = 30;
+    (d.result.summary as { offered: number }).offered = 200;
+    expect(readings(['degraded'], d)[0].now).toBe('15%');
+    expect(readings(['degraded'], run(10, 0, {}))).toEqual([]);
+  });
+
+  it('queuePeak: the most messages waiting in the fullest queue, with its name', () => {
+    const q = (n: number) => run(10, 0, { api: 0.2 }, { jobs: { queueDepthMax: n }, other: { queueDepthMax: 3 } });
+    expect(readings(['queuePeak'], q(120), q(4000))[0]).toMatchObject({ before: '4000', now: '120', who: 'JOBS', change: 'better' });
+    expect(readings(['queuePeak'], run(10, 0, { api: 0.2 }))).toEqual([]);
+  });
+
+  it('hedgeExtra: second copies over first calls, on the hedged connections only', () => {
+    const h = run(10, 0, {});
+    (h.design as { edges: unknown[] }).edges = [{ from: 'api', to: 'db', hedgeMs: 50 }, { from: 'c', to: 'api' }];
+    (h.result as { edges: unknown }).edges = { a: { from: 'api', to: 'db', calls: 1100, hedges: 100 }, b: { from: 'c', to: 'api', calls: 5000 } };
+    expect(readings(['hedgeExtra'], h)[0].now).toBe('10%');
+    expect(readings(['hedgeExtra'], run(10, 0, {}))).toEqual([]);
+  });
+
+  it('clientFail:<id>: the failed share of one client, by its id', () => {
+    const c = (fail: number) => run(10, 0, {}, { small: { kind: 'client', arrivals: 200, fail }, big: { kind: 'client', arrivals: 1000, fail: 900 } });
+    const row = readings(['clientFail:small'], c(2), c(150))[0];
+    expect(row).toMatchObject({ key: 'clientFail:small', before: '75%', now: '1.0%', who: 'SMALL', change: 'better' });
+    expect(row.label).toBe('Failed requests of SMALL');
+    expect(measureOf('clientFail:small')).toBeDefined();
+    expect(measureOf('clientFail:')).toBeUndefined();
+    expect(measureOf('toString')).toBeUndefined();
+    // no such client in this design: left out
+    expect(readings(['clientFail:nobody'], c(2))).toEqual([]);
   });
 });
