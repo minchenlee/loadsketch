@@ -678,6 +678,50 @@ test('course: after a run the step shows what it measured, next to the run befor
   await expect(page.getByTestId('course-measured')).toHaveCount(0);
 });
 
+test('course: back on a step run before, its measurements are still there', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=3.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  const step = page.getByTestId('course-step');
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-recover-never').click();
+  await page.getByTestId('course-option-amp-x3').click();
+  await page.getByTestId('course-next').click();
+  await expect(step).toHaveAttribute('data-step', '2:run');
+  await page.getByTestId('course-run').click();
+  const box = page.getByTestId('course-measured');
+  await expect(box).toBeVisible({ timeout: 60_000 });
+  const first = (await box.locator('[data-measure]').first().textContent())!;
+  // run on a later step (the challenge), then come back
+  await page.getByTestId('course-next').click();
+  await expect(step).toHaveAttribute('data-step', /:challenge$/);
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await page.getByTestId('course-back').click();
+  await expect(step).toHaveAttribute('data-step', '2:run');
+  await expect(box).toBeVisible();
+  await expect(box.locator('[data-measure]').first()).toHaveText(first);
+});
+
+test('course: after a language switch, the measurements name components in the new language', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  const busiest = page.getByTestId('course-measured').locator('[data-measure="busiest"]');
+  await expect(busiest).toBeVisible({ timeout: 60_000 });
+  await expect(busiest).toContainText(/Busiest component · [A-Za-z]/);
+  await page.getByTestId('course-lang').click();
+  // the label and the component's name are both Chinese now: no English word left in the row
+  await expect(busiest).toContainText('最忙的元件');
+  await expect(busiest).not.toContainText(/[A-Za-z]{3,}/);
+});
+
 test('course: a run shows its progress on the page, and Skip to end finishes it', async ({ page }) => {
   await page.goto('/learn/?lang=en&lesson=2.1');
   const frame = page.frameLocator('[data-testid="course-frame"]');
@@ -708,17 +752,28 @@ test('course: the page can point at a component: selected, centred, its settings
   await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
   await toFrame(page, { kind: 'focus', tab: 'results' });
   await expect(frame.getByTestId('tab-learn')).toHaveAttribute('aria-selected', 'true');
+  // the canvas's pan and zoom once it has settled after loading
+  const vp = () => frame.locator('.react-flow__viewport').evaluate((e) => (e as HTMLElement).style.transform);
+  let settled = await vp();
+  await expect.poll(async () => { const now = await vp(); const same = now === settled; settled = now; return same; }, { intervals: [400] }).toBe(true);
   await toFrame(page, { kind: 'focus', node: 'db', tab: 'design' });
   await expect(frame.locator('.react-flow__node.selected [data-node="db"]')).toBeVisible();
   await expect(frame.getByTestId('tab-design')).toHaveAttribute('aria-selected', 'true');
-  // centred in the canvas
+  // already on screen: the canvas does not move, and no card is cut off
   const pane = (await frame.locator('.react-flow').boundingBox())!;
-  await expect
-    .poll(async () => {
-      const b = (await frame.locator('[data-node="db"]').boundingBox())!;
-      return Math.hypot(b.x + b.width / 2 - (pane.x + pane.width / 2), b.y + b.height / 2 - (pane.y + pane.height / 2));
-    })
-    .toBeLessThan(30);
+  const inPane = async (id: string) => {
+    const b = await frame.locator(`[data-node="${id}"]`).boundingBox();
+    return !!b && b.x >= pane.x - 1 && b.y >= pane.y - 1 && b.x + b.width <= pane.x + pane.width + 1 && b.y + b.height <= pane.y + pane.height + 1;
+  };
+  const ids = await frame.locator('[data-node]').evaluateAll((els) => els.map((e) => e.getAttribute('data-node')!));
+  for (const id of ids) expect(await inPane(id), id).toBe(true);
+  await page.waitForTimeout(500);
+  expect(await vp()).toBe(settled);
+  // zoomed in until it is off screen: pointing at it brings it back into view
+  for (let k = 0; k < 6 && (await inPane('db')); k++) await frame.locator('.react-flow__controls-zoomin').click();
+  expect(await inPane('db')).toBe(false);
+  await toFrame(page, { kind: 'focus', node: 'db' });
+  await expect.poll(() => inPane('db')).toBe(true);
   // an unknown component changes nothing
   await toFrame(page, { kind: 'focus', node: 'nope' });
   await expect(frame.locator('.react-flow__node.selected [data-node="db"]')).toBeVisible();

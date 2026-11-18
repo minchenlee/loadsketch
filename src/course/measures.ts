@@ -5,6 +5,13 @@ import { recoveryS, spikeEnd, type RunData } from '../learn/metrics.ts';
 import { KINDS } from '../schema/kinds.ts';
 
 type NodeRes = RunData['result']['nodes'][string];
+
+/**
+ * A component's name in the page's language. The run holds its labels in the language it was made
+ * in; t() maps an example's label either way (English id ↔ Chinese text), and leaves a learner's own
+ * name as written.
+ */
+const nameOf = (n: { label: string }): string => t(n.label);
 type InstRes = NonNullable<NodeRes['instances']>[number];
 
 /** A design parameter of a node, else its kind's default. */
@@ -22,7 +29,7 @@ const paramOf = (r: RunData, id: string, name: string): number => {
  * from the design, as the engine does: per shard a primary, then its replicas.
  */
 function instanceName(r: RunData, id: string, n: NodeRes, inst: InstRes | undefined): string {
-  if (!inst?.role) return n.label;
+  if (!inst?.role) return nameOf(n);
   if (n.kind === 'database' || n.kind === 'sharded_db') {
     let shards = n.kind === 'sharded_db' ? paramOf(r, id, 'shards') : 1;
     for (const ev of r.scenario.events ?? []) if (ev.type === 'reshard' && ev.node === id) shards = Math.max(shards, ev.toShards);
@@ -30,9 +37,9 @@ function instanceName(r: RunData, id: string, n: NodeRes, inst: InstRes | undefi
     const s = Math.floor(inst.idx / per);
     const k = inst.idx % per;
     const role = k === 0 ? t('Primary') : t('Replica {r}', { r: k });
-    return `${n.label} ${shards > 1 ? t('Shard {s} {role}', { s, role }) : role}`;
+    return `${nameOf(n)} ${shards > 1 ? t('Shard {s} {role}', { s, role }) : role}`;
   }
-  return `${n.label} ${inst.role}`;
+  return `${nameOf(n)} ${t(inst.role)}`;
 }
 
 /** The busiest instance of one node (its maxInstanceUtilization), named. */
@@ -70,13 +77,22 @@ const sum = (r: RunData, f: (n: RunData['result']['nodes'][string]) => number | 
 export const MEASURES: Record<string, Measure> = {
   p99: { label: tx('p99 latency'), of: (r) => (r.result.summary.latencyMs.count ? { value: r.result.summary.latencyMs.p99 } : null), fmt: ms, better: 'lower' },
   p50: { label: tx('Median latency'), of: (r) => (r.result.summary.latencyMs.count ? { value: r.result.summary.latencyMs.p50 } : null), fmt: ms, better: 'lower' },
-  failRate: { label: tx('Failed requests'), of: (r) => ({ value: r.result.summary.errorRate }), fmt: pct, better: 'lower' },
+  /** Share of all offered requests that did not succeed (like rejected and timedOut; summary.errorRate counts only settled ones). */
+  failRate: {
+    label: tx('Failed requests'),
+    of: (r) => {
+      const s = r.result.summary;
+      return { value: s.offered > 0 ? Math.min(1, Math.max(0, s.offered - s.ok) / s.offered) : 0 };
+    },
+    fmt: pct,
+    better: 'lower',
+  },
   throughput: { label: tx('Successful requests per second'), of: (r) => ({ value: r.result.summary.throughputRps }), fmt: (x) => `${Math.round(x)}/s`, better: 'higher' },
   busiest: {
     label: tx('Busiest component'),
     of: (r) => {
       let best: Reading | null = null;
-      for (const n of nodes(r)) if (typeof n.utilization === 'number' && (!best || n.utilization > best.value)) best = { value: n.utilization, who: n.label };
+      for (const n of nodes(r)) if (typeof n.utilization === 'number' && (!best || n.utilization > best.value)) best = { value: n.utilization, who: nameOf(n) };
       return best;
     },
     fmt: pct,
@@ -87,7 +103,7 @@ export const MEASURES: Record<string, Measure> = {
     label: tx('Cache hit ratio'),
     of: (r) => {
       const c = nodes(r).find((n) => typeof n.hitRatio === 'number');
-      return c ? { value: c.hitRatio!, who: c.label } : null;
+      return c ? { value: c.hitRatio!, who: nameOf(c) } : null;
     },
     fmt: pct,
     better: 'higher',
@@ -135,7 +151,7 @@ export const MEASURES: Record<string, Measure> = {
     label: tx('Most messages waiting in the queue'),
     of: (r) => {
       let best: Reading | null = null;
-      for (const n of nodes(r)) if (typeof n.queueDepthMax === 'number' && (!best || n.queueDepthMax > best.value)) best = { value: n.queueDepthMax, who: n.label };
+      for (const n of nodes(r)) if (typeof n.queueDepthMax === 'number' && (!best || n.queueDepthMax > best.value)) best = { value: n.queueDepthMax, who: nameOf(n) };
       return best;
     },
     fmt: count,
@@ -169,7 +185,7 @@ const clientFail = (id: string): Measure => ({
   label: tx('Failed requests of {name}'),
   of: (r) => {
     const n = r.result.nodes[id];
-    return n && n.kind === 'client' ? { value: n.arrivals > 0 ? n.fail / n.arrivals : 0, who: n.label } : null;
+    return n && n.kind === 'client' ? { value: n.arrivals > 0 ? n.fail / n.arrivals : 0, who: nameOf(n) } : null;
   },
   fmt: pct,
   better: 'lower',
@@ -180,7 +196,7 @@ const utilOf = (id: string): Measure => ({
   label: tx('How busy {name} was'),
   of: (r) => {
     const n = r.result.nodes[id];
-    return n && typeof n.utilization === 'number' ? { value: n.utilization, who: n.label } : null;
+    return n && typeof n.utilization === 'number' ? { value: n.utilization, who: nameOf(n) } : null;
   },
   fmt: pct,
   better: 'lower',
@@ -235,7 +251,10 @@ export interface Row {
 }
 
 /** The component a keyed measure is about, by its label (busiestInstance:<id> names the component, not the instance). */
-const r0 = (r: RunData, key: string) => r.result.nodes[key.slice(key.indexOf(':') + 1)]?.label;
+const r0 = (r: RunData, key: string) => {
+  const n = r.result.nodes[key.slice(key.indexOf(':') + 1)];
+  return n && nameOf(n);
+};
 
 /** A keyed measure names its component in the label: show only the rest of who (an instance), or nothing. */
 function shownOf(key: string, who: string | undefined, name: string | undefined): string | undefined {

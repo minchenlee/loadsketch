@@ -1,7 +1,7 @@
 // The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
-import { answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, nextTitle, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
+import { addRun, answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, nextTitle, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
 import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
@@ -259,5 +259,19 @@ describe('saved progress from another tab', () => {
   it('saving says whether it worked', () => {
     // no localStorage here: the write fails
     expect(saveProgress({})).toBe(false);
+  });
+});
+
+describe('runs kept by page', () => {
+  it('each page keeps its own last run, next to the run before it, so Back shows it again', () => {
+    let s = addRun({ pages: {} }, 2, 'a');
+    s = addRun(s, 4, 'b');
+    // back on page 2: its run is still there
+    expect(s.pages[2]).toEqual({ run: 'a', before: undefined });
+    expect(s.pages[4]).toEqual({ run: 'b', before: 'a' });
+    // a second run on page 2 is compared with the run just before it
+    s = addRun(s, 2, 'c');
+    expect(s.pages[2]).toEqual({ run: 'c', before: 'b' });
+    expect(s.pages[4]).toEqual({ run: 'b', before: 'a' });
   });
 });

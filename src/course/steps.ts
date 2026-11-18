@@ -125,3 +125,12 @@ export function feedbackOf(lesson: Lesson, pages: Page[], i: number): string[] {
 export function clampStep(i: number, pages: Page[]): number {
   return Number.isInteger(i) ? Math.min(Math.max(i, 0), pages.length - 1) : 0;
 }
+
+/** The runs of a lesson visit: each page's last run, with the run made just before it (on any page). */
+export interface PageRuns<R> {
+  last?: R;
+  pages: Record<number, { run: R; before?: R }>;
+}
+
+/** Records a finished run on the page it started on. */
+export const addRun = <R,>(s: PageRuns<R>, page: number, run: R): PageRuns<R> => ({ last: run, pages: { ...s.pages, [page]: { run, before: s.last } } });

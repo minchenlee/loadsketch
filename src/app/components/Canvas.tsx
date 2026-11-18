@@ -12,6 +12,7 @@ import { startEdgeFlow } from '../edgeFlow.ts';
 import { t } from '../../i18n/index.ts';
 import { KINDS } from '../../schema/kinds.ts';
 import { limitBanner } from '../findLimit.ts';
+import { inView } from '../inView.ts';
 
 const nodeTypes = { component: ComponentNode };
 const edgeTypes = { flow: FlowEdge };
@@ -168,15 +169,19 @@ function useRefitOnLimit() {
 /** The course page asked to look at a node: centre it, at the same zoom (no motion with reduced motion). */
 function useCentreAsked() {
   const asked = useApp((s) => s.centreAsked);
-  const { setCenter, getZoom } = useReactFlow();
+  const { setCenter, getZoom, getViewport } = useReactFlow();
+  const flow = useStoreApi();
   useEffect(() => {
     if (!asked) return;
     const n = useApp.getState().nodes.find((x) => x.id === asked.node);
     if (!n) return;
     const w = n.measured?.width ?? 0;
     const h = n.measured?.height ?? 0;
+    // a card already on screen stays where it is: centring it would push the rest of the design off
+    const { width, height } = flow.getState();
+    if (inView({ x: n.position.x, y: n.position.y, w, h }, getViewport(), { w: width, h: height })) return;
     void setCenter(n.position.x + w / 2, n.position.y + h / 2, { zoom: getZoom(), duration: reducedMotion() ? 0 : 300 });
-  }, [asked, setCenter, getZoom]);
+  }, [asked, setCenter, getZoom, getViewport, flow]);
 }
 
 /**
