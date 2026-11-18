@@ -7,7 +7,7 @@ import { COURSE } from '../../src/learn/course.ts';
 import { judge, type Challenge, type Lesson } from '../../src/learn/lesson.ts';
 import { KINDS } from '../../src/schema/kinds.ts';
 import type { Design } from '../../src/schema/design.ts';
-import { design, runOf, type Change } from './run.ts';
+import { design, runOf, scenario, type Change } from './run.ts';
 
 const removeNode = (id: string): Change => ({
   key: `cheat:remove:${id}`,
@@ -69,10 +69,27 @@ function cheatsFor(d: Design, c: Challenge): { name: string; change: Change }[] 
   return out;
 }
 
+/**
+ * A cheat that takes away a component of the example (removed or renamed) is refused by judge()
+ * from the design alone: its "Removed" check reads only run.design. That is checked first, with
+ * the example's own run and the cheat's design, so these cheats need no run of their own (6.2 has
+ * 14 components, about 20 s a run). judge() must then name the removal; anything else is run.
+ */
+function refusedByDesign(c: Challenge, ex: string, sc: string, change: Change) {
+  const d = structuredClone(design(ex));
+  change.apply(d, structuredClone(scenario(sc)));
+  const original = design(ex);
+  const gone = original.nodes.filter((o) => !c.mayRemove?.includes(o.id) && !d.nodes.some((n) => n.id === o.id && n.kind === o.kind));
+  if (!gone.length) return false;
+  const v = judge(c, { ...runOf(ex, sc), design: d }, original);
+  return !v.passed && v.broken.length > 0;
+}
+
 /** Runs a cheat; a design the engine cannot run cannot pass either. */
 function verdict(c: Challenge, l: Lesson, change: Change) {
   const ex = c.example ?? l.example;
   const sc = c.scenario ?? l.scenario ?? ex;
+  if (refusedByDesign(c, ex, sc, change)) return false;
   let run;
   try {
     run = runOf(ex, sc, change);

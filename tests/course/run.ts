@@ -78,5 +78,20 @@ export function lessonRuns(lesson: Lesson) {
   return { run, original, passed, question, challenge };
 }
 
+/**
+ * cheats-errors.test.ts sets the error rate of every component, one at a time. A design with more
+ * than BIG_DESIGN such components takes many runs of a long scenario (6.2: 9 components, about
+ * 20 s a run), so the course suite tries one component of each kind (and all of them at once);
+ * COURSE_ALL_CHEATS=1 (npm run test:cheats-all) tries every component.
+ */
+export const ALL_CHEATS = !!process.env.COURSE_ALL_CHEATS;
+export const BIG_DESIGN = 8;
+/** All of `nodes`, or for a big design the first of each kind (in design order). */
+export function sample<T extends { kind: string }>(nodes: T[]): T[] {
+  if (ALL_CHEATS || nodes.length <= BIG_DESIGN) return nodes;
+  const seen = new Set<string>();
+  return nodes.filter((n) => !seen.has(n.kind) && seen.add(n.kind));
+}
+
 /** Each run is a whole simulation; the slow suite runs many files at once. */
 export const SLOW = 180_000;
