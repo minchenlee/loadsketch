@@ -21,7 +21,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { answerable, judgedOn, learnTicks, lookOf, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
+import { addRun, answerable, judgedOn, learnTicks, lookOf, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page, type PageRuns } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 import { readings, type Row } from './measures.ts';
 
@@ -423,7 +423,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
   /** The last two finished runs in this visit, with the page each started on: a run or try step shows the last one, next to the one before it. */
-  const [lastRuns, setLastRuns] = useState<{ run: RunData; page: number }[]>([]);
+  const [pageRuns, setPageRuns] = useState<PageRuns<RunData>>({ pages: {} });
   /** The page each of those runs started on (a challenge judges only a run started on its page). */
   const [runPages, setRunPages] = useState<Record<string, number>>({});
   const [reload, setReload] = useState(0);
@@ -474,7 +474,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const all = { ...runs, [key]: r.run };
     setRuns(all);
     setRunPages((x) => ({ ...x, [key]: r.page }));
-    setLastRuns((x) => [...x.slice(-1), { run: r.run, page: r.page }]);
+    setPageRuns((x) => addRun(x, r.page, r.run));
     const p = latest.current.progress;
     const ids = r.answers;
     const answered = lesson.questions.filter((q) => ids.includes(q.id));
@@ -571,7 +571,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     update({ ...EMPTY });
     setRuns({});
     setRunPages({});
-    setLastRuns([]);
+    setPageRuns({ pages: {} });
     setAnswerRuns({});
     dispatch({ kind: 'restart' });
     setReload((r) => r + 1);
@@ -625,12 +625,10 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     ) : (
       run && <p className="faint mt-2 text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</p>
     );
-  /** The run started on this step, next to the run before it (in this visit, whatever it ran). */
+  /** The last run started on this step, next to the run before it (in this visit, whatever it ran). */
   const measuredHere = (show: string[] | undefined) => {
-    const now = lastRuns[lastRuns.length - 1];
-    if (!now || now.page !== i) return null;
-    const before = lastRuns.length > 1 ? lastRuns[0].run : undefined;
-    return <Measured rows={readings(show, now.run, before)} />;
+    const here = pageRuns.pages[i];
+    return here ? <Measured rows={readings(show, here.run, here.before)} /> : null;
   };
   // an answer that shows points where to look (the first answered question with a look)
   const lookAt = answeredHere.map((x) => lookOf(x)).find((f) => f);

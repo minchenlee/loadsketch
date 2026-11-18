@@ -14,7 +14,7 @@ const run = (p99: number, err: number, util: Record<string, number>, extra: Extr
     scenario: {},
     windows: [],
     result: {
-      summary: { errorRate: err, throughputRps: 100, latencyMs: lat(p99), asyncLatencyMs: lat(0, 0) },
+      summary: { errorRate: err, offered: 1000, ok: Math.round(1000 * (1 - err)), throughputRps: 100, latencyMs: lat(p99), asyncLatencyMs: lat(0, 0) },
       nodes: Object.fromEntries([...new Set([...Object.keys(util), ...Object.keys(extra)])].map((id) => [id, { label: id.toUpperCase(), ...(id in util ? { utilization: util[id] } : {}), ...(extra[id] ?? {}) }])),
     },
   }) as unknown as RunData;
@@ -138,10 +138,10 @@ describe('course measures', () => {
     ]);
   });
   // a sharded database with 1 replica per shard: instances 0..3 are shard 0 primary, shard 0 replica 1, shard 1 primary, shard 1 replica 1
-  const sharded = (hotIdx: number, hot: number, roles: string[]) => {
+  const sharded = (hotIdx: number, hot: number, roles: string[], label = 'Sharded database') => {
     const r = run(10, 0, { api: 0.5 }, {
       api: { maxInstanceUtilization: 0.6, instances: [{ idx: 0, role: '#0', utilization: 0.6 }, { idx: 1, role: '#1', utilization: 0.4 }] as never },
-      db: { kind: 'sharded_db', label: 'Sharded database', utilization: 0.2, maxInstanceUtilization: hot, instances: roles.map((role, idx) => ({ idx, role, utilization: idx === hotIdx ? hot : 0.05 })) as never },
+      db: { kind: 'sharded_db', label, utilization: 0.2, maxInstanceUtilization: hot, instances: roles.map((role, idx) => ({ idx, role, utilization: idx === hotIdx ? hot : 0.05 })) as never },
     });
     (r.design as { nodes: unknown[] }).nodes = [{ id: 'db', kind: 'sharded_db', params: { shards: 2, replicas: 1 } }, { id: 'api', kind: 'api', params: {} }];
     return r;
@@ -164,15 +164,31 @@ describe('course measures', () => {
     expect(one.shown).toBe('');
   });
 
-  it('instance names are in the page language, whatever language the run was made in', () => {
-    // a run made in Chinese (its roles are Chinese), shown on an English page
-    const r = sharded(1, 0.95, zhRoles);
-    expect(readings(['busiestInstance'], r)[0].who).toBe('Sharded database Shard 0 Replica 1');
+  it('component and instance names are in the page language, whatever language the run was made in', () => {
+    const en = ['Shard 0 Primary', 'Shard 0 Replica 1', 'Shard 1 Primary', 'Shard 1 Replica 1'];
+    // a run made in Chinese (its labels and roles are Chinese), shown on an English page
+    const zhRun = sharded(1, 0.95, zhRoles, '分片資料庫');
+    expect(readings(['busiestInstance'], zhRun)[0].who).toBe('Sharded database Shard 0 Replica 1');
+    expect(readings(['busiestInstance:db', 'util:db'], zhRun).map((x) => x.label)).toEqual(['Busiest instance of Sharded database', 'How busy Sharded database was']);
+    expect(readings(['busiest'], run(10, 0, { api: 0.9 }, { api: { label: 'API 伺服器' } }))[0].who).toBe('API server');
     setLang('zh-TW');
     try {
-      expect(readings(['busiestInstance'], sharded(1, 0.95, ['Shard 0 Primary', 'Shard 0 Replica 1', 'Shard 1 Primary', 'Shard 1 Replica 1']))[0].who).toBe('Sharded database 分片 0 副本 1');
+      // a run made in English, shown on a Chinese page
+      const enRun = sharded(1, 0.95, en);
+      expect(readings(['busiestInstance'], enRun)[0].who).toBe('分片資料庫 分片 0 副本 1');
+      expect(readings(['busiestInstance:db'], enRun)[0]).toMatchObject({ label: '分片資料庫 最忙的 instance', shown: '分片 0 副本 1' });
+      expect(readings(['busiest'], run(10, 0, { api: 0.9 }, { api: { label: 'API server' } }))[0].who).toBe('API 伺服器');
+      // a name the learner wrote stays as written
+      expect(readings(['busiest'], run(10, 0, { api: 0.9 }, { api: { label: '我的服務' } }))[0].who).toBe('我的服務');
     } finally {
       setLang('en');
     }
+  });
+
+  it('failRate: failed share of all offered requests (like rejected and timedOut), not only of the settled ones', () => {
+    // 1000 offered, 700 ok; the engine's errorRate counts only settled requests
+    const r = run(10, 0.1, {});
+    (r.result.summary as { ok: number }).ok = 700;
+    expect(readings(['failRate'], r)[0].now).toBe('30%');
   });
 });
