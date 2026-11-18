@@ -107,7 +107,7 @@ const grayFailure: Lesson = {
       scenario: 'slow-instance',
       title: tx('A cheaper tail'),
       text: tx('Keep p99 under 125 ms with fewer than 10% extra calls from hedging. No more machines.'),
-      goals: [p99Under(125, tx('p99 of successful requests under 125 ms')), extraUnder(0.1, tx('Fewer than 10% extra calls from hedging'))],
+      goals: [p99Under(125, tx('p99 of successful requests under 125 ms')), extraUnder(0.1, tx('Fewer than 10% extra calls from hedging')), failUnder1],
       rules: [noMoreCapacity],
       hint: tx('A hedge is a second chance for a request that landed on the slow instance. Send fewer requests there in the first place, and fewer need a second chance: change how the load balancer picks an instance, and keep the hedge.'),
     },

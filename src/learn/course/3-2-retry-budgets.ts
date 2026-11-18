@@ -1,6 +1,7 @@
 // 3.2 Retry budgets, throttling and deadlines (retry-budget, adaptive-throttle, retry-storm).
 import { t, tx } from '../../i18n/index.ts';
 import { keepRetries, noMoreCapacity, type Lesson } from '../lesson.ts';
+import { errorsUnder } from '../lessonKit.ts';
 import { keepThrottle, oneEdgeOnly, recovery, recoveryText, recoversWithin } from '../lessonKit2.ts';
 import { peakAmp } from '../metrics.ts';
 
@@ -64,7 +65,7 @@ const retryBudgets: Lesson = {
       example: 'retry-storm',
       title: tx('One edge is enough'),
       text: tx('On the retry storm, recover within 5 seconds after the spike. Keep every retry, add no machines, and change one edge only.'),
-      goals: [recoversWithin(5, tx('Recovered within 5 seconds after the spike (then fewer than 5% fail in every second)'))],
+      goals: [recoversWithin(5, tx('Recovered within 5 seconds after the spike (then fewer than 5% fail in every second)')), errorsUnder(0.35, tx('Error rate under 35% for the whole run'))],
       rules: [noMoreCapacity, keepRetries, oneEdgeOnly],
       hint: tx('The storm grows where the overloaded component is called. The API servers are the ones that fill up; which edge retries into them? A retry budget on the edges into the cache or the database changes nothing here.'),
     },
@@ -73,7 +74,7 @@ const retryBudgets: Lesson = {
       example: 'adaptive-throttle',
       title: tx('Let go sooner'),
       text: tx('With adaptive throttling, recover within 20 seconds after the spike. Keep throttling on every edge that has it (K from 1 to 3), and add no machines.'),
-      goals: [recoversWithin(20, tx('Recovered within 20 seconds after the spike (then fewer than 5% fail in every second)'))],
+      goals: [recoversWithin(20, tx('Recovered within 20 seconds after the spike (then fewer than 5% fail in every second)')), errorsUnder(0.45, tx('Error rate under 45% for the whole run'))],
       rules: [noMoreCapacity, keepThrottle(3)],
       hint: tx('A smaller K rejects earlier, and takes longer to let go: try 1.5 and see. A larger K lets go sooner. A retry budget next to the throttle also helps: fewer retries fail, so fewer failures stay in the window.'),
     },

@@ -1,7 +1,7 @@
 // 3.3 Rate limiting at the door (flash-sale; tenant-limits with steady traffic).
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
-import { errorsUnder, p99Under, pct } from '../lessonKit.ts';
+import { errorsUnder, failUnder1, p99Under, pct } from '../lessonKit.ts';
 import { clientFailShare, keepParam, paramAtMost } from '../lessonKit2.ts';
 
 /** Share of every request that the rate limiters turned away. */
@@ -93,6 +93,7 @@ const rateLimiting: Lesson = {
         clientUnder('big', 0.01, tx('Large customer: under 1% fail')),
         clientUnder('small', 0.005, tx('Small customer: under 0.5% fail')),
         paramAtMost('rl', 'ratePerSec', 800, tx('Quota per customer ≤ 800 a second')),
+        failUnder1,
       ],
       rules: [noMoreCapacity, keepParam('rl', 'scope', tx('Keep one quota per customer'), tx('The rate limiter keeps “One per user (tenant)”'))],
       hint: tx('The large customer sends about 660 a second on average, but requests arrive at random: some seconds bring many more. A quota just over the average still turns some away. Leave some room above the average.'),

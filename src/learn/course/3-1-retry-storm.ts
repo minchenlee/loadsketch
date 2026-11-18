@@ -62,7 +62,7 @@ const retryStorm: Lesson = {
       id: 'retry-storm/recover',
       title: tx('Recover on its own'),
       text: tx('Recover within 5 seconds after the spike, with no more machines.'),
-      goals: [recoversWithin(5, tx('Recovered within 5 seconds after the spike (then fewer than 5% fail in every second)'))],
+      goals: [recoversWithin(5, tx('Recovered within 5 seconds after the spike (then fewer than 5% fail in every second)')), errorsUnder(0.35, tx('Error rate under 35% for the whole run'))],
       rules: [noMoreCapacity],
       hint: tx('Look at the retry settings on the edges. A retry budget limits retries to a share of the calls, so retries cannot snowball during the spike.'),
     },

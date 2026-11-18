@@ -1,7 +1,7 @@
 // 5.1 Queues absorb bursts (async-queue with the spike scenario).
 import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson } from '../lesson.ts';
-import { ms, p99Under } from '../lessonKit.ts';
+import { failUnder1, ms, p99Under } from '../lessonKit.ts';
 import { slotsAtMost } from '../lessonKit2.ts';
 import { spikeEnd, type RunData } from '../metrics.ts';
 
@@ -124,6 +124,7 @@ const queuesAbsorb: Lesson = {
         { text: tx('Async p99 (queued to done) under 1000 ms'), check: (run) => ({ ok: asyncP99(run) < 1000, value: ms(asyncP99(run)) }) },
         slotsAtMost('jobs', 10, tx('Worker slots (machines × slots) ≤ 10')),
         p99Under(200, tx('p99 of successful requests under 200 ms')),
+        failUnder1,
         everyMessageDone,
       ],
       rules: [],

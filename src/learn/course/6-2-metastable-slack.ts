@@ -1,7 +1,7 @@
 // 6.2 Incident replay: a metastable failure (saas-slack, after Slack's incident of 2022-02-22).
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
-import { ms, pct } from '../lessonKit.ts';
+import { errorsUnder, ms, pct } from '../lessonKit.ts';
 import { clientFailShare } from '../lessonKit2.ts';
 import type { RunData } from '../metrics.ts';
 
@@ -82,6 +82,7 @@ const metastable: Lesson = {
         afterP99Under(300, tx('Every second after second 70: p99 under 300 ms')),
         { text: tx('Fewer than 3% of the connected clients’ requests fail'), check: (run) => ({ ok: clientFailShare(run, 'active') < 0.03, value: pct(clientFailShare(run, 'active')) }) },
         { text: tx('At least 20% of boot queries succeed'), check: (run) => ({ ok: bootOk(run) >= 0.2, value: pct(bootOk(run)) }) },
+        errorsUnder(0.3, tx('Under 30% of all requests fail, turned-away boot queries included')),
       ],
       rules: [noMoreCapacity],
       hint: tx('Booting clients can wait; connected clients cannot. The boot rate limit applies only to the boot queries: give it a per-second limit low enough that the database gets out of the loop, but not so low that almost nobody can start.'),

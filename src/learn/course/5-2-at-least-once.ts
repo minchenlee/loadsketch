@@ -1,7 +1,7 @@
 // 5.2 At-least-once, duplicates and the DLQ (async-reliable with the worker-crash scenario).
 import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson } from '../lesson.ts';
-import { ms, pct } from '../lessonKit.ts';
+import { failUnder1, ms, pct } from '../lessonKit.ts';
 import { keepParam, slotsAtMost } from '../lessonKit2.ts';
 import type { RunData } from '../metrics.ts';
 
@@ -103,6 +103,7 @@ const atLeastOnce: Lesson = {
         { text: tx('Async p99 (queued to done) under 1000 ms'), check: (run) => ({ ok: asyncP99(run) < 1000, value: ms(asyncP99(run)) }) },
         nothingLost,
         noDuplicates,
+        failUnder1,
         slotsAtMost('jobs', 12, tx('Worker slots (machines × slots) ≤ 12')),
       ],
       rules: [
