@@ -547,3 +547,44 @@ test('course: a run from the simulator on the guess page, before Next, logs and 
   await expect(page.getByTestId('course-answer-hit')).toBeVisible();
   await expect(page.getByTestId('course-answer-db-share')).toBeVisible();
 });
+
+test('the simulator links to the course: the top bar on a wide window', async ({ page }) => {
+  await page.goto('/app/?lang=en');
+  const link = page.getByTestId('open-course');
+  await expect(link).toHaveText('Course');
+  await link.click();
+  await expect(page).toHaveURL(/\/learn\/$/);
+  await expect(page.getByTestId('course-lesson-2.1')).toBeVisible();
+});
+
+test('the simulator links to the course: the More menu on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/app/?lang=zh-TW');
+  await expect(page.getByTestId('open-course')).toBeHidden();
+  await page.getByTestId('more-menu').click();
+  await expect(page.getByTestId('course-item')).toHaveText('課程');
+  await page.getByTestId('course-item').click();
+  await expect(page).toHaveURL(/\/learn\/$/);
+  await expect(page.getByTestId('course-lesson-2.1')).toBeVisible();
+});
+
+test('the simulator in the course frame has no course link', async ({ page }) => {
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await expect(frame.getByTestId('open-course')).toHaveCount(0);
+});
+
+test('the intro site links to the course: the nav and next to the main button', async ({ page, request }) => {
+  await page.goto('/?lang=en');
+  for (const id of ['site-course', 'site-course-cta']) {
+    const href = await page.getByTestId(id).getAttribute('href');
+    expect(href).toBeTruthy();
+    const res = await request.get(new URL(href!, page.url()).toString());
+    expect(res.status(), id).toBe(200);
+  }
+  await expect(page.getByTestId('site-course-cta')).toContainText('Start the course');
+  await page.getByTestId('site-course').click();
+  await expect(page).toHaveURL(/\/learn\/$/);
+  await expect(page.getByTestId('course-lesson-2.1')).toBeVisible();
+});

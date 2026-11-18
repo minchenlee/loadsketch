@@ -5,7 +5,7 @@ import { StrictMode, useEffect, useRef, useState, useSyncExternalStore } from 'r
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { useModal } from '../app/modal.ts';
-import { ArrowLeft, ArrowRight, Code, Languages, Maximize2, Moon, Sun, Wrench, X, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Code, Languages, Maximize2, Moon, Sun, Wrench, X, Zap, GraduationCap } from 'lucide-react';
 import '../app/index.css';
 import './site.css';
 import logoBlack from '../app/assets/logo-black.svg';
@@ -14,6 +14,7 @@ import { pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
 import { REPO } from '../repo.ts';
 
 const APP = './app/';
+const LEARN = './learn/';
 
 type Theme = 'light' | 'dark';
 
@@ -479,6 +480,10 @@ function Site() {
           <button className="btn" onClick={flipTheme} aria-label={t('Dark / light')} title={t('Dark / light')} data-testid="site-theme">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
+          <a className="btn" href={LEARN} aria-label={t('Course')} data-testid="site-course">
+            <GraduationCap size={16} />
+            <span className="hidden sm:inline">{t('Course')}</span>
+          </a>
           <a className="btn site-wide" href={REPO}>
             <Code size={16} />
             GitHub
@@ -504,6 +509,10 @@ function Site() {
           <a className="btn btn-primary site-cta" href={APP}>
             {t('Open the simulator')}
             <ArrowRight size={18} />
+          </a>
+          <a className="btn site-cta" href={LEARN} data-testid="site-course-cta">
+            <GraduationCap size={18} />
+            {t('Start the course')}
           </a>
           <a className="btn site-cta" href={REPO}>
             <Code size={18} />
