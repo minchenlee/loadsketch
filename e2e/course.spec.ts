@@ -647,3 +647,31 @@ test('course: on a phone the Charts toggle opens the charts drawer in the simula
   await page.getByTestId('course-charts').click();
   await expect(frame.getByTestId('phone-drawer')).not.toHaveAttribute('data-open', '');
 });
+
+test('course: after a run the step shows what it measured, next to the run before it', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-measured')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  const box = page.getByTestId('course-measured');
+  await expect(box).toBeVisible({ timeout: 60_000 });
+  // without a show: p99, failed requests and the busiest component
+  await expect(box.locator('[data-measure]')).toHaveCount(3);
+  await expect(box.locator('[data-measure="p99"]')).toContainText(/\d/);
+  await expect(box.locator('[data-measure="busiest"]')).toContainText('Busiest component');
+  await expect(box.locator('[data-before]')).toHaveCount(0);
+  // a second run is compared with the first
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(box.locator('[data-measure="p99"][data-before]')).toBeVisible();
+  await expect(box.locator('[data-measure="p99"]')).toContainText('→');
+  // another step does not show this step's run
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-measured')).toHaveCount(0);
+});
