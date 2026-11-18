@@ -66,6 +66,7 @@ const queuesAbsorb: Lesson = {
       },
       measured: (run) => t('Highest p99 in one second: {a} before the spike, {b} during it', { a: ms(windowP99(run, 5, SPIKE_FROM)), b: ms(windowP99(run, SPIKE_FROM, spikeEnd(run.scenario))) }),
       explain: tx('The users wait only for the API, and the API only puts a message on the queue: that is as fast during the spike as before. The extra work goes into the queue and waits for the worker. The users do not see the spike; the thumbnails do.'),
+      look: { panel: 'bottom' },
       explainFor: {
         double: tx('The users felt the spike: something they wait for got busy. Look for a component on the path of the request, not behind the queue.'),
         worse: tx('The users felt the spike badly: something they wait for is full. A queue protects only what is behind it.'),
@@ -85,7 +86,9 @@ const queuesAbsorb: Lesson = {
         return d < 50 ? 'few' : d < 1000 ? 'hundreds' : 'thousands';
       },
       measured: (run) => t('At most {n} messages waiting', { n: Math.round(peakDepth(run)) }),
-      explain: tx('A job holds a worker slot for about 50 ms (the thumbnail and the database write), so 8 slots finish about 160 a second. During the spike about 180 uploads a second arrive. The queue grows by the difference, about 20 a second, for 15 seconds: a few hundred messages. The growth rate is arrivals minus service, λ − μ.'),
+      explain: tx('The worker finishes fewer jobs a second than arrive during the spike, so the queue grows by the difference for 15 seconds: a few hundred messages. The growth rate is arrivals minus service, λ − μ.'),
+      calc: [tx('Service: 8 slots ÷ 0.05 s a job = 160 a second'), tx('Arrivals in the spike: about 180 uploads a second'), tx('Growth: 180 − 160 = 20 a second × 15 s = 300 messages')],
+      look: { node: 'jobs' },
       explainFor: {
         few: tx('The queue stays short: the worker finishes more jobs a second than arrive, even during the spike.'),
         thousands: tx('The queue grows by thousands: the worker finishes far fewer jobs a second than arrive. It grows as long as arrivals are higher than service.'),
@@ -108,7 +111,9 @@ const queuesAbsorb: Lesson = {
         const s = drainS(run);
         return s === Infinity ? t('Still not empty at the end') : t('Empty {s} seconds after the spike', { s: Math.round(s) });
       },
-      explain: tx('After the spike, about 60 uploads a second arrive and the worker finishes about 160: it gains 100 a second on the queue, so a few hundred messages are gone in a few seconds. The time to drain is the backlog divided by the spare capacity (μ − λ). With little spare capacity, a small backlog takes a long time.'),
+      explain: tx('After the spike the worker finishes more jobs than arrive, so it gains on the queue, and a few hundred messages are gone in a few seconds. The time to drain is the backlog divided by the spare capacity (μ − λ). With little spare capacity, a small backlog takes a long time.'),
+      calc: [tx('After the spike: about 60 arrive and 160 finish a second'), tx('Spare: 160 − 60 = 100 a second'), tx('Drain: 300 messages ÷ 100 a second = 3 s')],
+      look: { panel: 'bottom' },
       explainFor: {
         slow: tx('The worker has little spare capacity after the spike: it drains the backlog slowly.'),
         never: tx('The worker is slower than the uploads even after the spike (or barely faster): the queue never empties, and the wait keeps growing.'),
@@ -131,13 +136,16 @@ const queuesAbsorb: Lesson = {
       hint: tx('Work out the slots the spike needs: arrivals a second × seconds a job holds a slot. About 180 a second × 0.05 s ≈ 9 slots. With fewer, the queue grows during the spike; with a bit more, it stays short. Change “Concurrency per instance” or “Instances” of the worker.'),
     },
   ],
+  learn: [tx('Why users do not feel a spike that goes into a queue'), tx('How fast a queue grows: arrivals minus service'), tx('How long it takes to drain: backlog ÷ spare capacity'), tx('What happens when the worker is slower than the uploads'), tx('How many worker slots a spike needs')],
+  learnAt: [2, 2, 2, 3, 4],
+  recap: [tx('The users wait only for the API; the spike waits in the queue.'), tx('A queue grows by λ − μ and drains by μ − λ: little spare capacity means a long drain.'), tx('Slots needed = arrivals a second × seconds a job holds a slot.')],
   steps: [
-    { kind: 'read', text: tx('An upload service: 600 requests a second, 1 in 10 is an upload. The API stores the file, puts one message on a work queue and answers at once; a thumbnail worker (2 machines × 4 slots, about 50 ms a job) takes the messages later. From second 20 to 35, traffic triples. Guess where the spike goes, then press Run.') },
-    { kind: 'guess', questions: ['users-p99', 'queue-peak', 'drain'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Take one worker machine away (“Instances” 1) and run again. Now the worker is slower than the uploads during the spike by about 100 a second, and only a little faster after it: the queue grows past a thousand, and the async p99 becomes many seconds. The users still do not notice.'), patch: [{ node: 'thumb', params: { instances: 1 } }] },
-    { kind: 'challenge', challenges: ['async-queue/ready-in-1s'] },
-    { kind: 'practice', items: [{ kind: 'brief', id: 'brief-sale' }, { kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },
+    { kind: 'read', title: tx('An upload service'), text: tx('An upload service: 600 requests a second, 1 in 10 is an upload. The API stores the file, puts one message on a work queue and answers at once; a thumbnail worker (2 machines × 4 slots, about 50 ms a job) takes the messages later. From second 20 to 35, traffic triples. Guess where the spike goes, then press Run.'), key: tx('A queue moves the wait from the users to the work behind it.') },
+    { kind: 'guess', title: tx('Guess: where the spike goes'), questions: ['users-p99', 'queue-peak', 'drain'] },
+    { kind: 'run', title: tx('Run the upload spike'), look: { panel: 'bottom' }, show: ['p99', 'asyncP99', 'queuePeak'] },
+    { kind: 'try', title: tx('One worker machine'), text: tx('Take one worker machine away (“Instances” 1) and run again. Watch the queue in the charts: how far does it grow, and does it drain after the spike? Do the users notice?'), patch: [{ node: 'thumb', params: { instances: 1 } }], look: { panel: 'bottom' }, show: ['p99', 'asyncP99', 'queuePeak'] },
+    { kind: 'challenge', title: tx('Thumbnails within a second'), challenges: ['async-queue/ready-in-1s'] },
+    { kind: 'practice', title: tx('Practice'), items: [{ kind: 'brief', id: 'brief-sale' }, { kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },
   ],
 };
 

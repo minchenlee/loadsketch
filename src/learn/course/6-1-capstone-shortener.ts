@@ -31,7 +31,9 @@ const capstone: Lesson = {
         return e < 0.1 ? 'few' : e < 0.4 ? 'some' : 'most';
       },
       measured: (run) => t('{p} of the requests failed', { p: pct(run.result.summary.errorRate) }),
-      explain: tx('Every write goes to the primary database, and a cache or a read replica cannot take a write. 2450 writes a second × 8 ms ≈ 20 connections busy, and the primary has 8. The queue at the database fills up, and most requests fail. Count the load on each part again whenever the mix changes: here the writes, not the reads, set the size of the database.'),
+      explain: tx('Every write goes to the primary database, and a cache or a read replica cannot take a write. The primary has far fewer connections than the writes keep busy: the queue at the database fills up, and most requests fail. Count the load on each part again whenever the mix changes: here the writes, not the reads, set the size of the database.'),
+      calc: [tx('Writes: 3500 a second × 70% = 2450 a second'), tx('Busy connections: 2450 × 0.008 s ≈ 20'), tx('The primary has 8')],
+      look: { node: 'db' },
       explainFor: {
         few: tx('Almost nothing failed: the primary database has enough connections for the writes.'),
         some: tx('Some failed: the primary has more connections than at the start, but not enough for all the writes.'),
@@ -57,14 +59,18 @@ const capstone: Lesson = {
       hint: tx('Work out the connections the writes need: writes a second × seconds a write takes. The primary is the only part that can take them, so make it larger. More API servers do not help: they wait for the database too. Then pay for it with the part that no longer earns its place.'),
     },
   ],
+  learn: [tx('How to read the cost and the complexity points next to the result'), tx('Why a part that does no real work is still a cost'), tx('Why the writes, not the reads, size the primary database'), tx('How to pay for the capacity you need with a part you do not need')],
+  learnAt: [2, 3, 5, 6],
+  recap: [tx('The cache takes almost all clicks, so a read replica behind it adds cost and complexity, not capacity.'), tx('Count the load on each part again whenever the mix changes: only the primary can take a write.'), tx('Connections needed = writes a second × seconds a write takes.')],
   steps: [
-    { kind: 'read', text: tx('The last unit puts it all together: estimate, build, run, read the result, and fix what breaks first, within money and complexity limits like a real team. Here: a URL shortener run by one person. 3000 requests a second, 99% clicks. It works, but it has a read replica, and one person cannot look after one. Press Run, then look at the cost and the complexity points.') },
-    { kind: 'run' },
-    { kind: 'challenge', challenges: ['capstone/solo-shortener'] },
-    { kind: 'guess', questions: ['writes-fail'] },
-    { kind: 'run', scenario: 'hot-keys' },
-    { kind: 'challenge', challenges: ['capstone/write-heavy'] },
-    { kind: 'practice', text: tx('Now the full problems: the brief starts from an empty canvas, and the constraint problem from a design that fails.'), items: [{ kind: 'brief', id: 'brief-shortener' }, { kind: 'constraint', id: 'solo-shortener' }, { kind: 'constraint', id: 'spike-budget' }] },
+    { kind: 'read', title: tx('The last unit'), text: tx('The last unit puts it all together: estimate, build, run, read the result, and fix what breaks first, within money and complexity limits like a real team.') },
+    { kind: 'read', title: tx('A URL shortener'), text: tx('Here: a URL shortener run by one person. 3000 requests a second, 99% clicks. It works, but it has a read replica, and one person cannot look after one. Press Run, then look at the cost and the complexity points.'), key: tx('Every part costs money and attention: keep only the parts that earn their place.') },
+    { kind: 'run', title: tx('Run the shortener'), look: { tab: 'results' } },
+    { kind: 'challenge', title: tx('One person can run it'), challenges: ['capstone/solo-shortener'] },
+    { kind: 'guess', title: tx('Guess: writes take over'), questions: ['writes-fail'] },
+    { kind: 'run', title: tx('Run the write-heavy traffic'), scenario: 'hot-keys', look: { node: 'db' } },
+    { kind: 'challenge', title: tx('When writes take over'), challenges: ['capstone/write-heavy'] },
+    { kind: 'practice', title: tx('Practice'), text: tx('Now the full problems: the brief starts from an empty canvas, and the constraint problem from a design that fails.'), items: [{ kind: 'brief', id: 'brief-shortener' }, { kind: 'constraint', id: 'solo-shortener' }, { kind: 'constraint', id: 'spike-budget' }] },
   ],
 };
 

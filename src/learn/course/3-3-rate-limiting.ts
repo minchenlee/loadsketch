@@ -43,7 +43,9 @@ const rateLimiting: Lesson = {
         return s < 0.1 ? 'few' : s < 0.3 ? 'some' : s < 0.6 ? 'half' : 'most';
       },
       measured: (run) => t('{p} of the requests got a 429', { p: pct(limitedShare(run)) }),
-      explain: tx('For 20 s, 4000 a second arrive and 1500 get through: 2500 a second are turned away. That is most of the sale, and about half the whole run. The checkout servers and the database stay at a normal pace (look at their utilization), so the ones that get through are fast. But the limit is lower than what they can carry: the challenge finds the real number.'),
+      explain: tx('During the sale most requests are turned away: about half of the whole run. The checkout servers and the database stay at a normal pace (look at their utilization), so the ones that get through are fast. But the limit is lower than what they can carry: the challenge finds the real number.'),
+      calc: [tx('During the sale: 4000 a second arrive, 1500 get through'), tx('Turned away: 4000 − 1500 = 2500 a second, for 20 s')],
+      look: { node: 'limiter' },
       explainFor: {
         few: tx('Almost nothing was turned away: the limit is close to the sale traffic. Check that the servers behind it still keep up (p99).'),
         some: tx('The limit is close to what the servers behind it can carry: fewer shoppers are turned away, and the ones that get through are still fast.'),
@@ -68,6 +70,7 @@ const rateLimiting: Lesson = {
       },
       measured: (run) => t('Small customer: {s} failed; large customer: {b} failed', { s: pct(clientFailShare(run, 'small')), b: pct(clientFailShare(run, 'big')) }),
       explain: tx('Each customer has its own bucket. The large customer is over its quota, so about a third of its requests get a 429; the small customer is far under its own and sees nothing. With one shared bucket (“All share one”), both would lose the same share: the large customer’s burst would use up the small customer’s tokens.'),
+      look: { node: 'rl' },
       explainFor: {
         same: tx('Both customers lose the same share: the quota is shared (“All share one”), so the large customer uses up the tokens the small one needs.'),
         some: tx('The small customer loses some requests: the quota or the concurrency limit is close to its own traffic.'),
@@ -99,16 +102,19 @@ const rateLimiting: Lesson = {
       hint: tx('The large customer sends about 660 a second on average, but requests arrive at random: some seconds bring many more. A quota just over the average still turns some away. Leave some room above the average.'),
     },
   ],
+  learn: [tx('What a rate limiter costs: the requests it turns away'), tx('What it saves: the servers behind it stay fast'), tx('How to set the limit from what the servers can carry'), tx('Why each customer needs its own quota')],
+  learnAt: [2, 3, 4, 7],
+  recap: [tx('A limit below what the servers can carry turns users away for nothing; a limit above it lets the queues fill.'), tx('Requests arrive at random: leave room above the average.'), tx('One shared quota lets a large customer use up a small one’s share; one quota per customer keeps them apart.')],
   steps: [
-    { kind: 'read', text: tx('A flash sale: 400 requests a second, then 10× (4000 a second) from second 15 for 20 s. A token bucket at the edge lets 1500 a second through, with a burst of 300; every request over that gets a 429 at once. Behind it: 4 checkout servers and one MySQL database. Guess what the limiter costs and what it saves, then press Run.') },
-    { kind: 'guess', questions: ['sale-limited'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Take the limit away: set “Limit per second” to 100000 and run again. Fewer requests fail, because the servers can carry more than 1500 a second; but the database fills up, and p99 rises from about 100 ms to over 300 ms.'), patch: [{ node: 'limiter', params: { ratePerSec: 100000 } }] },
-    { kind: 'challenge', challenges: ['flash-sale/sell-more'] },
-    { kind: 'guess', questions: ['tenant-small'] },
-    { kind: 'run', example: 'tenant-limits', scenario: 'steady' },
-    { kind: 'try', example: 'tenant-limits', scenario: 'steady', text: tx('Switch “How the allowance is split” to “All share one” and run again: now the small customer loses as large a share as the large one.'), patch: [{ node: 'rl', params: { scope: 'global' } }] },
-    { kind: 'challenge', challenges: ['tenant-limits/grow'] },
+    { kind: 'read', title: tx('A flash sale'), text: tx('A flash sale: 400 requests a second, then 10× (4000 a second) from second 15 for 20 s. A token bucket at the edge lets 1500 a second through, with a burst of 300; every request over that gets a 429 at once. Behind it: 4 checkout servers and one MySQL database. Guess what the limiter costs and what it saves, then press Run.'), key: tx('A rate limiter protects what is behind it by choosing who is turned away.') },
+    { kind: 'guess', title: tx('Guess: how many are turned away'), questions: ['sale-limited'] },
+    { kind: 'run', title: tx('Run the sale'), look: { panel: 'bottom' } },
+    { kind: 'try', title: tx('Without the limit'), text: tx('Take the limit away: set “Limit per second” to 100000 and run again. Do fewer requests fail? What happens to the database and to p99?'), patch: [{ node: 'limiter', params: { ratePerSec: 100000 } }], look: { node: 'db' } },
+    { kind: 'challenge', title: tx('Sell more'), challenges: ['flash-sale/sell-more'] },
+    { kind: 'guess', title: tx('Guess: two customers'), questions: ['tenant-small'] },
+    { kind: 'run', title: tx('Run two customers'), example: 'tenant-limits', scenario: 'steady', show: ['clientFail:small', 'clientFail:big'] },
+    { kind: 'try', title: tx('One shared quota'), text: tx('Switch “How the allowance is split” to “All share one” and run again. What share of the small customer’s requests fail now, next to the large one’s?'), example: 'tenant-limits', scenario: 'steady', patch: [{ node: 'rl', params: { scope: 'global' } }], show: ['clientFail:small', 'clientFail:big'] },
+    { kind: 'challenge', title: tx('A bigger plan'), challenges: ['tenant-limits/grow'] },
   ],
 };
 
