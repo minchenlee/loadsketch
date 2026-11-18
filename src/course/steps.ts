@@ -1,7 +1,7 @@
 // The pages of a lesson on the course page: one per step of the lesson (stepsOf() in
 // src/learn/lesson.ts), then a last page to finish. Each page has the run it works with: the
 // example and scenario the simulator on the right shows. Pure: no React, no DOM.
-import { runOf, stepsOf, type Lesson, type Step } from '../learn/lesson.ts';
+import { runOf, stepsOf, type Lesson, type Look, type Step } from '../learn/lesson.ts';
 
 export type Page = Step | { kind: 'done' };
 
@@ -52,6 +52,51 @@ const guessedOn = (lesson: Lesson, pages: Page[], from: number, to: number, ctx:
 export function answerable(lesson: Lesson, pages: Page[], i: number, ctx: Ctx, guesses: Record<string, string> = {}): string[] {
   const here = guessedOn(lesson, pages, i, i + 1, ctx).filter((id) => guesses[id] !== undefined);
   return [...new Set([...guessedOn(lesson, pages, 0, i, ctx), ...here])];
+}
+
+/** Where the simulator looks: a component to select and centre, a tab of its settings panel. */
+export type Focus = { node?: string; tab?: NonNullable<Look['tab']> };
+
+const focusIn = (l: Look | undefined): Focus | null => (l?.node || l?.tab ? { ...(l.node ? { node: l.node } : {}), ...(l.tab ? { tab: l.tab } : {}) } : null);
+
+/** Where a step (or a question, when its answer shows) points when the learner reaches it: its look, without the charts (opensCharts). */
+export const lookOf = (p: Page | { look?: Look }): Focus | null => ('kind' in p && p.kind === 'done' ? null : focusIn(p.look));
+
+/**
+ * After Make this change: the step's look, else the first node the patch changes (an edge alone:
+ * its caller), on its settings.
+ */
+export function patchFocus(p: Page): Focus | null {
+  if (p.kind !== 'try' || !p.patch?.length) return null;
+  const changed = p.patch.find((x) => 'node' in x);
+  const node = p.look?.node ?? (changed && 'node' in changed ? changed.node : 'edge' in p.patch[0] ? p.patch[0].edge.split('->')[0] : undefined);
+  return { ...(node ? { node } : {}), tab: p.look?.tab ?? 'design' };
+}
+
+/** The next page's title, for the Next button ("Next: <title>"); none on the last page or without one. */
+export function nextTitle(pages: Page[], i: number): string | undefined {
+  const n = pages[i + 1];
+  return n && n.kind !== 'done' ? n.title : undefined;
+}
+
+/**
+ * Which lines of the lesson's `learn` are ticked, once the learner has reached page `reached`:
+ * each at the step learnAt gives it; without learnAt, all of them at the last page.
+ */
+export function learnTicks(lesson: Lesson, reached: number): boolean[] {
+  const lines = lesson.learn ?? [];
+  const last = stepsOf(lesson).length; // the done page
+  return lines.map((_, k) => reached >= (lesson.learnAt?.[k] ?? last));
+}
+
+/** Problems with a lesson's learn and learnAt (the format test reports them): same length, each a step. */
+export function learnProblems(lesson: Lesson): string[] {
+  const out: string[] = [];
+  const n = stepsOf(lesson).length;
+  if (lesson.learnAt && !lesson.learn) out.push('learnAt without learn');
+  if (lesson.learn && lesson.learnAt && lesson.learnAt.length !== lesson.learn.length) out.push(`learnAt has ${lesson.learnAt.length} entries, learn has ${lesson.learn.length}`);
+  for (const k of lesson.learnAt ?? []) if (!Number.isInteger(k) || k < 0 || k >= n) out.push(`learnAt ${k} is not a step (0 to ${n - 1})`);
+  return out;
 }
 
 /** The step opens the charts under the canvas when the learner reaches it (look.panel, lesson.ts). */

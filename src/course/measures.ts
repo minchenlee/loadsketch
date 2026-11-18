@@ -2,6 +2,46 @@
 // (the Show of a step in src/learn/lesson.ts). Pure: no React.
 import { t, tx } from '../i18n/index.ts';
 import { recoveryS, spikeEnd, type RunData } from '../learn/metrics.ts';
+import { KINDS } from '../schema/kinds.ts';
+
+type NodeRes = RunData['result']['nodes'][string];
+type InstRes = NonNullable<NodeRes['instances']>[number];
+
+/** A design parameter of a node, else its kind's default. */
+const paramOf = (r: RunData, id: string, name: string): number => {
+  const d = r.design.nodes.find((n) => n.id === id);
+  const v = d?.params?.[name];
+  if (typeof v === 'number') return v;
+  const def = d ? KINDS[d.kind]?.params[name]?.default : undefined;
+  return typeof def === 'number' ? def : 0;
+};
+
+/**
+ * An instance's name in the page's language. The engine names database instances in the language
+ * of the run (a run made before the learner switched language keeps it), so they are named again
+ * from the design, as the engine does: per shard a primary, then its replicas.
+ */
+function instanceName(r: RunData, id: string, n: NodeRes, inst: InstRes | undefined): string {
+  if (!inst?.role) return n.label;
+  if (n.kind === 'database' || n.kind === 'sharded_db') {
+    let shards = n.kind === 'sharded_db' ? paramOf(r, id, 'shards') : 1;
+    for (const ev of r.scenario.events ?? []) if (ev.type === 'reshard' && ev.node === id) shards = Math.max(shards, ev.toShards);
+    const per = 1 + paramOf(r, id, 'replicas');
+    const s = Math.floor(inst.idx / per);
+    const k = inst.idx % per;
+    const role = k === 0 ? t('Primary') : t('Replica {r}', { r: k });
+    return `${n.label} ${shards > 1 ? t('Shard {s} {role}', { s, role }) : role}`;
+  }
+  return `${n.label} ${inst.role}`;
+}
+
+/** The busiest instance of one node (its maxInstanceUtilization), named. */
+const busiestOf = (r: RunData, id: string, n: NodeRes): Reading | null => {
+  const u = n.maxInstanceUtilization;
+  if (typeof u !== 'number') return null;
+  const inst = n.instances?.reduce((a, b) => (b.utilization > a.utilization ? b : a));
+  return { value: u, who: instanceName(r, id, n, inst) };
+};
 
 export interface Reading {
   value: number;
@@ -63,11 +103,9 @@ export const MEASURES: Record<string, Measure> = {
     label: tx('Busiest single instance'),
     of: (r) => {
       let best: Reading | null = null;
-      for (const n of nodes(r)) {
-        const u = n.maxInstanceUtilization;
-        if (typeof u !== 'number' || (best && u <= best.value)) continue;
-        const inst = n.instances?.reduce((a, b) => (b.utilization > a.utilization ? b : a));
-        best = { value: u, who: inst?.role ? `${n.label} ${inst.role}` : n.label };
+      for (const [id, n] of Object.entries(r.result.nodes)) {
+        const b = busiestOf(r, id, n);
+        if (b && (!best || b.value > best.value)) best = b;
       }
       return best;
     },
@@ -148,6 +186,17 @@ const utilOf = (id: string): Measure => ({
   better: 'lower',
 });
 
+/** `busiestInstance:<node id>`: the busiest instance (or shard) of that component only, named like busiestInstance. */
+const busiestInstanceOf = (id: string): Measure => ({
+  label: tx('Busiest instance of {name}'),
+  of: (r) => {
+    const n = r.result.nodes[id];
+    return n ? busiestOf(r, id, n) : null;
+  },
+  fmt: pct,
+  better: 'lower',
+});
+
 /** Failure reasons that turn a request away at once (a full queue, a limit, an open breaker, a down instance, CoDel), not after a wait. */
 const REJECTED = ['queue_full', 'rate_limited', 'shed', 'circuit_open', 'down', 'throttled', 'bulkhead', 'codel'] as const;
 const failShareOf = (r: RunData, reasons: readonly string[]): Reading => {
@@ -163,6 +212,8 @@ export function measureOf(key: string): Measure | undefined {
   if (c) return clientFail(c[1]);
   const u = /^util:(.+)$/.exec(key);
   if (u) return utilOf(u[1]);
+  const b = /^busiestInstance:(.+)$/.exec(key);
+  if (b) return busiestInstanceOf(b[1]);
   return Object.hasOwn(MEASURES, key) ? MEASURES[key] : undefined;
 }
 
@@ -181,6 +232,9 @@ export interface Row {
   change?: 'better' | 'worse' | 'same';
 }
 
+/** The component a keyed measure is about, by its label (busiestInstance:<id> names the component, not the instance). */
+const r0 = (r: RunData, key: string) => r.result.nodes[key.slice(key.indexOf(':') + 1)]?.label;
+
 /** The rows a step shows after `run`, with `before` (the run before it). Unknown keys and readings the run has not are left out. */
 export function readings(show: string[] | undefined, run: RunData, before?: RunData): Row[] {
   const out: Row[] = [];
@@ -188,7 +242,7 @@ export function readings(show: string[] | undefined, run: RunData, before?: RunD
     const m = measureOf(key);
     const now = m?.of(run);
     if (!m || !now) continue;
-    const row: Row = { key, label: t(m.label, { name: now.who ?? '' }), now: m.fmt(now.value), who: now.who };
+    const row: Row = { key, label: t(m.label, { name: (key.startsWith('busiestInstance:') ? r0(run, key) : now.who) ?? '' }), now: m.fmt(now.value), who: now.who };
     const was = before ? m.of(before) : null;
     if (was) {
       row.before = m.fmt(was.value);

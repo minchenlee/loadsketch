@@ -5,7 +5,7 @@
 // this browser (src/course/progress.ts).
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, ChartLine, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChartLine, SkipForward, Calculator, Check, Circle, KeyRound, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
 import '../app/index.css';
 import './course.css';
 import logoBlack from '../app/assets/logo-black.svg';
@@ -21,7 +21,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { answerable, judgedOn, opensCharts, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
+import { answerable, judgedOn, learnTicks, lookOf, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 import { readings, type Row } from './measures.ts';
 
@@ -227,8 +227,12 @@ const pageLabel = (p: Page): string => {
   }
 };
 
-function RunButton({ status, onRun }: { status: Status; onRun: () => void }) {
+type Clock = { atS: number; ofS: number };
+
+function RunButton({ status, clock, onRun, onSkip }: { status: Status; clock: Clock | null; onRun: () => void; onSkip: () => void }) {
   const busy = status === 'running' || status === 'paused' || status === 'loading';
+  const going = status === 'running' || status === 'paused';
+  const at = clock ? { at: clock.atS, of: clock.ofS } : null;
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <button className="btn btn-primary" onClick={onRun} disabled={busy} data-testid="course-run">
@@ -236,8 +240,14 @@ function RunButton({ status, onRun }: { status: Status; onRun: () => void }) {
         {t('Run')}
       </button>
       <span className="faint text-[14px]" data-testid="course-status" data-status={status}>
-        {status === 'loading' ? t('The simulator is loading…') : status === 'running' ? t('Running…') : status === 'paused' ? t('Paused in the simulator') : status === 'done' ? t('The run ended.') : ''}
+        {status === 'loading' ? t('The simulator is loading…') : status === 'running' ? (at ? t('Running… {at} / {of} s', at) : t('Running…')) : status === 'paused' ? (at ? t('Paused in the simulator at {at} / {of} s', at) : t('Paused in the simulator')) : status === 'done' ? t('The run ended.') : ''}
       </span>
+      {going && (
+        <button className="btn" onClick={onSkip} title={t('Skip the animation and compute to the end')} data-testid="course-skip">
+          <SkipForward size={14} />
+          {t('Skip to end')}
+        </button>
+      )}
     </div>
   );
 }
@@ -262,6 +272,17 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
       {guess && mine !== answer && <div className="muted mt-0.5 text-[14px]">{t('Your guess: {g}', { g: t(guess.text) })}</div>}
       {right && <div className="muted mt-0.5 text-[14px]">{t('Answer: {a}', { a: t(right.text) })}</div>}
       <div className="mt-1 text-[15px] leading-relaxed">{t(q.explainFor?.[answer] || q.explain)}</div>
+      {q.calc && q.calc.length > 0 && (
+        <div className="course-calc mt-2" data-testid={`course-calc-${q.id}`}>
+          <div className="faint mb-1 flex items-center gap-1.5 text-[13px] font-medium uppercase tracking-wide">
+            <Calculator size={13} />
+            {t('The arithmetic')}
+          </div>
+          {q.calc.map((line, k) => (
+            <div key={k}>{t(line)}</div>
+          ))}
+        </div>
+      )}
       {first && (
         <div className="faint mt-1 text-[14px]" data-testid={`course-scored-${q.id}`}>
           {t('The design changed since the first run. Your score counts that run, whose answer was: {a}', { a: t(first.text) })}
@@ -397,6 +418,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** The frame and its runs, as the table in runState.ts says. `status` and `started` show it. */
   const rs = useRef<RunState>(INITIAL);
   const [status, setStatus] = useState<Status>('loading');
+  /** The simulated time of the run that goes, from the frame's status (null when none goes). */
+  const [clock, setClock] = useState<Clock | null>(null);
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
   /** The last two finished runs in this visit, with the page each started on: a run or try step shows the last one, next to the one before it. */
@@ -495,11 +518,17 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       const d = dispatchRef.current;
       if (msg.kind === 'ready') {
         send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
-        // a new frame takes the charts choice; on a phone the drawer stays closed until asked
-        send({ source: 'loadsketch-course', kind: 'panels', bottom: latest.current.charts });
+        // a new frame takes the charts choice; on a phone the drawer stays closed until asked (a
+        // step that opens the charts asks); and the step's look, which a loading frame missed
+        const here = pages[latest.current.i];
+        send({ source: 'loadsketch-course', kind: 'panels', bottom: latest.current.charts, ...(opensCharts(here) ? { show: true } : {}) });
+        const f = lookOf(here);
+        if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
         d({ kind: 'ready' });
       } else if (msg.kind === 'status') {
-        if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') d({ kind: 'status', status: msg.status, page: latest.current.i });
+        setClock(typeof msg.atS === 'number' && typeof msg.ofS === 'number' ? { atS: msg.atS, ofS: msg.ofS } : null);
+        // the clock ticks repeat the status: only a new status goes through the table
+        if ((msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') && msg.status !== rs.current.frame) d({ kind: 'status', status: msg.status, page: latest.current.i });
       } else if (msg.kind === 'loaded') d({ kind: 'loaded' });
       else if (msg.kind === 'run') {
         const answers = d({ kind: 'finished', page: latest.current.i }).answer ?? [];
@@ -518,9 +547,11 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   };
   // a page's guesses go to the simulator when the page opens: a run started there answers them
   useEffect(() => void dispatch({ kind: 'page' }), [i]);
-  // a step about what changes over time opens the charts
+  // a step about what changes over time opens the charts; a step's look points the simulator
   useEffect(() => {
     if (opensCharts(page) && !charts) openCharts();
+    const f = lookOf(page);
+    if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
   }, [i]);
   // the toggle (or such a step) opens or closes them now, on a phone as the charts drawer
   const chartsSent = useRef(charts);
@@ -601,6 +632,12 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const before = lastRuns.length > 1 ? lastRuns[0].run : undefined;
     return <Measured rows={readings(show, now.run, before)} />;
   };
+  // an answer that shows points where to look (the first answered question with a look)
+  const lookAt = answeredHere.map((x) => lookOf(x)).find((f) => f);
+  const lookKey = lookAt ? JSON.stringify(lookAt) + answeredHere.map((x) => x.id).join() : '';
+  useEffect(() => {
+    if (lookAt) send({ source: 'loadsketch-course', kind: 'focus', ...lookAt });
+  }, [lookKey]);
   const score = scoreOf(
     lesson.questions.map((x) => x.id),
     progress,
@@ -612,6 +649,15 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       body = (
         <>
           <p className="text-[16px] leading-relaxed">{t(page.text)}</p>
+          {page.key && (
+            <div className="course-key mt-3" data-testid="course-key">
+              <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide">
+                <KeyRound size={13} />
+                {t('Key idea')}
+              </div>
+              <div className="text-[16px] leading-relaxed">{t(page.key)}</div>
+            </div>
+          )}
           {i === 0 && <p className="muted mt-3 text-[15px] leading-relaxed">{t('How a lesson goes: guess the answers first, then run the simulator. The answers are read from that run. Then change the design to pass the challenges.')}</p>}
         </>
       );
@@ -654,7 +700,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         <>
           <p className="text-[16px] leading-relaxed">{page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')}</p>
           {!run && askedHere.some((x) => !progress.guesses[x.id]) && <p className="muted mt-2 text-[14px]">{t('Some questions have no guess yet. Go back to guess, or run without one.')}</p>}
-          <RunButton status={status} onRun={startRun} />
+          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
           {measuredHere(page.show)}
           {answers(run)}
         </>
@@ -666,12 +712,19 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         <>
           <p className="text-[16px] leading-relaxed">{t(page.text)}</p>
           {page.patch && page.patch.length > 0 && (
-            <button className="btn mt-3" onClick={() => send({ source: 'loadsketch-course', kind: 'patch', patches: page.patch! })} disabled={status === 'running' || status === 'paused' || status === 'loading'} data-testid="course-patch">
+            <button
+              className="btn mt-3"
+              onClick={() => {
+                send({ source: 'loadsketch-course', kind: 'patch', patches: page.patch! });
+                // then the simulator shows the change: the node selected, centred, its settings open
+                const f = patchFocus(page);
+                if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
+              }} disabled={status === 'running' || status === 'paused' || status === 'loading'} data-testid="course-patch">
               <Wrench size={14} />
               {t('Make this change in the simulator')}
             </button>
           )}
-          <RunButton status={status} onRun={startRun} />
+          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
           {measuredHere(page.show)}
           {answers(runs[ctxKey(ctx)])}
         </>
@@ -689,7 +742,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           {runs[ctxKey(ctx)] && runPages[ctxKey(ctx)] === i && scenarios[ctx.scenario] && !sameScenario(runs[ctxKey(ctx)].scenario, scenarios[ctx.scenario]) && (
             <div className="mt-2 text-[14px]" style={{ color: 'var(--warn-ink)' }}>{t('The scenario was changed. Switch back to "{name}" for the challenges to count.', { name: t(scenarios[ctx.scenario].name ?? ctx.scenario) })}</div>
           )}
-          <RunButton status={status} onRun={startRun} />
+          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
         </>
       );
       break;
@@ -715,6 +768,16 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       body = (
         <div data-testid="course-finish">
           <p className="text-[16px] leading-relaxed">{t('You finished this lesson.')}</p>
+          {lesson.recap && lesson.recap.length > 0 && (
+            <div className="card mt-3 p-3" data-testid="course-recap">
+              <div className="faint text-[14px]">{t('To remember')}</div>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-[15px] leading-relaxed">
+                {lesson.recap.map((r, k) => (
+                  <li key={k}>{t(r)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <ul className="muted mt-2 space-y-1 text-[15px]">
             {lesson.questions.length > 0 && (
               <li data-testid="course-score" data-right={score.right}>
@@ -744,6 +807,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       break;
   }
 
+  const ticks = learnTicks(lesson, progress.reached);
+  const upNext = nextTitle(pages, i);
   const unguessed = page.kind === 'guess' && qs(page.questions).some((x) => !progress.guesses[x.id] && !progress.answered.includes(x.id));
   return (
     <div className="course-lesson" data-testid="course-lesson">
@@ -770,6 +835,21 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           <div className="muted mt-2 text-[14px]" data-testid="course-step" data-step={`${i}:${page.kind}`}>
             {t('Step {n} of {all}: {name}', { n: i + 1, all: pages.length, name: pageLabel(page) })}
           </div>
+          {lesson.learn && lesson.learn.length > 0 && (
+            <details className="course-learn mt-3" open={i === 0 || undefined} key={i === 0 ? 'first' : 'later'} data-testid="course-learn">
+              <summary className="text-[14px] font-medium">
+                {t('What this lesson teaches')} <span className="faint num">{t('{n} of {all}', { n: ticks.filter(Boolean).length, all: ticks.length })}</span>
+              </summary>
+              <ul className="mt-1.5 space-y-1 text-[15px]">
+                {lesson.learn.map((l, k) => (
+                  <li key={k} className="flex gap-1.5" data-ticked={ticks[k] || undefined}>
+                    {ticks[k] ? <Check size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--ok-ink)' }} /> : <Circle size={16} className="faint mt-0.5 shrink-0" />}
+                    <span className={ticks[k] ? 'muted' : undefined}>{t(l)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <div className="mt-4">{body}</div>
           <div className="mt-6 flex gap-2">
             <button className="btn" onClick={() => go(i - 1)} disabled={i === 0} data-testid="course-back">
@@ -778,7 +858,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
             </button>
             {page.kind !== 'done' && (
               <button className="btn btn-primary" onClick={() => go(i + 1)} data-testid="course-next">
-                {unguessed ? t('Skip') : t('Next@@step')}
+                {unguessed ? t('Skip') : upNext ? t('Next: {title}', { title: t(upNext) }) : t('Next@@step')}
                 <ArrowRight size={14} />
               </button>
             )}
