@@ -1,6 +1,7 @@
 // Ways round a challenge that every challenge of every course lesson must refuse (lead's rule,
 // review of bddad6f): delete a component of the example, give it a new id, make the work take
-// forever (nothing finishes, so nothing "fails" and the latency histogram is empty), or drop
+// forever (nothing finishes, so nothing "fails" and the latency histogram is empty), make it take
+// the shortest time a part allows, let every part take 8 times as many requests at a time, or drop
 // queued messages at once. Each cheat is applied to the example as it is.
 import { describe, expect, it } from 'vitest';
 import { COURSE } from '../../src/learn/course.ts';
@@ -39,6 +40,47 @@ const forever: Change = {
       }
   },
 };
+/** Every processing time at its minimum: faster code or hardware than the example has. */
+const fastest: Change = {
+  key: 'cheat:fastest',
+  apply: (d) => {
+    for (const n of d.nodes)
+      for (const k of TIME_KEYS) {
+        const spec = KINDS[n.kind]?.params[k];
+        if (spec) n.params = { ...n.params, [k]: { mean: (spec as { min?: number }).min ?? 0, cv: 0 } };
+      }
+  },
+};
+/** Every component that has slots takes 8 times as many requests at a time (within the kind's maximum). */
+const moreSlots: Change = {
+  key: 'cheat:concurrency',
+  apply: (d) => {
+    for (const n of d.nodes) {
+      const spec = KINDS[n.kind]?.params.concurrency as { default?: number; max?: number } | undefined;
+      if (!spec) continue;
+      const was = typeof n.params?.concurrency === 'number' ? n.params.concurrency : (spec.default ?? 1);
+      n.params = { ...n.params, concurrency: Math.min(spec.max ?? Infinity, was * 8) };
+    }
+  },
+};
+/**
+ * A second copy of every component that runs on machines, under a new id, wired like the first:
+ * more capacity that no rule about the original ids sees.
+ */
+const copies: Change = {
+  key: 'cheat:copies',
+  apply: (d) => {
+    const ids = d.nodes.filter((n) => n.kind !== 'client' && KINDS[n.kind]?.params.instances).map((n) => n.id);
+    for (const id of ids) {
+      const n = d.nodes.find((x) => x.id === id)!;
+      d.nodes.push({ ...structuredClone(n), id: id + '-copy' });
+      for (const e of [...d.edges]) {
+        if (e.to === id) d.edges.push({ ...structuredClone(e), to: id + '-copy' });
+        if (e.from === id) d.edges.push({ ...structuredClone(e), from: id + '-copy' });
+      }
+    }
+  },
+};
 /** Every queue drops its messages almost at once. */
 const dropMessages: Change = {
   key: 'cheat:ttl',
@@ -64,6 +106,9 @@ function cheatsFor(d: Design, c: Challenge): { name: string; change: Change }[] 
     out.push({ name: `rename ${n.id}`, change: renameNode(n.id) });
   }
   out.push({ name: 'processing takes forever', change: forever });
+  out.push({ name: 'processing at the minimum time', change: fastest });
+  out.push({ name: 'a second copy of each component', change: copies });
+  if (d.nodes.some((n) => KINDS[n.kind]?.params.concurrency)) out.push({ name: 'more requests at a time', change: moreSlots });
   if (d.nodes.some((n) => KINDS[n.kind]?.params.autoscale && n.params?.autoscale !== 'on')) out.push({ name: 'autoscale past the machine limit', change: autoscaleAll });
   if (d.nodes.some((n) => KINDS[n.kind]?.params.messageTtlS)) out.push({ name: 'messages expire at once', change: dropMessages });
   return out;

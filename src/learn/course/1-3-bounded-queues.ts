@@ -5,6 +5,7 @@ import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Goal, type Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
 import { errorsUnder, failShareOf, p99Under, paramOf, pct } from '../lessonKit.ts';
+import { KINDS } from '../../schema/kinds.ts';
 
 const INTRO = tx('Two API servers, 16 requests at a time each. A request holds its slot about 24 ms (20 ms of work plus the database call), so together they serve about 1300 requests a second. From second 20 to 60 users send 2000 a second, more than the servers can do, and each user gives up after 1 s. The queue in front of the servers holds up to 5000 requests. Guess how many fail and how, then press Run.');
 
@@ -21,7 +22,10 @@ const fifoPlain: Goal = {
   check: (run) => {
     const order = paramOf(run.design, 'api', 'queueOrder');
     const codel = paramOf(run.design, 'api', 'codelTargetMs');
-    return { ok: order === 'fifo' && codel === 0, value: `${String(order)}, ${String(codel)} ms` };
+    const kind = run.design.nodes.find((n) => n.id === 'api')?.kind;
+    const spec = kind ? KINDS[kind]?.params.queueOrder : undefined;
+    const label = spec && 'options' in spec ? spec.options?.find((o) => o.value === order)?.label : undefined;
+    return { ok: order === 'fifo' && codel === 0, value: `${label ? t(label) : String(order)}, ${String(codel)} ms` };
   },
 };
 

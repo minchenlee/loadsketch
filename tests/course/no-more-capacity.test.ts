@@ -10,6 +10,14 @@ const withApi = (d: Design, serviceMs: ParamValue): Design => ({
   nodes: d.nodes.map((n) => (n.id === 'api' ? { ...n, params: { ...n.params, serviceMs } } : n)),
 });
 
+describe('noMoreCapacity and the cache operation time', () => {
+  it('a faster cache (opMs) breaks the rule', () => {
+    const o = design('three-tier');
+    const d: Design = { ...o, nodes: o.nodes.map((n) => (n.id === 'cache' ? { ...n, params: { ...n.params, opMs: 0.01 } } : n)) };
+    expect(noMoreCapacity.check(d, o)).not.toEqual([]);
+  });
+});
+
 describe('noMoreCapacity and processing times', () => {
   const o = design('retry-storm');
   it('a faster time written as a number breaks the rule', () => {

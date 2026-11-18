@@ -180,7 +180,7 @@ export interface Verdict {
 /** Parameters that add capacity: a larger value is more machines, slots or connections. */
 const MORE = ['instances', 'concurrency', 'connections', 'replicas', 'shards', 'maxInstances', 'partitions'];
 /** Parameters whose smaller value is faster code or hardware (a distribution's mean). */
-const FASTER = ['serviceMs', 'readMs', 'writeMs'];
+const FASTER = ['serviceMs', 'readMs', 'writeMs', 'opMs'];
 
 const num = (v: ParamValue | undefined): number | undefined => (typeof v === 'number' ? v : undefined);
 /** The mean of a time: a number is the mean itself; a distribution has its mean. */
