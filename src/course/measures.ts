@@ -228,12 +228,22 @@ export interface Row {
   /** The run before it (same example and scenario); absent on the first run. */
   before?: string;
   who?: string;
+  /** What the row shows after its label: who, less what the label already names ('' when nothing is left). */
+  shown?: string;
   /** better / worse / same, by the measure's direction; absent without a run before. */
   change?: 'better' | 'worse' | 'same';
 }
 
 /** The component a keyed measure is about, by its label (busiestInstance:<id> names the component, not the instance). */
 const r0 = (r: RunData, key: string) => r.result.nodes[key.slice(key.indexOf(':') + 1)]?.label;
+
+/** A keyed measure names its component in the label: show only the rest of who (an instance), or nothing. */
+function shownOf(key: string, who: string | undefined, name: string | undefined): string | undefined {
+  if (!who) return who;
+  if (/^(clientFail|util):/.test(key)) return '';
+  if (key.startsWith('busiestInstance:')) return name && who.startsWith(name) ? who.slice(name.length).trim() : who;
+  return who;
+}
 
 /** The rows a step shows after `run`, with `before` (the run before it). Unknown keys and readings the run has not are left out. */
 export function readings(show: string[] | undefined, run: RunData, before?: RunData): Row[] {
@@ -242,7 +252,8 @@ export function readings(show: string[] | undefined, run: RunData, before?: RunD
     const m = measureOf(key);
     const now = m?.of(run);
     if (!m || !now) continue;
-    const row: Row = { key, label: t(m.label, { name: (key.startsWith('busiestInstance:') ? r0(run, key) : now.who) ?? '' }), now: m.fmt(now.value), who: now.who };
+    const name = key.startsWith('busiestInstance:') ? r0(run, key) : now.who;
+    const row: Row = { key, label: t(m.label, { name: name ?? '' }), now: m.fmt(now.value), who: now.who, shown: shownOf(key, now.who, name) };
     const was = before ? m.of(before) : null;
     if (was) {
       row.before = m.fmt(was.value);
