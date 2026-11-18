@@ -1,7 +1,7 @@
 // ?embed=1&course=1: the simulator inside the course page (/learn/, src/course/main.tsx). The page
 // shows the lesson's questions and challenges; this frame is the canvas and the run controls.
 // The bridge tells the page about every run (its status, and the finished run as RunData) and
-// takes three requests from it: start a run, the learner's guesses (so the guess log records
+// takes requests from it: start a run or skip to its end, the learner's guesses (so the guess log records
 // them as in the simulator), and a change to the design that a lesson step offers (a patch). Messages go only to and from the parent page of the same origin.
 import { useEffect } from 'react';
 import { EMBEDDED, useApp } from './store.ts';
@@ -30,7 +30,11 @@ const CTX: CourseCtx = (() => {
 /** From this frame to the course page. */
 export type ToCourse =
   | { source: 'loadsketch-app'; kind: 'ready'; ctx: CourseCtx }
-  | { source: 'loadsketch-app'; kind: 'status'; ctx: CourseCtx; status: string }
+  /**
+   * The run's status, and while it runs or is paused its simulated time: `atS` of `ofS` seconds of
+   * traffic. Sent on every change of status and, while running, about twice a second.
+   */
+  | { source: 'loadsketch-app'; kind: 'status'; ctx: CourseCtx; status: string; atS?: number; ofS?: number }
   /** Another design loaded (it drops the guesses): the page sends them again. */
   | { source: 'loadsketch-app'; kind: 'loaded'; ctx: CourseCtx }
   | { source: 'loadsketch-app'; kind: 'run'; ctx: CourseCtx; run: RunData };
@@ -38,6 +42,8 @@ export type ToCourse =
 /** From the course page to this frame. */
 export type FromCourse =
   | { source: 'loadsketch-course'; kind: 'run' }
+  /** Skip to the end of the run that goes (the run bar's Skip to end). */
+  | { source: 'loadsketch-course'; kind: 'skip' }
   /** The guesses a run started now answers, and the course lesson they belong to (the guess log records them under it). */
   | { source: 'loadsketch-course'; kind: 'guesses'; lesson: string; guesses: Record<string, string> }
   | { source: 'loadsketch-course'; kind: 'patch'; patches: Patch[] }
@@ -64,6 +70,8 @@ export function useCourseBridge(): void {
       const st = useApp.getState();
       if (m.kind === 'run') {
         if (st.status === 'idle' || st.status === 'done') st.run();
+      } else if (m.kind === 'skip') {
+        st.finish();
       } else if (m.kind === 'panels') {
         useApp.setState({ courseBottom: !!m.bottom });
         if (m.show && isPhone()) {
@@ -89,10 +97,25 @@ export function useCourseBridge(): void {
     };
     window.addEventListener('message', onMessage);
     post({ source: 'loadsketch-app', kind: 'ready', ctx: CTX });
+    // the simulated time of the run that goes: the traffic's length, and the time shown (it runs on
+    // past the traffic to drain the last requests: clamped)
+    const clock = (s: ReturnType<typeof useApp.getState>) => {
+      if (s.status !== 'running' && s.status !== 'paused') return {};
+      const ofS = (s.ran ?? s).scenario.durationS ?? 60;
+      return { atS: Math.min(ofS, Math.floor(s.tView / 1000)), ofS };
+    };
+    let ticked = 0;
     const off = useApp.subscribe((s, prev) => {
       if (s.loads !== prev.loads) post({ source: 'loadsketch-app', kind: 'loaded', ctx: CTX });
-      if (s.status === prev.status) return;
-      post({ source: 'loadsketch-app', kind: 'status', ctx: CTX, status: s.status });
+      if (s.status === prev.status) {
+        if (s.status === 'running' && s.tView !== prev.tView && performance.now() - ticked >= 400) {
+          ticked = performance.now();
+          post({ source: 'loadsketch-app', kind: 'status', ctx: CTX, status: s.status, ...clock(s) });
+        }
+        return;
+      }
+      ticked = performance.now();
+      post({ source: 'loadsketch-app', kind: 'status', ctx: CTX, status: s.status, ...clock(s) });
       if (s.status === 'done' && s.result && s.ran) post({ source: 'loadsketch-app', kind: 'run', ctx: CTX, run: { design: s.ran.design, scenario: s.ran.scenario, result: s.result, windows: s.windows } });
     });
     return () => {

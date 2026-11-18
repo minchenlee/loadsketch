@@ -5,7 +5,7 @@
 // this browser (src/course/progress.ts).
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, ChartLine, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChartLine, SkipForward, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
 import '../app/index.css';
 import './course.css';
 import logoBlack from '../app/assets/logo-black.svg';
@@ -227,8 +227,12 @@ const pageLabel = (p: Page): string => {
   }
 };
 
-function RunButton({ status, onRun }: { status: Status; onRun: () => void }) {
+type Clock = { atS: number; ofS: number };
+
+function RunButton({ status, clock, onRun, onSkip }: { status: Status; clock: Clock | null; onRun: () => void; onSkip: () => void }) {
   const busy = status === 'running' || status === 'paused' || status === 'loading';
+  const going = status === 'running' || status === 'paused';
+  const at = clock ? { at: clock.atS, of: clock.ofS } : null;
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <button className="btn btn-primary" onClick={onRun} disabled={busy} data-testid="course-run">
@@ -236,8 +240,14 @@ function RunButton({ status, onRun }: { status: Status; onRun: () => void }) {
         {t('Run')}
       </button>
       <span className="faint text-[14px]" data-testid="course-status" data-status={status}>
-        {status === 'loading' ? t('The simulator is loading…') : status === 'running' ? t('Running…') : status === 'paused' ? t('Paused in the simulator') : status === 'done' ? t('The run ended.') : ''}
+        {status === 'loading' ? t('The simulator is loading…') : status === 'running' ? (at ? t('Running… {at} / {of} s', at) : t('Running…')) : status === 'paused' ? (at ? t('Paused in the simulator at {at} / {of} s', at) : t('Paused in the simulator')) : status === 'done' ? t('The run ended.') : ''}
       </span>
+      {going && (
+        <button className="btn" onClick={onSkip} title={t('Skip the animation and compute to the end')} data-testid="course-skip">
+          <SkipForward size={14} />
+          {t('Skip to end')}
+        </button>
+      )}
     </div>
   );
 }
@@ -397,6 +407,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** The frame and its runs, as the table in runState.ts says. `status` and `started` show it. */
   const rs = useRef<RunState>(INITIAL);
   const [status, setStatus] = useState<Status>('loading');
+  /** The simulated time of the run that goes, from the frame's status (null when none goes). */
+  const [clock, setClock] = useState<Clock | null>(null);
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
   /** The last two finished runs in this visit, with the page each started on: a run or try step shows the last one, next to the one before it. */
@@ -499,7 +511,9 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         send({ source: 'loadsketch-course', kind: 'panels', bottom: latest.current.charts });
         d({ kind: 'ready' });
       } else if (msg.kind === 'status') {
-        if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') d({ kind: 'status', status: msg.status, page: latest.current.i });
+        setClock(typeof msg.atS === 'number' && typeof msg.ofS === 'number' ? { atS: msg.atS, ofS: msg.ofS } : null);
+        // the clock ticks repeat the status: only a new status goes through the table
+        if ((msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') && msg.status !== rs.current.frame) d({ kind: 'status', status: msg.status, page: latest.current.i });
       } else if (msg.kind === 'loaded') d({ kind: 'loaded' });
       else if (msg.kind === 'run') {
         const answers = d({ kind: 'finished', page: latest.current.i }).answer ?? [];
@@ -654,7 +668,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         <>
           <p className="text-[16px] leading-relaxed">{page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')}</p>
           {!run && askedHere.some((x) => !progress.guesses[x.id]) && <p className="muted mt-2 text-[14px]">{t('Some questions have no guess yet. Go back to guess, or run without one.')}</p>}
-          <RunButton status={status} onRun={startRun} />
+          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
           {measuredHere(page.show)}
           {answers(run)}
         </>
@@ -671,7 +685,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
               {t('Make this change in the simulator')}
             </button>
           )}
-          <RunButton status={status} onRun={startRun} />
+          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
           {measuredHere(page.show)}
           {answers(runs[ctxKey(ctx)])}
         </>
@@ -689,7 +703,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           {runs[ctxKey(ctx)] && runPages[ctxKey(ctx)] === i && scenarios[ctx.scenario] && !sameScenario(runs[ctxKey(ctx)].scenario, scenarios[ctx.scenario]) && (
             <div className="mt-2 text-[14px]" style={{ color: 'var(--warn-ink)' }}>{t('The scenario was changed. Switch back to "{name}" for the challenges to count.', { name: t(scenarios[ctx.scenario].name ?? ctx.scenario) })}</div>
           )}
-          <RunButton status={status} onRun={startRun} />
+          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
         </>
       );
       break;

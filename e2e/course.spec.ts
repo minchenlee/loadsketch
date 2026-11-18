@@ -670,3 +670,23 @@ test('course: after a run the step shows what it measured, next to the run befor
   await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-measured')).toHaveCount(0);
 });
+
+test('course: a run shows its progress on the page, and Skip to end finishes it', async ({ page }) => {
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-skip')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  const st = page.getByTestId('course-status');
+  // at normal speed the run takes about a minute: the page counts the simulated seconds
+  await expect(st).toHaveText(/Running… [1-9]\d* \/ \d+ s/, { timeout: 30_000 });
+  const at = (s: string | null) => Number(/(\d+) \//.exec(s ?? '')?.[1]);
+  const first = at(await st.textContent());
+  await expect.poll(async () => at(await st.textContent()), { timeout: 15_000 }).toBeGreaterThan(first);
+  await page.getByTestId('course-skip').click();
+  await expect(st).toHaveAttribute('data-status', 'done', { timeout: 30_000 });
+  await expect(page.getByTestId('course-skip')).toHaveCount(0);
+  await expect(page.getByTestId('course-measured')).toBeVisible();
+});
