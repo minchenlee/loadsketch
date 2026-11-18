@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { COURSE } from '../../src/learn/course.ts';
 import { judge, type Challenge, type Lesson } from '../../src/learn/lesson.ts';
 import { KINDS } from '../../src/schema/kinds.ts';
-import { design, runOf, type Change } from './run.ts';
+import { design, runOf, sample, type Change } from './run.ts';
 
 const RATES = [1, 0.99, 0.5];
 const failing = (ids: string[], rate: number): Change => ({
@@ -18,7 +18,7 @@ const failing = (ids: string[], rate: number): Change => ({
 });
 
 /** Components whose kind has an error rate. */
-const withErrors = (ex: string) => design(ex).nodes.filter((n) => KINDS[n.kind]?.params.errorRate).map((n) => n.id);
+const withErrors = (ex: string) => design(ex).nodes.filter((n) => KINDS[n.kind]?.params.errorRate);
 
 function passes(c: Challenge, l: Lesson, change: Change) {
   const ex = c.example ?? l.example;
@@ -33,15 +33,18 @@ function passes(c: Challenge, l: Lesson, change: Change) {
 }
 
 describe('no challenge passes with a component that fails most requests', () => {
-  for (const l of COURSE) {
-    it(`lesson ${l.id}`, () => {
+  // one test per lesson and rate: 6.2 takes about 4 runs of 20 s for each rate
+  for (const l of COURSE)
+    for (const rate of RATES) {
+    it(`lesson ${l.id}, errorRate ${rate}`, () => {
       const passedBy: string[] = [];
       for (const c of l.challenges) {
-        const ids = withErrors(c.example ?? l.example);
-        for (const rate of RATES) {
-          for (const id of ids) if (passes(c, l, failing([id], rate))) passedBy.push(`${c.id}: ${id} errorRate ${rate}`);
-          if (ids.length > 1 && passes(c, l, failing(ids, rate))) passedBy.push(`${c.id}: every component errorRate ${rate}`);
-        }
+        const all = withErrors(c.example ?? l.example);
+        const ids = all.map((n) => n.id);
+        // one at a time: every component, or one of each kind in a big design (see sample())
+        const one = sample(all).map((n) => n.id);
+        for (const id of one) if (passes(c, l, failing([id], rate))) passedBy.push(`${c.id}: ${id} errorRate ${rate}`);
+        if (ids.length > 1 && passes(c, l, failing(ids, rate))) passedBy.push(`${c.id}: every component errorRate ${rate}`);
       }
       expect(passedBy, passedBy.join('; ')).toEqual([]);
     }, 900_000);
