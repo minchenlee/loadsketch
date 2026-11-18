@@ -68,7 +68,7 @@ const capstone: Lesson = {
     { kind: 'run', title: tx('Run the shortener'), look: { tab: 'results' } },
     { kind: 'challenge', title: tx('One person can run it'), challenges: ['capstone/solo-shortener'] },
     { kind: 'guess', title: tx('Guess: writes take over'), questions: ['writes-fail'] },
-    { kind: 'run', title: tx('Run the write-heavy traffic'), scenario: 'hot-keys', look: { node: 'db' } },
+    { kind: 'run', title: tx('Run the write-heavy traffic'), scenario: 'hot-keys', look: { node: 'db' }, show: ['failRate', 'util:db', 'p99'] },
     { kind: 'challenge', title: tx('When writes take over'), challenges: ['capstone/write-heavy'] },
     { kind: 'practice', title: tx('Practice'), text: tx('Now the full problems: the brief starts from an empty canvas, and the constraint problem from a design that fails.'), items: [{ kind: 'brief', id: 'brief-shortener' }, { kind: 'constraint', id: 'solo-shortener' }, { kind: 'constraint', id: 'spike-budget' }] },
   ],

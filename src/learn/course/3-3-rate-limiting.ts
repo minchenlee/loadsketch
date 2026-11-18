@@ -109,7 +109,7 @@ const rateLimiting: Lesson = {
     { kind: 'read', title: tx('A flash sale'), text: tx('A flash sale: 400 requests a second, then 10× (4000 a second) from second 15 for 20 s. A token bucket at the edge lets 1500 a second through, with a burst of 300; every request over that gets a 429 at once. Behind it: 4 checkout servers and one MySQL database. Guess what the limiter costs and what it saves, then press Run.'), key: tx('A rate limiter protects what is behind it by choosing who is turned away.') },
     { kind: 'guess', title: tx('Guess: how many are turned away'), questions: ['sale-limited'] },
     { kind: 'run', title: tx('Run the sale'), look: { panel: 'bottom' } },
-    { kind: 'try', title: tx('Without the limit'), text: tx('Take the limit away: set “Limit per second” to 100000 and run again. Do fewer requests fail? What happens to the database and to p99?'), patch: [{ node: 'limiter', params: { ratePerSec: 100000 } }], look: { node: 'db' } },
+    { kind: 'try', title: tx('Without the limit'), text: tx('Take the limit away: set “Limit per second” to 100000 and run again. Do fewer requests fail? What happens to the database and to p99?'), patch: [{ node: 'limiter', params: { ratePerSec: 100000 } }], look: { node: 'db' }, show: ['failRate', 'p99', 'util:db'] },
     { kind: 'challenge', title: tx('Sell more'), challenges: ['flash-sale/sell-more'] },
     { kind: 'guess', title: tx('Guess: two customers'), questions: ['tenant-small'] },
     { kind: 'run', title: tx('Run two customers'), example: 'tenant-limits', scenario: 'steady', show: ['clientFail:small', 'clientFail:big'] },

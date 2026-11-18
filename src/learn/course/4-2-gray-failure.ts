@@ -122,10 +122,10 @@ const grayFailure: Lesson = {
   steps: [
     { kind: 'read', title: tx('One slow instance'), text: tx('Four API servers behind a round-robin load balancer, 800 requests a second, a 500 ms timeout. From second 20 to 80, instance 1 becomes 15 times slower, but its process stays up. The load balancer runs a liveness check: “is the process up?”. Guess what users see, then press Run.'), key: tx('A process that is up is not the same as a process that works.') },
     { kind: 'guess', title: tx('Guess: what users see'), questions: ['gray-errors'] },
-    { kind: 'run', title: tx('Run the gray failure'), look: { panel: 'bottom' } },
-    { kind: 'try', title: tx('A deep health check'), text: tx('Change the health check to “Deep (runs a real request)” and run again. Do fewer requests fail? Do none fail? In the charts, see when the slow instance leaves the rotation.'), patch: [{ node: 'lb', params: { healthCheck: 'deep' } }], look: { panel: 'bottom' } },
+    { kind: 'run', title: tx('Run the gray failure'), look: { panel: 'bottom' }, show: ['failRate', 'timedOut', 'busiestInstance'] },
+    { kind: 'try', title: tx('A deep health check'), text: tx('Change the health check to “Deep (runs a real request)” and run again. Do fewer requests fail? Do none fail? In the charts, see when the slow instance leaves the rotation.'), patch: [{ node: 'lb', params: { healthCheck: 'deep' } }], look: { panel: 'bottom' }, show: ['failRate', 'busiestInstance'] },
     { kind: 'guess', title: tx('Guess: outlier detection'), questions: ['outlier-errors'] },
-    { kind: 'run', title: tx('Run with outlier detection'), example: 'gray-failure-outlier' },
+    { kind: 'run', title: tx('Run with outlier detection'), example: 'gray-failure-outlier', show: ['failRate', 'busiestInstance'] },
     { kind: 'challenge', title: tx('Without outlier detection'), challenges: ['gray-failure/no-outlier'] },
     { kind: 'guess', title: tx('Guess: the cost of hedging'), questions: ['hedge-cost'] },
     { kind: 'run', title: tx('Run hedged reads'), example: 'hedged-reads', scenario: 'slow-instance', show: ['p99', 'hedgeExtra'] },
