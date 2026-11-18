@@ -4,7 +4,7 @@
 import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson, Rule } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
-import { paramOf, pct } from '../lessonKit.ts';
+import { failUnder1, paramOf, pct } from '../lessonKit.ts';
 import { meanOf } from '../courseMachines.ts';
 
 const INTRO = tx('Writes are too many for one database, so the data is split by the hash of the key over 4 shards, 8 connections each. Users send 3500 requests a second, 70% of them writes, and some keys are much more popular than others (Zipf). Each shard gets about a quarter of the keys. Guess whether it also gets a quarter of the load, then press Run.');
@@ -102,6 +102,8 @@ const lesson: Lesson = {
       goals: [
         shardsAtMost(4),
         { text: tx('Every database machine under 35% busy'), check: (run) => ({ ok: hottest(run) < 0.35, value: pct(hottest(run)) }) },
+        // failed requests take load off the database: they must not count as handling it (review of 41fe433)
+        failUnder1,
       ],
       rules: [sameMachines],
       hint: tx('The hot key is mostly read. Reads of one key can go to several copies of its shard: give each shard read replicas and send reads to them.'),

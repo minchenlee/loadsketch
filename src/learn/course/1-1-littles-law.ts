@@ -111,7 +111,7 @@ const lesson: Lesson = {
       id: 'littles/knee',
       title: tx('Find the knee'),
       text: tx('Run the server at least 80% busy with p99 under 40 ms, without adding capacity: make each request slower until you find where p99 starts to climb.'),
-      goals: [busy80, p99Under(40, tx('p99 of successful requests under 40 ms'))],
+      goals: [busy80, p99Under(40, tx('p99 of successful requests under 40 ms')), failUnder1],
       rules: [noMoreCapacity],
       hint: tx('Raise the processing time a little at a time (3.5, 4, 4.2 ms…) and watch p99: from 50% to 80% busy it grows slowly, and past about 85% it shoots up. That bend is why people plan for 70–80% busy, not 100%.'),
     },
