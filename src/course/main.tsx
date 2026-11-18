@@ -301,12 +301,12 @@ function Measured({ rows }: { rows: Row[] }) {
       <div className="faint text-[14px]">{rows.some((r) => r.before !== undefined) ? t('This run, next to the run before it') : t('This run measured')}</div>
       <dl className="mt-1.5 space-y-1">
         {rows.map((r) => (
-          <div key={r.key} className="flex flex-wrap items-baseline justify-between gap-x-3" data-measure={r.key} data-before={r.before !== undefined || undefined} data-change={r.change}>
-            <dt className="text-[15px]">
+          <div key={r.key} className="flex items-baseline justify-between gap-x-3" data-measure={r.key} data-before={r.before !== undefined || undefined} data-change={r.change}>
+            <dt className="min-w-0 text-[15px]">
               {r.label}
-              {r.who && !/^(clientFail|util):/.test(r.key) && <span className="faint"> · {r.who}</span>}
+              {r.shown && <span className="faint"> · {r.shown}</span>}
             </dt>
-            <dd className="num text-[15px] font-medium">
+            <dd className="num shrink-0 text-[15px] font-medium">
               {r.before !== undefined && (
                 <>
                   <span className="muted">{r.before}</span>

@@ -155,9 +155,13 @@ describe('course measures', () => {
     const row = readings(['busiestInstance:db'], r, sharded(2, 0.9, zhRoles))[0];
     expect(row).toMatchObject({ key: 'busiestInstance:db', before: '90%', now: '30%', change: 'better', who: 'Sharded database Shard 1 Primary' });
     expect(measureOf('busiestInstance:db')).toBeDefined();
+    // the row names the component already: it shows only the instance
+    expect(row.shown).toBe('Shard 1 Primary');
     expect(readings(['busiestInstance:nobody'], r)).toEqual([]);
     // a component with one instance: its utilization
-    expect(readings(['busiestInstance:api'], run(10, 0, { api: 0.5 }, { api: { maxInstanceUtilization: 0.5 } }))[0]).toMatchObject({ now: '50%', who: 'API' });
+    const one = readings(['busiestInstance:api'], run(10, 0, { api: 0.5 }, { api: { maxInstanceUtilization: 0.5 } }))[0];
+    expect(one).toMatchObject({ now: '50%', who: 'API' });
+    expect(one.shown).toBe('');
   });
 
   it('instance names are in the page language, whatever language the run was made in', () => {

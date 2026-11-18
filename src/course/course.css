@@ -164,6 +164,6 @@ html.course #root {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
-  overflow-x: auto;
-  white-space: pre;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
