@@ -23,7 +23,10 @@
 //                           |                     |             | a run started with)
 // finished (a run's result) | any                 | unchanged   | answer the questions fixed when the run
 //                           |                     |             | started (or this page's, if its start was
-//                           |                     |             | not seen)
+//                           |                     |             | not seen). The run is kept with the page it
+//                           |                     |             | started on (runPage): a challenge judges it
+//                           |                     |             | only if that page is a challenge page that
+//                           |                     |             | lists it (judgedOn() in steps.ts)
 // loaded (another design   | idle / done         | unchanged   | send the guesses (load() in the frame drops
 //   in the frame)           |                     |             | them, with no status change)
 // loaded                    | loading/running/    | unchanged   | nothing now: the end of the run sends them

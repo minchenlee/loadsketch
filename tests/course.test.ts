@@ -1,7 +1,7 @@
 // The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
-import { answerable, clampStep, ctxOf, feedbackOf, pagesOf } from '../src/course/steps.ts';
+import { answerable, clampStep, ctxOf, feedbackOf, judgedOn, opensCharts, pagesOf } from '../src/course/steps.ts';
 import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
@@ -150,6 +150,22 @@ describe('questions by experiment', () => {
     expect(feedbackOf(l, pages, 4)).toEqual(['amp']);
     expect(feedbackOf(l, pages, 5)).toEqual([]);
     expect(feedbackOf(l, pages, 3)).toEqual([]);
+  });
+
+  it('a challenge judges only a run started on a challenge page that lists it', () => {
+    const id = base.challenges[0].id;
+    expect(judgedOn(pages, 6, id)).toBe(true);
+    // a run or try page before it (the reported case: a try run on the same example and scenario)
+    for (const p of [2, 4, 5]) expect(judgedOn(pages, p, id)).toBe(false);
+    expect(judgedOn(pages, 6, 'other')).toBe(false);
+    expect(judgedOn(pages, 99, id)).toBe(false);
+  });
+
+  it('a step with look.panel bottom opens the charts; others do not', () => {
+    expect(opensCharts({ kind: 'run', look: { panel: 'bottom' } })).toBe(true);
+    expect(opensCharts({ kind: 'read', text: 'x', look: { node: 'api' } })).toBe(false);
+    expect(opensCharts({ kind: 'run' })).toBe(false);
+    expect(opensCharts({ kind: 'done' })).toBe(false);
   });
 
   it('without steps, the one run answers every question', () => {

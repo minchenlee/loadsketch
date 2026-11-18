@@ -159,7 +159,8 @@ export function App() {
 
 function Shell() {
   const saved = useApp((s) => s.panels);
-  const panels = EMBED ? { left: false, right: EMBED.right, bottom: EMBED.bottom } : saved;
+  const courseBottom = useApp((s) => s.courseBottom);
+  const panels = EMBED ? { left: false, right: EMBED.right, bottom: courseBottom ?? EMBED.bottom } : saved;
   const phone = usePhone() && (!EMBED || EMBED.phone);
   const drawer = useApp(sheetOf);
   const limitOpen = useApp((s) => s.limitOpen);

@@ -151,6 +151,8 @@ export interface AppState {
   loads: number;
   /** Which side panels are shown. Saved in localStorage. */
   panels: Panels;
+  /** In the course's frame: the charts under the canvas, as the course page asks (null: as the address says). The course page saves the choice. */
+  courseBottom: boolean | null;
   /** The phone layout: the drawer that is open (phone.ts). */
   drawer: Drawer;
   setDrawer: (d: Drawer) => void;
@@ -362,6 +364,7 @@ export const useApp = create<AppState>((set, get) => {
   origin: null,
   loads: 0,
   panels: loadPanels(),
+  courseBottom: null,
   drawer: null,
   setDrawer: (drawer) => set({ drawer }),
   expanded: {},
