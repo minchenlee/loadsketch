@@ -118,10 +118,10 @@ const lesson: Lesson = {
   steps: [
     { kind: 'read', title: tx('Reads from replicas'), text: INTRO, key: tx('A replica read is stale when its key was written within the lag.') },
     { kind: 'guess', title: tx('Stale reads'), questions: ['stale-share'] },
-    { kind: 'run', title: tx('Run'), show: ['staleReads', 'p99', 'failRate'] },
+    { kind: 'run', title: tx('Run'), show: ['staleReads', 'busiestInstance:db', 'failRate'] },
     { kind: 'guess', title: tx('A lag limit'), questions: ['primary-busy'] },
-    { kind: 'try', title: tx('Max lag 200 ms'), text: tx('Set “Max replication lag” to 200 ms and run again. How many reads are stale now, and how busy is the primary?'), patch: [{ node: 'db', params: { maxLagMs: 200 } }], show: ['staleReads', 'p99', 'failRate'], look: { node: 'db' } },
-    { kind: 'try', title: tx('A shorter lag'), text: tx('Put the lag limit back to 0 and set “Replication lag” to 50 ms. Run again: how many reads are stale now?'), patch: [{ node: 'db', params: { maxLagMs: 0, replicaDelayMs: 50 } }], show: ['staleReads', 'p99', 'failRate'] },
+    { kind: 'try', title: tx('Max lag 200 ms'), text: tx('Set “Max replication lag” to 200 ms and run again. How many reads are stale now, and how busy is the primary?'), patch: [{ node: 'db', params: { maxLagMs: 200 } }], show: ['staleReads', 'busiestInstance:db', 'failRate'], look: { node: 'db' } },
+    { kind: 'try', title: tx('A shorter lag'), text: tx('Put the lag limit back to 0 and set “Replication lag” to 50 ms. Run again: how many reads are stale now?'), patch: [{ node: 'db', params: { maxLagMs: 0, replicaDelayMs: 50 } }], show: ['staleReads', 'busiestInstance:db', 'failRate'] },
     { kind: 'challenge', title: tx('Two challenges'), challenges: ['replicas/no-stale', 'replicas/keep-replicas'] },
   ],
 };
