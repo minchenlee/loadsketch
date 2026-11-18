@@ -54,7 +54,15 @@ export type FromCourse =
    * phone layout they are the charts drawer: `show` opens or closes it now (a toggle or a step);
    * without it (a new frame) the drawer is left as it is, so a saved choice does not cover the canvas.
    */
-  | { source: 'loadsketch-course'; kind: 'panels'; bottom: boolean; show?: boolean };
+  | { source: 'loadsketch-course'; kind: 'panels'; bottom: boolean; show?: boolean }
+  /**
+   * Look here (a step's or a question's look, or the node a lesson's change touched): select and
+   * centre `node`, open `tab` of the settings panel (default with a node: its settings). On a
+   * phone the settings drawer opens. An unknown node or tab is ignored.
+   */
+  | { source: 'loadsketch-course'; kind: 'focus'; node?: string; tab?: 'design' | 'scenario' | 'results' | 'versions' };
+
+const TABS = { design: 'design', scenario: 'scenario', results: 'learn', versions: 'versions' } as const;
 
 function post(m: ToCourse) {
   if (window.parent !== window) window.parent.postMessage(m, location.origin);
@@ -72,6 +80,16 @@ export function useCourseBridge(): void {
         if (st.status === 'idle' || st.status === 'done') st.run();
       } else if (m.kind === 'skip') {
         st.finish();
+      } else if (m.kind === 'focus') {
+        const node = typeof m.node === 'string' && st.nodes.some((n) => n.id === m.node) ? m.node : undefined;
+        const asked = typeof m.tab === 'string' && Object.hasOwn(TABS, m.tab) ? TABS[m.tab] : undefined;
+        const tab = asked ?? (node ? 'design' : undefined);
+        if (node) {
+          st.focus({ type: 'node', id: node });
+          useApp.setState({ centreAsked: { node } });
+        }
+        if (tab) useApp.setState({ tabAsked: tab });
+        if (tab && isPhone() && !useApp.getState().limitOpen) useApp.setState({ drawer: 'inspector' });
       } else if (m.kind === 'panels') {
         useApp.setState({ courseBottom: !!m.bottom });
         if (m.show && isPhone()) {

@@ -693,3 +693,38 @@ test('course: a run shows its progress on the page, and Skip to end finishes it'
   await expect(page.getByTestId('course-measured')).toBeVisible();
 });
 
+const toFrame = (page: Page, m: Record<string, unknown>) =>
+  page.evaluate((msg) => (document.querySelector('[data-testid="course-frame"]') as HTMLIFrameElement).contentWindow!.postMessage({ source: 'loadsketch-course', ...msg }, location.origin), m);
+
+test('course: the page can point at a component: selected, centred, its settings open', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await toFrame(page, { kind: 'focus', tab: 'results' });
+  await expect(frame.getByTestId('tab-learn')).toHaveAttribute('aria-selected', 'true');
+  await toFrame(page, { kind: 'focus', node: 'db', tab: 'design' });
+  await expect(frame.locator('.react-flow__node.selected [data-node="db"]')).toBeVisible();
+  await expect(frame.getByTestId('tab-design')).toHaveAttribute('aria-selected', 'true');
+  // centred in the canvas
+  const pane = (await frame.locator('.react-flow').boundingBox())!;
+  await expect
+    .poll(async () => {
+      const b = (await frame.locator('[data-node="db"]').boundingBox())!;
+      return Math.hypot(b.x + b.width / 2 - (pane.x + pane.width / 2), b.y + b.height / 2 - (pane.y + pane.height / 2));
+    })
+    .toBeLessThan(30);
+  // an unknown component changes nothing
+  await toFrame(page, { kind: 'focus', node: 'nope' });
+  await expect(frame.locator('.react-flow__node.selected [data-node="db"]')).toBeVisible();
+});
+
+test('course: on a phone, pointing at a component opens its settings drawer', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="db"]')).toBeAttached({ timeout: 30_000 });
+  await toFrame(page, { kind: 'focus', node: 'db' });
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('data-open', '');
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('aria-label', 'Settings');
+});

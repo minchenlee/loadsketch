@@ -1,7 +1,7 @@
 // The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
-import { answerable, clampStep, ctxOf, feedbackOf, judgedOn, opensCharts, pagesOf } from '../src/course/steps.ts';
+import { answerable, clampStep, ctxOf, feedbackOf, judgedOn, lookOf, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
 import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
@@ -167,6 +167,22 @@ describe('questions by experiment', () => {
     expect(opensCharts({ kind: 'read', text: 'x', look: { node: 'api' } })).toBe(false);
     expect(opensCharts({ kind: 'run' })).toBe(false);
     expect(opensCharts({ kind: 'done' })).toBe(false);
+  });
+
+  it('a step points at its look: the node and tab, without the charts', () => {
+    expect(lookOf({ kind: 'read', text: 'x', look: { node: 'db', tab: 'results', panel: 'bottom' } })).toEqual({ node: 'db', tab: 'results' });
+    expect(lookOf({ kind: 'read', text: 'x', look: { panel: 'bottom' } })).toBeNull();
+    expect(lookOf({ kind: 'run' })).toBeNull();
+    expect(lookOf({ kind: 'done' })).toBeNull();
+  });
+
+  it('after Make this change: the changed node and its settings, unless the step looks elsewhere', () => {
+    expect(patchFocus({ kind: 'try', text: 'x', patch: [{ node: 'api', params: { instances: 2 } }] })).toEqual({ node: 'api', tab: 'design' });
+    expect(patchFocus({ kind: 'try', text: 'x', patch: [{ edge: 'api->db', set: { timeoutMs: 100 } }, { node: 'db', params: {} }] })).toEqual({ node: 'db', tab: 'design' });
+    expect(patchFocus({ kind: 'try', text: 'x', look: { node: 'cache', tab: 'results' }, patch: [{ node: 'api', params: {} }] })).toEqual({ node: 'cache', tab: 'results' });
+    // only an edge changed: its caller
+    expect(patchFocus({ kind: 'try', text: 'x', patch: [{ edge: 'api->db', set: {} }] })).toEqual({ node: 'api', tab: 'design' });
+    expect(patchFocus({ kind: 'read', text: 'x' })).toBeNull();
   });
 
   it('without steps, the one run answers every question', () => {

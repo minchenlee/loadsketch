@@ -153,6 +153,10 @@ export interface AppState {
   panels: Panels;
   /** In the course's frame: the charts under the canvas, as the course page asks (null: as the address says). The course page saves the choice. */
   courseBottom: boolean | null;
+  /** In the course's frame: the settings panel tab the course page asked for (the Inspector opens it, then clears this). */
+  tabAsked: 'design' | 'scenario' | 'learn' | 'versions' | null;
+  /** In the course's frame: centre the canvas on this node (a new object each time it is asked). */
+  centreAsked: { node: string } | null;
   /** The phone layout: the drawer that is open (phone.ts). */
   drawer: Drawer;
   setDrawer: (d: Drawer) => void;
@@ -365,6 +369,8 @@ export const useApp = create<AppState>((set, get) => {
   loads: 0,
   panels: loadPanels(),
   courseBottom: null,
+  tabAsked: null,
+  centreAsked: null,
   drawer: null,
   setDrawer: (drawer) => set({ drawer }),
   expanded: {},

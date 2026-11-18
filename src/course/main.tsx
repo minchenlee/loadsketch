@@ -21,7 +21,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { answerable, judgedOn, opensCharts, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
+import { answerable, judgedOn, lookOf, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 import { readings, type Row } from './measures.ts';
 
@@ -507,8 +507,12 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       const d = dispatchRef.current;
       if (msg.kind === 'ready') {
         send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
-        // a new frame takes the charts choice; on a phone the drawer stays closed until asked
-        send({ source: 'loadsketch-course', kind: 'panels', bottom: latest.current.charts });
+        // a new frame takes the charts choice; on a phone the drawer stays closed until asked (a
+        // step that opens the charts asks); and the step's look, which a loading frame missed
+        const here = pages[latest.current.i];
+        send({ source: 'loadsketch-course', kind: 'panels', bottom: latest.current.charts, ...(opensCharts(here) ? { show: true } : {}) });
+        const f = lookOf(here);
+        if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
         d({ kind: 'ready' });
       } else if (msg.kind === 'status') {
         setClock(typeof msg.atS === 'number' && typeof msg.ofS === 'number' ? { atS: msg.atS, ofS: msg.ofS } : null);
@@ -532,9 +536,11 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   };
   // a page's guesses go to the simulator when the page opens: a run started there answers them
   useEffect(() => void dispatch({ kind: 'page' }), [i]);
-  // a step about what changes over time opens the charts
+  // a step about what changes over time opens the charts; a step's look points the simulator
   useEffect(() => {
     if (opensCharts(page) && !charts) openCharts();
+    const f = lookOf(page);
+    if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
   }, [i]);
   // the toggle (or such a step) opens or closes them now, on a phone as the charts drawer
   const chartsSent = useRef(charts);
@@ -615,6 +621,12 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const before = lastRuns.length > 1 ? lastRuns[0].run : undefined;
     return <Measured rows={readings(show, now.run, before)} />;
   };
+  // an answer that shows points where to look (the first answered question with a look)
+  const lookAt = answeredHere.map((x) => lookOf(x)).find((f) => f);
+  const lookKey = lookAt ? JSON.stringify(lookAt) + answeredHere.map((x) => x.id).join() : '';
+  useEffect(() => {
+    if (lookAt) send({ source: 'loadsketch-course', kind: 'focus', ...lookAt });
+  }, [lookKey]);
   const score = scoreOf(
     lesson.questions.map((x) => x.id),
     progress,
@@ -680,7 +692,14 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         <>
           <p className="text-[16px] leading-relaxed">{t(page.text)}</p>
           {page.patch && page.patch.length > 0 && (
-            <button className="btn mt-3" onClick={() => send({ source: 'loadsketch-course', kind: 'patch', patches: page.patch! })} disabled={status === 'running' || status === 'paused' || status === 'loading'} data-testid="course-patch">
+            <button
+              className="btn mt-3"
+              onClick={() => {
+                send({ source: 'loadsketch-course', kind: 'patch', patches: page.patch! });
+                // then the simulator shows the change: the node selected, centred, its settings open
+                const f = patchFocus(page);
+                if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
+              }} disabled={status === 'running' || status === 'paused' || status === 'loading'} data-testid="course-patch">
               <Wrench size={14} />
               {t('Make this change in the simulator')}
             </button>

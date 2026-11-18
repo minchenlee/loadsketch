@@ -784,7 +784,16 @@ export function Inspector() {
   const hasChecks = useApp((s) => !!s.imported && s.imported.loads === s.loads);
   const hasLesson = example ? LESSONS[example] !== undefined : false;
   // opened with a part already selected (the phone drawer after a tap): its settings, not the lesson
-  const [tab, setTab] = useState<Tab>(hasLesson && !selected ? 'learn' : 'design');
+  // the course page may ask for a tab (it opens on a phone's drawer as it mounts)
+  const tabAsked = useApp((s) => s.tabAsked);
+  const [tab, setTab] = useState<Tab>(() => tabAsked ?? (hasLesson && !selected ? 'learn' : 'design'));
+  // after the checks below (a selection asks for settings): the asked tab wins
+  useEffect(() => {
+    if (!tabAsked) return;
+    setTab(tabAsked);
+    if (tabAsked === 'learn') setSeen(true);
+    useApp.setState({ tabAsked: null });
+  }, [tabAsked]);
   const [seen, setSeen] = useState(true);
   const imports = useApp((s) => s.imported?.loads);
   const asked = useApp((s) => s.settingsAsked);
