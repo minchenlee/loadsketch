@@ -104,10 +104,10 @@ const lesson: Lesson = {
   steps: [
     { kind: 'read', title: tx('An overload'), text: INTRO, key: tx('When more arrives than the servers can do, the extra must fail: the queue decides how.') },
     { kind: 'guess', title: tx('How many fail, and how'), questions: ['overload-fail', 'fail-how'] },
-    { kind: 'run', title: tx('Run the overload'), look: { panel: 'bottom' } },
-    { kind: 'try', title: tx('A plain FIFO queue'), text: tx('Set “Queue order” to FIFO and “CoDel queue target” to 0, and run again. The servers are just as busy: how many requests fail now, and how long do the others wait?'), patch: [{ node: 'api', params: { queueOrder: 'fifo', codelTargetMs: 0 } }], look: { panel: 'bottom' } },
-    { kind: 'try', title: tx('A shorter queue'), text: tx('Keep FIFO without CoDel, and set the queue limit to 10, then 100, then 300, with a run each time. As the limit grows, what happens to the failures, and to p99?') },
-    { kind: 'try', title: tx('A looser CoDel'), text: tx('This puts the queue back as it was (adaptive LIFO, limit 5000) with a CoDel target of 50 ms instead of 5. Run it: are more requests turned away at once, or do more wait for the timeout?'), patch: [{ node: 'api', params: { queueOrder: 'adaptive_lifo', queueLimit: 5000, codelTargetMs: 50 } }] },
+    { kind: 'run', title: tx('Run the overload'), look: { panel: 'bottom' }, show: ['failRate', 'rejected', 'timedOut', 'p99'] },
+    { kind: 'try', title: tx('A plain FIFO queue'), text: tx('Set “Queue order” to FIFO and “CoDel queue target” to 0, and run again. The servers are just as busy: how many requests fail now, and how long do the others wait?'), patch: [{ node: 'api', params: { queueOrder: 'fifo', codelTargetMs: 0 } }], look: { panel: 'bottom' }, show: ['failRate', 'rejected', 'timedOut', 'p99'] },
+    { kind: 'try', title: tx('A shorter queue'), text: tx('Keep FIFO without CoDel, and set the queue limit to 10, then 100, then 300, with a run each time. As the limit grows, what happens to the failures, and to p99?'), show: ['failRate', 'rejected', 'timedOut', 'p99'] },
+    { kind: 'try', title: tx('A looser CoDel'), text: tx('This puts the queue back as it was (adaptive LIFO, limit 5000) with a CoDel target of 50 ms instead of 5. Run it: are more requests turned away at once, or do more wait for the timeout?'), patch: [{ node: 'api', params: { queueOrder: 'adaptive_lifo', queueLimit: 5000, codelTargetMs: 50 } }], show: ['failRate', 'rejected', 'timedOut', 'p99'] },
     { kind: 'challenge', title: tx('A short FIFO queue'), challenges: ['queues/bounded-fifo'] },
   ],
 };

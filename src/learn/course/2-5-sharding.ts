@@ -123,10 +123,10 @@ const lesson: Lesson = {
   steps: [
     { kind: 'read', title: tx('Four shards'), text: INTRO, key: tx('A hash spreads keys evenly, not requests.') },
     { kind: 'guess', title: tx('The busiest shard'), questions: ['hot-ratio'] },
-    { kind: 'run', title: tx('Run'), look: { node: 'db' }, show: ['p99', 'failRate'] },
+    { kind: 'run', title: tx('Run'), look: { node: 'db' }, show: ['busiestInstance', 'util:db', 'failRate'] },
     { kind: 'guess', title: tx('16 shards'), questions: ['more-shards'] },
-    { kind: 'try', title: tx('16 shards'), text: tx('Set the shards to 16 and run again. The average shard now does a quarter of the work: how busy is the busiest shard?'), patch: [{ node: 'db', params: { shards: 16 } }], look: { node: 'db' }, show: ['p99', 'failRate'] },
-    { kind: 'run', title: tx('A hot channel'), scenario: 'hot-shard', text: tx('Open the scenario “A large server posts an announcement”: now 80% of requests are reads, and a few keys are very hot. Run it: is one shard again the busiest?'), look: { node: 'db' }, show: ['p99', 'failRate'] },
+    { kind: 'try', title: tx('16 shards'), text: tx('Set the shards to 16 and run again. The average shard now does a quarter of the work: how busy is the busiest shard?'), patch: [{ node: 'db', params: { shards: 16 } }], look: { node: 'db' }, show: ['util:db', 'failRate'] },
+    { kind: 'run', title: tx('A hot channel'), scenario: 'hot-shard', text: tx('Open the scenario “A large server posts an announcement”: now 80% of requests are reads, and a few keys are very hot. Run it: is one shard again the busiest?'), look: { node: 'db' }, show: ['busiestInstance', 'util:db', 'failRate'] },
     { kind: 'challenge', title: tx('A hot channel'), challenges: ['shards/read-hot'] },
   ],
 };

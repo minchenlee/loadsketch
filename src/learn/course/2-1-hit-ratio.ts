@@ -102,7 +102,7 @@ const cacheHitRatio: Lesson = {
   steps: [
     { kind: 'read', title: tx('A URL shortener'), text: tx('A URL shortener: 3000 clicks a second, 99% reads (short code → original URL). There are 200,000 short URLs, and the clicks are concentrated. Redis keeps at most 20,000 of them (a tenth) as an LRU cache; only a miss reads the database. Guess the hit ratio and the database load, then press Run.'), key: tx('Only a cache miss reads the database.') },
     { kind: 'guess', title: tx('Hit ratio and database'), questions: ['hit', 'db-share'] },
-    { kind: 'run', title: tx('Run'), show: ['hitRatio', 'p99', 'failRate'] },
+    { kind: 'run', title: tx('Run') },
     { kind: 'challenge', title: tx('Three challenges'), challenges: ['cache/tenth', 'cache/fiftieth', 'cache/fresh'] },
   ],
 };

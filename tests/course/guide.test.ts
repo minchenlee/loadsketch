@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COURSE_BY_ID } from '../../src/learn/course.ts';
 import { runOf, stepsOf } from '../../src/learn/lesson.ts';
-import { MEASURES } from '../../src/course/measures.ts';
+import { measureOf } from '../../src/course/measures.ts';
 
 const IDS = ['0.1', '1.1', '1.2', '1.3', '1.5', '2.1', '2.2', '2.4', '2.5'];
 const root = join(import.meta.dirname, '..', '..');
@@ -33,7 +33,7 @@ describe.each(IDS)('lesson %s guidance', (id) => {
 
   it('shows only known measures, and looks only at nodes of the step’s design', () => {
     for (const [k, s] of steps.entries()) {
-      if ('show' in s && s.show) for (const m of s.show) expect(MEASURES[m], `step ${k}: ${m}`).toBeDefined();
+      if ('show' in s && s.show) for (const m of s.show) expect(measureOf(m), `step ${k}: ${m}`).toBeDefined();
       if (s.look?.node) {
         const ex = s.kind === 'run' || s.kind === 'try' ? runOf(l, s).example : l.example;
         expect(existsSync(join(root, 'examples', 'designs', `${ex}.json`))).toBe(true);
