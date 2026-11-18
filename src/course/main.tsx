@@ -5,7 +5,7 @@
 // this browser (src/course/progress.ts).
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChartLine, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
 import '../app/index.css';
 import './course.css';
 import logoBlack from '../app/assets/logo-black.svg';
@@ -21,7 +21,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { answerable, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
+import { answerable, judgedOn, opensCharts, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 
 const APP = '../app/';
@@ -71,7 +71,17 @@ function useRoute(): [string | null, (id: string | null) => void] {
 // ---------------------------------------------------------------------------------------------
 // Top bar
 
-function Bar({ lang, theme, onLang, onTheme, onHome }: { lang: Lang; theme: Theme; onLang: () => void; onTheme: () => void; onHome: (() => void) | null }) {
+/** The Charts toggle's choice (the charts under the simulator's canvas), kept in this browser. */
+const CHARTS_KEY = 'loadsketch-course-charts';
+const savedCharts = () => {
+  try {
+    return localStorage.getItem(CHARTS_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+function Bar({ lang, theme, onLang, onTheme, onHome, charts }: { lang: Lang; theme: Theme; onLang: () => void; onTheme: () => void; onHome: (() => void) | null; charts: { on: boolean; toggle: () => void } | null }) {
   return (
     <header className="course-bar panel flex items-center gap-2 border-b px-3 py-2">
       <a href="../" className="flex shrink-0 items-center gap-2" aria-label="loadsketch">
@@ -88,6 +98,12 @@ function Bar({ lang, theme, onLang, onTheme, onHome }: { lang: Lang; theme: Them
         <span className="muted truncate text-[15px]">{t('Course')}</span>
       )}
       <span className="flex-1" />
+      {charts && (
+        <button className={`btn shrink-0 ${charts.on ? 'btn-on' : ''}`} onClick={charts.toggle} aria-pressed={charts.on} aria-label={t('Charts')} title={t('Charts under the canvas: requests, latency and how busy each component is, over time')} data-testid="course-charts">
+          <ChartLine size={16} />
+          <span className="course-wide">{t('Charts')}</span>
+        </button>
+      )}
       <button className="btn shrink-0" onClick={onLang} aria-label={t('Language')} title={t('Language')} data-testid="course-lang">
         <Languages size={16} />
         <span className="course-wide">{lang === 'en' ? '中文' : 'English'}</span>
@@ -314,6 +330,8 @@ interface Ran {
   run: RunData;
   /** The questions it answers (runState.ts). */
   answers: string[];
+  /** The page it started on. */
+  page: number;
 }
 
 /**
@@ -326,7 +344,7 @@ const openGuesses = (lesson: Lesson, pages: Page[], i: number, p: LessonProgress
   return Object.fromEntries(Object.entries(p.guesses).filter(([q]) => ids.includes(q) && !p.answered.includes(q)));
 };
 
-function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, home }: {
+function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, home, charts, openCharts }: {
   entry: CourseLesson;
   lesson: Lesson;
   progress: LessonProgress;
@@ -335,6 +353,10 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   theme: Theme;
   openLesson: (id: string) => void;
   home: () => void;
+  /** The charts under the simulator's canvas are on (the Charts toggle in the top bar). */
+  charts: boolean;
+  /** A step that shows what changes over time opens them (look.panel; not saved). */
+  openCharts: () => void;
 }) {
   const pages = useMemo(() => pagesOf(lesson), [lesson]);
   const i = clampStep(progress.step, pages);
@@ -346,6 +368,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const [status, setStatus] = useState<Status>('loading');
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
+  /** The page each of those runs started on (a challenge judges only a run started on its page). */
+  const [runPages, setRunPages] = useState<Record<string, number>>({});
   const [reload, setReload] = useState(0);
   /** Questions a run started in this visit answers: their guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
   const [started, setStarted] = useState<string[]>([]);
@@ -355,8 +379,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** Example designs and scenarios as they ship, by name: challenges are judged against them. */
   const [designs, setDesigns] = useState<Record<string, Design>>({});
   const [scenarios, setScenarios] = useState<Record<string, Scenario>>({});
-  const latest = useRef({ progress, ctx, lang, theme, i });
-  latest.current = { progress, ctx, lang, theme, i };
+  const latest = useRef({ progress, ctx, lang, theme, i, charts });
+  latest.current = { progress, ctx, lang, theme, i, charts };
 
   useEffect(() => {
     let live = true;
@@ -375,7 +399,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** A challenge's verdict on its run, when that run used the challenge's scenario. */
   const verdictOf = (c: Challenge): Verdict | null => {
     const r = runOf(lesson, c);
-    const run = runs[ctxKey(r)];
+    const key = ctxKey(r);
+    const run = runPages[key] !== undefined && judgedOn(pages, runPages[key], c.id) ? runs[key] : undefined;
     const want = scenarios[r.scenario];
     const original = designs[r.example];
     return run && want && original && sameScenario(run.scenario, want) ? judge(c, run, original) : null;
@@ -392,6 +417,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     const key = ctxKey(r.ctx);
     const all = { ...runs, [key]: r.run };
     setRuns(all);
+    setRunPages((x) => ({ ...x, [key]: r.page }));
     const p = latest.current.progress;
     const ids = r.answers;
     const answered = lesson.questions.filter((q) => ids.includes(q.id));
@@ -435,11 +461,16 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       const d = dispatchRef.current;
       if (msg.kind === 'ready') {
         send({ source: 'loadsketch-course', kind: 'look', theme: latest.current.theme, lang: latest.current.lang });
+        // a new frame takes the charts choice; on a phone the drawer stays closed until asked
+        send({ source: 'loadsketch-course', kind: 'panels', bottom: latest.current.charts });
         d({ kind: 'ready' });
       } else if (msg.kind === 'status') {
         if (msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') d({ kind: 'status', status: msg.status, page: latest.current.i });
       } else if (msg.kind === 'loaded') d({ kind: 'loaded' });
-      else if (msg.kind === 'run') onRunRef.current({ ctx: here, run: msg.run, answers: d({ kind: 'finished', page: latest.current.i }).answer ?? [] });
+      else if (msg.kind === 'run') {
+        const answers = d({ kind: 'finished', page: latest.current.i }).answer ?? [];
+        onRunRef.current({ ctx: here, run: msg.run, answers, page: rs.current.runPage ?? latest.current.i });
+      }
     };
     addEventListener('message', onMessage);
     return () => removeEventListener('message', onMessage);
@@ -453,6 +484,17 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   };
   // a page's guesses go to the simulator when the page opens: a run started there answers them
   useEffect(() => void dispatch({ kind: 'page' }), [i]);
+  // a step about what changes over time opens the charts
+  useEffect(() => {
+    if (opensCharts(page) && !charts) openCharts();
+  }, [i]);
+  // the toggle (or such a step) opens or closes them now, on a phone as the charts drawer
+  const chartsSent = useRef(charts);
+  useEffect(() => {
+    if (chartsSent.current === charts) return;
+    chartsSent.current = charts;
+    send({ source: 'loadsketch-course', kind: 'panels', bottom: charts, show: true });
+  }, [charts]);
   const guess = (q: string, o: string) => {
     const qq = lesson.questions.find((x) => x.id === q);
     if (!qq || isLocked(qq)) return;
@@ -463,6 +505,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const restart = () => {
     update({ ...EMPTY });
     setRuns({});
+    setRunPages({});
     setAnswerRuns({});
     dispatch({ kind: 'restart' });
     setReload((r) => r + 1);
@@ -599,7 +642,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
               <ChallengeCard key={c.id} c={c} verdict={verdictOf(c)} passed={progress.passed.includes(c.id)} />
             ))}
           </div>
-          {runs[ctxKey(ctx)] && scenarios[ctx.scenario] && !sameScenario(runs[ctxKey(ctx)].scenario, scenarios[ctx.scenario]) && (
+          {runs[ctxKey(ctx)] && runPages[ctxKey(ctx)] === i && scenarios[ctx.scenario] && !sameScenario(runs[ctxKey(ctx)].scenario, scenarios[ctx.scenario]) && (
             <div className="mt-2 text-[14px]" style={{ color: 'var(--warn-ink)' }}>{t('The scenario was changed. Switch back to "{name}" for the challenges to count.', { name: t(scenarios[ctx.scenario].name ?? ctx.scenario) })}</div>
           )}
           <RunButton status={status} onRun={startRun} />
@@ -711,6 +754,13 @@ function Course() {
   const [lang, setL] = useState<Lang>(initialLang);
   const [theme, setTheme] = useState<Theme>(() => (document.documentElement.classList.contains('dark') ? 'dark' : 'light'));
   const [progress, setProgress] = useState<Progress>(loadProgress);
+  // the charts under the simulator's canvas: the toggle saves its choice; a step that opens them
+  // (look.panel) does not
+  const [charts, setChartsOn] = useState(savedCharts);
+  const setCharts = useCallback((on: boolean, keep = true) => {
+    if (keep) save(CHARTS_KEY, on ? '1' : '0');
+    setChartsOn(on);
+  }, []);
   const [id, go] = useRoute();
   setLang(lang);
   useEffect(() => {
@@ -753,7 +803,7 @@ function Course() {
   }, []);
   return (
     <div className="course-page">
-      <Bar lang={lang} theme={theme} onLang={flipLang} onTheme={flipTheme} onHome={entry && lesson ? () => go(null) : null} />
+      <Bar lang={lang} theme={theme} onLang={flipLang} onTheme={flipTheme} onHome={entry && lesson ? () => go(null) : null} charts={entry && lesson ? { on: charts, toggle: () => setCharts(!charts) } : null} />
       {entry && lesson ? (
         <LessonView
           key={entry.id}
@@ -765,6 +815,8 @@ function Course() {
           theme={theme}
           openLesson={go}
           home={() => go(null)}
+          charts={charts}
+          openCharts={() => setCharts(true, false)}
         />
       ) : (
         <Catalog progress={progress} open={go} />

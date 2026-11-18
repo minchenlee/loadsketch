@@ -518,6 +518,7 @@ export const ZH: Record<string, string> = {
   "Chaos Kong: us-east goes down at second 30 for 60 s": "Chaos Kong：第 30 秒關掉 us-east 60 秒",
   "Charging twice": "重複扣款",
   "Charts": "圖表",
+  "Charts under the canvas: requests, latency and how busy each component is, over time": "畫布下方的圖表：隨時間變化的請求量、延遲和每個元件的忙碌度",
   "Cheaper scores higher.": "越便宜分數越高。",
   "Check": "檢查",
   "Check interval": "偵測間隔",

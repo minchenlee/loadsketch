@@ -77,10 +77,12 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
     .poll(() => frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { edges: { id: string; data?: { edge: { retries?: number } } }[] } } }).__loadsketch.getState().edges.find((e) => e.id === 'lb->api')?.data?.edge.retries))
     .toBe(0);
 
-  // the challenges: the original design (the run before the change) passes none
+  // the challenges: no verdict until a run on this page; the original design passes none
   await page.getByTestId('course-next').click();
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:challenge');
-  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible();
+  await expect(page.getByTestId('course-verdict')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-challenge-retry-storm/recover').getByTestId('course-verdict')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId('course-passed')).toHaveCount(0);
 
   // change the design in the frame (a retry budget on every connection), run again: passed
@@ -587,4 +589,61 @@ test('the intro site links to the course: the nav and next to the main button', 
   await page.getByTestId('site-course').click();
   await expect(page).toHaveURL(/\/learn\/$/);
   await expect(page.getByTestId('course-lesson-2.1')).toBeVisible();
+});
+
+test('course: a challenge judges only runs started on its page, not an earlier run of the same example', async ({ page }) => {
+  await page.goto('/learn/?lang=en&speed=300&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-option-hit-most').click();
+  await page.getByTestId('course-option-db-share-quarter').click();
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-answer-hit')).toBeVisible({ timeout: 60_000 });
+  const card = page.locator('[data-testid^="course-challenge-"]').first();
+  for (let k = 0; k < 6 && !(await card.isVisible()); k++) await page.getByTestId('course-next').click();
+  await expect(card).toBeVisible();
+  // the run of the run page is not this challenge's
+  await expect(page.getByTestId('course-verdict')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  await expect(card.getByTestId('course-verdict')).toBeVisible({ timeout: 60_000 });
+});
+
+test('course: the Charts toggle opens the charts under the canvas, and stays after a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  const toggle = page.getByTestId('course-charts');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(frame.getByTestId('metrics-side')).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame.getByTestId('metrics-side')).toBeVisible();
+  // the canvas and the lesson stay usable
+  const box = await frame.locator('.react-flow').boundingBox();
+  expect(box!.height).toBeGreaterThan(250);
+  await expect(page.getByTestId('course-step')).toBeInViewport();
+  await page.reload();
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('course-charts')).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame.getByTestId('metrics-side')).toBeVisible();
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('metrics-side')).toHaveCount(0);
+});
+
+test('course: on a phone the Charts toggle opens the charts drawer in the simulator', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('data-open', '');
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('aria-label', 'Charts');
+  await expect(page.getByTestId('course-step')).toBeVisible();
+  // no sideways scroll on the course page
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('phone-drawer')).not.toHaveAttribute('data-open', '');
 });
