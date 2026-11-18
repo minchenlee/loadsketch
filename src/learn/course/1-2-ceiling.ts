@@ -32,6 +32,20 @@ const lesson: Lesson = {
   order: 2,
   minutes: 20,
   wave: 1,
+  learn: [
+    tx("Find the busiest component: it gives up first"),
+    tx("Estimate the ceiling from how busy it is"),
+    tx("Check the ceiling with Find limit"),
+    tx("See that past the ceiling a system fails, it does not slow down gently"),
+    tx("Add capacity only at the bottleneck"),
+  ],
+  learnAt: [2, 2, 3, 5, 6],
+  recap: [
+    tx("Utilization grows with traffic: the busiest component reaches 100% first."),
+    tx("Ceiling ≈ traffic ÷ utilization of the busiest component."),
+    tx("Past the ceiling, queues fill and most of the extra fails."),
+    tx("Capacity added anywhere but the bottleneck does not move the ceiling."),
+  ],
   example: 'three-tier',
   scenario: 'steady',
   intro: INTRO,
@@ -51,7 +65,8 @@ const lesson: Lesson = {
         const b = run.result.bottleneck;
         return b ? t('Busiest: {name}, {u} busy on average', { name: t(b.label), u: pct(b.utilization) }) : t('No bottleneck');
       },
-      explain: tx('The API servers are about 60% busy at 800 a second; Redis and Postgres are under 10%. Utilisation grows in step with traffic, so the API servers reach 100% first, at roughly 800 ÷ 0.6 ≈ 1300 a second. Find limit (on the run bar) checks this by running more and more traffic until the target breaks.'),
+      calc: [tx('API servers: about 60% busy at 800 requests/s'), tx('100% busy at about 800 ÷ 0.6 ≈ 1300 requests/s')],
+      explain: tx('The API servers are about 60% busy at 800 a second; Redis and Postgres are under 10%. Utilisation grows in step with traffic, so the API servers reach 100% first, at about 1300 a second. Find limit (on the run bar) checks this by running more and more traffic until the target breaks.'),
       explainFor: {
         lb: tx('Here the load balancer is the busiest: it is the first to give up as traffic grows.'),
         cache: tx('Here the cache is the busiest: it is the first to give up as traffic grows.'),
@@ -89,14 +104,14 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['ceiling-first'] },
-    { kind: 'run' },
-    { kind: 'try', text: tx('Press “Find limit” on the run bar. It runs the design at more and more traffic and reports the most that met the target and the component that gave up first. Compare that component with your answer.') },
-    { kind: 'guess', questions: ['double'] },
-    { kind: 'run', scenario: 'overload' },
-    { kind: 'try', text: tx('Double the database connections and find the limit again: it does not move, because the database was not the bottleneck. Then set the API servers to 6 and find it again: the ceiling about doubles.'), patch: [{ node: 'db', params: { connections: 24 } }] },
-    { kind: 'challenge', challenges: ['ceiling/double'] },
+    { kind: 'read', title: tx('The site at 800/s'), text: INTRO, key: tx('The busiest component is the first to give up as traffic grows.') },
+    { kind: 'guess', title: tx('The busiest component'), questions: ['ceiling-first'] },
+    { kind: 'run', title: tx('Run at 800/s'), look: { tab: 'results' } },
+    { kind: 'try', title: tx('Find limit'), text: tx('Press “Find limit” on the run bar. It runs the design at more and more traffic and reports the most that met the target and the component that gave up first. Is that the component you picked?') },
+    { kind: 'guess', title: tx('Double traffic'), questions: ['double'] },
+    { kind: 'run', title: tx('Run the overload'), scenario: 'overload', look: { panel: 'bottom' } },
+    { kind: 'try', title: tx('More database connections'), text: tx('Double the database connections and find the limit again. Does the ceiling move? Then set the API servers to 6 and find it again: which change moved it?'), patch: [{ node: 'db', params: { connections: 24 } }] },
+    { kind: 'challenge', title: tx('Room for double'), challenges: ['ceiling/double'] },
   ],
 };
 

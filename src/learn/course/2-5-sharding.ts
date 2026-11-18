@@ -48,6 +48,17 @@ const lesson: Lesson = {
   order: 5,
   minutes: 20,
   wave: 1,
+  learn: [
+    tx("See that sharding splits keys, not load"),
+    tx("See why more shards cannot split one key"),
+    tx("Spread a read-hot key with replicas of its shard"),
+  ],
+  learnAt: [2, 4, 6],
+  recap: [
+    tx("A design is as strong as its hottest shard, not its average."),
+    tx("More shards cannot split one key."),
+    tx("A key that is mostly read can be spread over read replicas of its shard."),
+  ],
   example: 'sharded',
   scenario: 'hot-keys',
   intro: INTRO,
@@ -110,13 +121,13 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', text: INTRO },
-    { kind: 'guess', questions: ['hot-ratio'] },
-    { kind: 'run' },
-    { kind: 'guess', questions: ['more-shards'] },
-    { kind: 'try', text: tx('Set the shards to 16 and run again: the average shard drops to a quarter, the busiest only to about half.'), patch: [{ node: 'db', params: { shards: 16 } }] },
-    { kind: 'run', scenario: 'hot-shard', text: tx('Open the scenario “A large server posts an announcement”: now 80% of requests are reads, and one shard is again the busiest.') },
-    { kind: 'challenge', challenges: ['shards/read-hot'] },
+    { kind: 'read', title: tx('Four shards'), text: INTRO, key: tx('A hash spreads keys evenly, not requests.') },
+    { kind: 'guess', title: tx('The busiest shard'), questions: ['hot-ratio'] },
+    { kind: 'run', title: tx('Run'), look: { node: 'db' }, show: ['busiestInstance:db', 'util:db', 'failRate'] },
+    { kind: 'guess', title: tx('16 shards'), questions: ['more-shards'] },
+    { kind: 'try', title: tx('16 shards'), text: tx('Set the shards to 16 and run again. The average shard now does a quarter of the work: how busy is the busiest shard?'), patch: [{ node: 'db', params: { shards: 16 } }], look: { node: 'db' }, show: ['busiestInstance:db', 'util:db', 'failRate'] },
+    { kind: 'run', title: tx('A hot channel'), scenario: 'hot-shard', text: tx('Open the scenario “A large server posts an announcement”: now 80% of requests are reads, and a few keys are very hot. Run it: is one shard again the busiest?'), look: { node: 'db' }, show: ['busiestInstance:db', 'util:db', 'failRate'] },
+    { kind: 'challenge', title: tx('A hot channel'), challenges: ['shards/read-hot'] },
   ],
 };
 
