@@ -5,6 +5,7 @@
 // them as in the simulator), and a change to the design that a lesson step offers (a patch). Messages go only to and from the parent page of the same origin.
 import { useEffect } from 'react';
 import { EMBEDDED, useApp } from './store.ts';
+import { isPhone } from './phone.ts';
 import type { RunData } from '../learn/metrics.ts';
 import type { Patch } from '../learn/oncall.ts';
 import type { Lang } from '../i18n/index.ts';
@@ -41,7 +42,13 @@ export type FromCourse =
   | { source: 'loadsketch-course'; kind: 'guesses'; lesson: string; guesses: Record<string, string> }
   | { source: 'loadsketch-course'; kind: 'patch'; patches: Patch[] }
   /** The page's theme and language changed: the simulator follows without reloading (the design stays). */
-  | { source: 'loadsketch-course'; kind: 'look'; theme: 'light' | 'dark'; lang: Lang };
+  | { source: 'loadsketch-course'; kind: 'look'; theme: 'light' | 'dark'; lang: Lang }
+  /**
+   * The charts under the canvas (the course page's Charts toggle, or a step that opens them). On a
+   * phone layout they are the charts drawer: `show` opens or closes it now (a toggle or a step);
+   * without it (a new frame) the drawer is left as it is, so a saved choice does not cover the canvas.
+   */
+  | { source: 'loadsketch-course'; kind: 'panels'; bottom: boolean; show?: boolean };
 
 function post(m: ToCourse) {
   if (window.parent !== window) window.parent.postMessage(m, location.origin);
@@ -57,6 +64,13 @@ export function useCourseBridge(): void {
       const st = useApp.getState();
       if (m.kind === 'run') {
         if (st.status === 'idle' || st.status === 'done') st.run();
+      } else if (m.kind === 'panels') {
+        useApp.setState({ courseBottom: !!m.bottom });
+        if (m.show && isPhone()) {
+          const { drawer, limitOpen } = useApp.getState();
+          if (m.bottom && !limitOpen) useApp.setState({ drawer: 'metrics' });
+          else if (!m.bottom && drawer === 'metrics') useApp.setState({ drawer: null });
+        }
       } else if (m.kind === 'look') {
         if (m.theme !== st.theme) st.setTheme(m.theme);
         st.setLang(m.lang);

@@ -604,3 +604,41 @@ test('course: a challenge judges only runs started on its page, not an earlier r
   await page.getByTestId('course-run').click();
   await expect(card.getByTestId('course-verdict')).toBeVisible({ timeout: 60_000 });
 });
+
+test('course: the Charts toggle opens the charts under the canvas, and stays after a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  const toggle = page.getByTestId('course-charts');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(frame.getByTestId('metrics-side')).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame.getByTestId('metrics-side')).toBeVisible();
+  // the canvas and the lesson stay usable
+  const box = await frame.locator('.react-flow').boundingBox();
+  expect(box!.height).toBeGreaterThan(250);
+  await expect(page.getByTestId('course-step')).toBeInViewport();
+  await page.reload();
+  await expect(frame.locator('[data-node="cache"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('course-charts')).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame.getByTestId('metrics-side')).toBeVisible();
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('metrics-side')).toHaveCount(0);
+});
+
+test('course: on a phone the Charts toggle opens the charts drawer in the simulator', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en&lesson=2.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node]').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('data-open', '');
+  await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('aria-label', 'Charts');
+  await expect(page.getByTestId('course-step')).toBeVisible();
+  // no sideways scroll on the course page
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByTestId('course-charts').click();
+  await expect(frame.getByTestId('phone-drawer')).not.toHaveAttribute('data-open', '');
+});
