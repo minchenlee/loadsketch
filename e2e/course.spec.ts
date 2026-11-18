@@ -76,6 +76,8 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   await expect
     .poll(() => frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { edges: { id: string; data?: { edge: { retries?: number } } }[] } } }).__loadsketch.getState().edges.find((e) => e.id === 'lb->api')?.data?.edge.retries))
     .toBe(0);
+  // put the retries back: the challenge step keeps the frame, so it would judge the try's design
+  await frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { updateEdge: (id: string, p: Record<string, number>) => void } } }).__loadsketch.getState().updateEdge('lb->api', { retries: 3 }));
 
   // the challenges: no verdict until a run on this page; the original design passes none
   await page.getByTestId('course-next').click();
