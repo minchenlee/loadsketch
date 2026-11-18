@@ -283,7 +283,7 @@ function Measured({ rows }: { rows: Row[] }) {
           <div key={r.key} className="flex flex-wrap items-baseline justify-between gap-x-3" data-measure={r.key} data-before={r.before !== undefined || undefined} data-change={r.change}>
             <dt className="text-[15px]">
               {r.label}
-              {r.who && !r.key.startsWith('clientFail:') && <span className="faint"> · {r.who}</span>}
+              {r.who && !/^(clientFail|util):/.test(r.key) && <span className="faint"> · {r.who}</span>}
             </dt>
             <dd className="num text-[15px] font-medium">
               {r.before !== undefined && (

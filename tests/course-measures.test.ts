@@ -103,4 +103,38 @@ describe('course measures', () => {
     // no such client in this design: left out
     expect(readings(['clientFail:nobody'], c(2))).toEqual([]);
   });
+  it('busiestInstance: the busiest single instance or shard, with its name', () => {
+    const r = (hot: number) =>
+      run(10, 0, { db: 0.3, api: 0.5 }, { db: { maxInstanceUtilization: hot, instances: [{ idx: 0, role: 'Shard 1 Primary', utilization: 0.1 }, { idx: 1, role: 'Shard 2 Primary', utilization: hot }] as never }, api: { maxInstanceUtilization: 0.5 } });
+    const row = readings(['busiestInstance'], r(0.4), r(0.98))[0];
+    expect(row).toMatchObject({ before: '98%', now: '50%', change: 'better' });
+    // the hot shard, not the node average (30%)
+    expect(readings(['busiestInstance'], r(0.98))[0]).toMatchObject({ now: '98%', who: 'DB Shard 2 Primary' });
+    expect(readings(['busiest'], r(0.98))[0]).toMatchObject({ now: '50%', who: 'API' });
+    expect(readings(['busiestInstance'], run(10, 0, {}))).toEqual([]);
+  });
+
+  it('util:<id>: how busy one component was, by its id', () => {
+    const r = (u: number) => run(10, 0, { primary: u, replica: 0.1 });
+    const row = readings(['util:primary'], r(0.2), r(0.9))[0];
+    expect(row).toMatchObject({ key: 'util:primary', before: '90%', now: '20%', who: 'PRIMARY', change: 'better' });
+    expect(row.label).toBe('How busy PRIMARY was');
+    expect(measureOf('util:primary')).toBeDefined();
+    expect(readings(['util:nobody'], r(0.2))).toEqual([]);
+  });
+
+  it('rejected and timedOut: failed requests split into turned away at once and timed out', () => {
+    const r = (fail: Record<string, number>) => {
+      const x = run(10, 0, {});
+      Object.assign(x.result.summary, { offered: 1000, fail: { timeout: 0, queue_full: 0, error: 0, rate_limited: 0, shed: 0, circuit_open: 0, down: 0, throttled: 0, bulkhead: 0, codel: 0, ...fail } });
+      return x;
+    };
+    // without CoDel requests wait and time out; with it they are dropped at once
+    const before = r({ timeout: 300, error: 5 });
+    const after = r({ codel: 120, queue_full: 30, timeout: 10 });
+    expect(readings(['rejected', 'timedOut'], after, before).map((x) => [x.key, x.before, x.now, x.change])).toEqual([
+      ['rejected', '0%', '15%', 'worse'],
+      ['timedOut', '30%', '1.0%', 'better'],
+    ]);
+  });
 });

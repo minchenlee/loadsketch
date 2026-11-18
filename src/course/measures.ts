@@ -10,7 +10,7 @@ export interface Reading {
 }
 
 export interface Measure {
-  label: string; // message id (with {client} for clientFail:<id>)
+  label: string; // message id ({name}: the component a keyed measure is about, clientFail:<id> and util:<id>)
   of: (run: RunData) => Reading | null;
   fmt: (v: number) => string;
   /** Which way is better, for the colour of the change (null: neither). */
@@ -55,6 +55,29 @@ export const MEASURES: Record<string, Measure> = {
   duplicates: { label: tx('Messages processed twice'), of: (r) => sum(r, (n) => n.duplicates), fmt: count, better: 'lower' },
   dlq: { label: tx('Messages in the dead-letter queue'), of: (r) => sum(r, (n) => n.dlq), fmt: count, better: null },
   staleReads: { label: tx('Stale reads'), of: (r) => sum(r, (n) => n.staleReads), fmt: count, better: 'lower' },
+  /**
+   * The busiest single instance or shard of any component (maxInstanceUtilization), with its name:
+   * the node average (busiest) hides one hot shard.
+   */
+  busiestInstance: {
+    label: tx('Busiest single instance'),
+    of: (r) => {
+      let best: Reading | null = null;
+      for (const n of nodes(r)) {
+        const u = n.maxInstanceUtilization;
+        if (typeof u !== 'number' || (best && u <= best.value)) continue;
+        const inst = n.instances?.reduce((a, b) => (b.utilization > a.utilization ? b : a));
+        best = { value: u, who: inst?.role ? `${n.label} ${inst.role}` : n.label };
+      }
+      return best;
+    },
+    fmt: pct,
+    better: 'lower',
+  },
+  /** Share of all requests turned away at once (REJECTED reasons). */
+  rejected: { label: tx('Requests turned away at once'), of: (r) => failShareOf(r, REJECTED), fmt: pct, better: 'lower' },
+  /** Share of all requests that failed by waiting too long (the timeout reason). */
+  timedOut: { label: tx('Requests that timed out'), of: (r) => failShareOf(r, ['timeout']), fmt: pct, better: 'lower' },
   /** Seconds from the end of the scenario's last spike until fewer than 5% fail in every later second (recoveryS); null without a spike. */
   recovery: {
     label: tx('Recovery after the spike'),
@@ -105,7 +128,7 @@ export const MEASURES: Record<string, Measure> = {
  * (the same as clientFailShare in the lessons). Null when the design has no such client.
  */
 const clientFail = (id: string): Measure => ({
-  label: tx('Failed requests of {client}'),
+  label: tx('Failed requests of {name}'),
   of: (r) => {
     const n = r.result.nodes[id];
     return n && n.kind === 'client' ? { value: n.arrivals > 0 ? n.fail / n.arrivals : 0, who: n.label } : null;
@@ -114,10 +137,32 @@ const clientFail = (id: string): Measure => ({
   better: 'lower',
 });
 
-/** The measure for a key of a step's `show`, with its argument (clientFail:<id>); undefined for an unknown key. */
+/** `util:<node id>`: how busy that component was (its utilization, averaged over its instances). Null when the design has no such component or it has no utilization (not a server). */
+const utilOf = (id: string): Measure => ({
+  label: tx('How busy {name} was'),
+  of: (r) => {
+    const n = r.result.nodes[id];
+    return n && typeof n.utilization === 'number' ? { value: n.utilization, who: n.label } : null;
+  },
+  fmt: pct,
+  better: 'lower',
+});
+
+/** Failure reasons that turn a request away at once (a full queue, a limit, an open breaker, a down instance, CoDel), not after a wait. */
+const REJECTED = ['queue_full', 'rate_limited', 'shed', 'circuit_open', 'down', 'throttled', 'bulkhead', 'codel'] as const;
+const failShareOf = (r: RunData, reasons: readonly string[]): Reading => {
+  const s = r.result.summary;
+  const fail = s.fail as unknown as Record<string, number>;
+  const n = reasons.reduce((a, k) => a + (fail[k] ?? 0), 0);
+  return { value: s.offered > 0 ? n / s.offered : 0 };
+};
+
+/** The measure for a key of a step's `show`, with its argument (clientFail:<id>, util:<id>); undefined for an unknown key. */
 export function measureOf(key: string): Measure | undefined {
   const c = /^clientFail:(.+)$/.exec(key);
   if (c) return clientFail(c[1]);
+  const u = /^util:(.+)$/.exec(key);
+  if (u) return utilOf(u[1]);
   return Object.hasOwn(MEASURES, key) ? MEASURES[key] : undefined;
 }
 
@@ -143,7 +188,7 @@ export function readings(show: string[] | undefined, run: RunData, before?: RunD
     const m = measureOf(key);
     const now = m?.of(run);
     if (!m || !now) continue;
-    const row: Row = { key, label: t(m.label, { client: now.who ?? '' }), now: m.fmt(now.value), who: now.who };
+    const row: Row = { key, label: t(m.label, { name: now.who ?? '' }), now: m.fmt(now.value), who: now.who };
     const was = before ? m.of(before) : null;
     if (was) {
       row.before = m.fmt(was.value);
