@@ -3,7 +3,7 @@ import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
 import { failUnder1, p99Under } from '../lessonKit.ts';
-import { mostMachines } from '../courseMachines.ts';
+import { mostMachines, onlyMachinesOf } from '../courseMachines.ts';
 
 const INTRO = tx('A three-tier site: a load balancer, 3 API servers (4 requests at a time each), a Redis cache and a Postgres database. Traffic is 600 requests a second, and from second 20 to 35 it is 3 times higher. Each card on the canvas shows how busy that component is; the Results tab shows p99 (the time 99% of requests finish within) and the bottleneck note. Guess which component fills up first.');
 
@@ -116,7 +116,7 @@ const lesson: Lesson = {
       title: tx('Hold the spike'),
       text: tx('Keep the error rate under 1% and p99 under 100 ms through the spike, with at most 5 API servers.'),
       goals: [apiAtMost5, failUnder1, p99Under(100, tx('p99 of successful requests under 100 ms'))],
-      rules: [],
+      rules: [onlyMachinesOf('api')],
       hint: tx('The spike asks for about 1800 requests a second. Work out how many requests a second one API server can do (requests at a time ÷ time per request), and add servers until the spike fits with some room to spare: a server that is 100% busy still makes requests queue.'),
     },
   ],

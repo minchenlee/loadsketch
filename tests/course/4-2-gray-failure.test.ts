@@ -49,4 +49,9 @@ describe('gray failure lesson (4.2): challenges', () => {
     expect(cheaper(hedged(policy('least_conn'), setEdge('lb', 'api', 'hedgeMs', 60)))).toBe(false);
     expect(cheaper(hedged(setEdge('lb', 'api', 'hedgeMs', 50)))).toBe(false);
   }, SLOW);
+
+  it('a cheaper tail keeps the hedge: with any balancing policy, hedging off or a hedge that never fires does not pass', () => {
+    for (const p of ['round_robin', 'least_conn', 'p2c', 'random'])
+      for (const h of [0, 1000]) expect(cheaper(hedged(policy(p), setEdge('lb', 'api', 'hedgeMs', h))), `${p}, hedge ${h} ms`).toBe(false);
+  }, SLOW);
 });

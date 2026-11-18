@@ -6,6 +6,7 @@ import { givenParts, keepParam, keepThrottle, oneEdgeOnly, slotsAtMost } from '.
 import { COURSE_BY_ID } from '../../src/learn/course.ts';
 import type { RunData } from '../../src/learn/metrics.ts';
 import { design } from './run.ts';
+import { setLang, t } from '../../src/i18n/index.ts';
 
 const clone = (d: Design): Design => JSON.parse(JSON.stringify(d));
 const nodeOf = (d: Design, id: string) => d.nodes.find((n) => n.id === id)!;
@@ -32,7 +33,7 @@ describe('keepThrottle', () => {
 });
 
 describe('slotsAtMost', () => {
-  const goal = slotsAtMost('jobs', 10, 'x');
+  const goal = slotsAtMost('jobs', 10, 'x', 'Work queue');
   it('counts every consumer of the queue, not only the first worker', () => {
     const d = clone(design('async-queue'));
     d.nodes.push({ id: 'thumb2', kind: 'worker', pos: [0, 0], params: { instances: 1, concurrency: 4 } } as Design['nodes'][number]);
@@ -61,6 +62,21 @@ describe('slotsAtMost', () => {
   });
 });
 
+describe('slotsAtMost names a removed queue', () => {
+  it('by its name in the current language, not its id', () => {
+    const d = clone(design('async-queue'));
+    d.nodes = d.nodes.filter((n) => n.id !== 'jobs');
+    setLang('zh-TW');
+    try {
+      const v = slotsAtMost('jobs', 10, 'x', 'Work queue').check(fakeRun(d)).value;
+      expect(v).toContain(t('Work queue'));
+      expect(v).not.toContain('jobs');
+    } finally {
+      setLang('en');
+    }
+  });
+});
+
 describe('keepParam and the 5.2 goals', () => {
   it('a removed node breaks the rule', () => {
     const o = design('async-reliable');
@@ -85,6 +101,12 @@ describe('givenParts', () => {
     db.id = 'db2';
     db.params = { ...db.params, replicas: 0, readMs: { mean: 0.1, cv: 1 }, writeMs: { mean: 0.1, cv: 1 } };
     d.edges = d.edges.map((e) => (e.to === 'db' ? { ...e, to: 'db2' } : e));
+    expect(givenParts.check(d, o)).not.toEqual([]);
+  });
+  it('a faster cache (opMs) is shorter than given', () => {
+    const o = design('three-tier');
+    const d = clone(o);
+    nodeOf(d, 'cache').params = { ...nodeOf(d, 'cache').params, opMs: 0.01 };
     expect(givenParts.check(d, o)).not.toEqual([]);
   });
   it('the shipped design keeps the given speeds', () => {

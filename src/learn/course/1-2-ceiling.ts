@@ -6,7 +6,7 @@ import { DEFAULT_SLO } from '../../engine/limit.ts';
 import type { Goal, Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
 import { errorsUnder, failShareOf, ms, p99Under, pct } from '../lessonKit.ts';
-import { mostMachines } from '../courseMachines.ts';
+import { mostMachines, onlyMachinesOf } from '../courseMachines.ts';
 
 const INTRO = tx('The same three-tier site at a steady 800 requests a second: a load balancer, 3 API servers, Redis and Postgres. Nothing is wrong yet. How much more traffic can it take, and which part gives up first? Guess, then press Run.');
 
@@ -99,7 +99,7 @@ const lesson: Lesson = {
       title: tx('Room for double'),
       text: tx('With the “Overload” scenario (2000 a second for 40 seconds), meet the target (under 1% fail, p99 under 1 s) with at most 5 API servers.'),
       goals: [apiAtMost5, errorsUnder(0.01, tx('Error rate under 1% for the whole run')), p99Under(1000, tx('p99 of successful requests under 1 s'))],
-      rules: [],
+      rules: [onlyMachinesOf('api')],
       hint: tx('One API server does about 4 ÷ 9 ms ≈ 450 requests a second. How many does 2000 a second need? Adding database connections does not help: the database was never the busy part.'),
     },
   ],

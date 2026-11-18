@@ -111,13 +111,14 @@ export const paramAtMost = (id: string, key: string, max: number, text: string):
 /**
  * Total slots of every consumer of a queue stay at most max: instances (when it autoscales, the
  * larger of the initial count and the maximum) × concurrency per instance, summed over each node the queue delivers to. A missing
- * queue, or a consumer without a slot count, fails.
+ * queue, or a consumer without a slot count, fails. name: the queue's label (a message id), to name
+ * it when it was removed (the run's design no longer has it).
  */
-export const slotsAtMost = (queue: string, max: number, text: string): Goal => ({
+export const slotsAtMost = (queue: string, max: number, text: string, name: string): Goal => ({
   text,
   check: (run) => {
     const d = run.design;
-    if (!d.nodes.some((n) => n.id === queue)) return { ok: false, value: t('“{name}” was removed', { name: queue }) };
+    if (!d.nodes.some((n) => n.id === queue)) return { ok: false, value: t('“{name}” was removed', { name: t(name) }) };
     let n = 0;
     for (const id of new Set(d.edges.filter((e) => e.from === queue).map((e) => e.to))) {
       const auto = paramOf(d, id, 'autoscale') === 'on';
@@ -143,7 +144,7 @@ export const limitGoals = (l: { maxErrorRate: number; maxP99Ms: number; budgetPe
   { text: texts[3], check: (run) => { const p = complexity(run.design).total; return { ok: p <= l.maxPoints, value: String(p) }; } },
 ];
 
-const GIVEN = ['serviceMs', 'readMs', 'writeMs'];
+const GIVEN = ['serviceMs', 'readMs', 'writeMs', 'opMs'];
 const meanOf = (v: unknown) => (typeof v === 'number' ? v : v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined);
 
 /**

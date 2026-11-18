@@ -2,7 +2,7 @@
 import { t, tx } from '../../i18n/index.ts';
 import type { Goal, Lesson } from '../lesson.ts';
 import { failUnder1, ms, pct } from '../lessonKit.ts';
-import { keepParam, slotsAtMost } from '../lessonKit2.ts';
+import { givenParts, keepParam, slotsAtMost } from '../lessonKit2.ts';
 import type { RunData } from '../metrics.ts';
 
 type QueueStats = { arrivals: number; asyncFail?: number; redelivered?: number; duplicates?: number; dlq?: number };
@@ -108,9 +108,10 @@ const atLeastOnce: Lesson = {
         nothingLost,
         noDuplicates,
         failUnder1,
-        slotsAtMost('jobs', 12, tx('Worker slots (machines × slots) ≤ 12')),
+        slotsAtMost('jobs', 12, tx('Worker slots (machines × slots) ≤ 12'), tx('Work queue')),
       ],
       rules: [
+        givenParts,
         keepParam('jobs', 'delivery', tx('At-least-once delivery'), tx('The queue’s delivery stays at-least-once')),
         keepParam('jobs', 'maxReceives', tx('Same limit of tries'), tx('The queue’s limit of tries before the DLQ stays as it is')),
       ],

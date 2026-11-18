@@ -2,13 +2,30 @@
 import { describe, expect, it } from 'vitest';
 import { COURSE_BY_ID } from '../../src/learn/course.ts';
 import { stepsOf } from '../../src/learn/lesson.ts';
-import { lessonRuns, setParam, SLOW, type Change } from './run.ts';
+import { design, lessonRuns, setParam, SLOW, type Change } from './run.ts';
+import { setLang, t } from '../../src/i18n/index.ts';
+import type { RunData } from '../../src/learn/metrics.ts';
 
 const lesson = COURSE_BY_ID['1.3'];
 const { run, passed, question } = lessonRuns(lesson);
 const fifo: Change[] = [setParam('api', 'queueOrder', 'fifo'), setParam('api', 'codelTargetMs', 0)];
 const limit = (n: number) => setParam('api', 'queueLimit', n);
 const fails = (r: ReturnType<typeof run>) => r.result.summary.fail;
+
+describe('lesson 1.3: the FIFO goal', () => {
+  it('names the queue order in the current language, not its value in the file', () => {
+    const goal = lesson.challenges.flatMap((c) => c.goals).find((g) => g.text === 'Queue order FIFO and CoDel off')!;
+    const r = { design: design('lifo-codel'), result: { nodes: {}, summary: {} }, windows: [], scenario: {} } as unknown as RunData;
+    setLang('zh-TW');
+    try {
+      const v = goal.check(r).value;
+      expect(v).toContain(t('Newest first when congested (adaptive LIFO)'));
+      expect(v).not.toContain('adaptive_lifo');
+    } finally {
+      setLang('en');
+    }
+  });
+});
 
 describe('lesson 1.3: questions', () => {
   it('LIFO + CoDel: about the part above capacity fails, and at once', () => {
