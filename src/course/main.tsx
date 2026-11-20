@@ -24,6 +24,7 @@ import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './
 import { addRun, answerable, judgedOn, learnTicks, lookOf, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page, type PageRuns } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 import { readings, type Row } from './measures.ts';
+import { calcParts } from './calc.ts';
 
 const APP = '../app/';
 type Theme = 'light' | 'dark';
@@ -252,25 +253,19 @@ function RunButton({ status, clock, onRun, onSkip }: { status: Status; clock: Cl
   );
 }
 
-const NUM_UNIT = /(?:\b\d+(?:\.\d+)?%?\s+(?:(?:requests?|reads?|writes?)(?:\/s)?\b|ms\b|s\b|servers?|slots?|connections?|messages?|minutes?|rounds?|times?|uploads?|retries\b|busy\b|at a time\b|a second\b|(?:個請求|個槽|條連線|次讀取|次寫入|分鐘|忙碌|在忙|[台個秒輪則倍條次分]))|(?:超過|more than)\s+\d+(?:\.\d+)?)/g;
-
 /** Wrap `<number> <unit>` pairs in nowrap spans so line breaks never split a number from its unit. */
 function renderCalcLine(line: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  let last = 0;
-  for (const m of line.matchAll(NUM_UNIT)) {
-    const at = m.index ?? 0;
-    if (at > last) parts.push(line.slice(last, at));
-    parts.push(
-      <span key={at} className="whitespace-nowrap">
-        {m[0]}
-      </span>,
-    );
-    last = at + m[0].length;
-  }
-  if (last === 0) return line;
-  if (last < line.length) parts.push(line.slice(last));
-  return parts;
+  const parts = calcParts(line);
+  if (parts.length === 1 && !parts[0].nowrap) return line;
+  return parts.map((p, k) =>
+    p.nowrap ? (
+      <span key={k} className="whitespace-nowrap">
+        {p.text}
+      </span>
+    ) : (
+      p.text
+    ),
+  );
 }
 
 /**

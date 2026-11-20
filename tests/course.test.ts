@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
 import { addRun, answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, nextTitle, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
 import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
+import { calcParts } from '../src/course/calc.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
 import { LESSONS } from '../src/learn/lessons.ts';
 import { stepsOf, type Lesson } from '../src/learn/lesson.ts';
@@ -273,5 +274,21 @@ describe('runs kept by page', () => {
     s = addRun(s, 2, 'c');
     expect(s.pages[2]).toEqual({ run: 'c', before: 'b' });
     expect(s.pages[4]).toEqual({ run: 'b', before: 'a' });
+  });
+});
+
+describe('arithmetic line wrapping', () => {
+  const kept = (line: string) => calcParts(line).filter((p) => p.nowrap).map((p) => p.text);
+
+  it('keeps number + plural or per-second rate units together, without catching read/write adjectives', () => {
+    expect(kept('2 read replicas')).toEqual([]);
+    expect(kept('2 write paths')).toEqual([]);
+    expect(kept('100 reads of the same row')).toEqual(['100 reads']);
+    expect(kept('5 read/s')).toEqual(['5 read/s']);
+    expect(kept('5 write/s and 1 request/s')).toEqual(['5 write/s', '1 request/s']);
+    expect(kept('800/s × about 2.7 ms ≈ 2 requests inside')).toEqual(['2.7 ms', '2 requests']);
+    expect(kept('3 servers × 4 at a time ÷ 9 ms ≈ 1300 requests/s')).toEqual(['3 servers', '4 at a time', '9 ms', '1300 requests/s']);
+    expect(kept('3 台 × 同時 4 個 ÷ 9 ms ≈ 每秒 1300 個請求')).toEqual(['3 台', '4 個', '9 ms', '1300 個請求']);
+    expect(kept('尖峰：每秒 600 個 × 3 = 每秒 1800 個請求，超過 1300')).toEqual(['600 個', '1800 個請求', '超過 1300']);
   });
 });

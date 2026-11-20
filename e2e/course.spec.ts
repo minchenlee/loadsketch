@@ -367,8 +367,8 @@ test('course: a run again shows the answer of that run; the score keeps the firs
   await page.getByTestId('course-run').click();
   const recover = page.getByTestId('course-answer-recover');
   const recoverAnswer = recover.locator('[data-answer-field="answer"]');
-  await expect(recoverAnswer.locator('dt')).toHaveText('Answer');
-  await expect(recoverAnswer.locator('dd')).toHaveText('It stays broken', { timeout: 60_000 });
+  await expect(recoverAnswer.locator('dt')).toHaveText('Answer', { timeout: 60_000 });
+  await expect(recoverAnswer.locator('dd')).toHaveText('It stays broken');
   // fix the storm (a retry budget on every connection that retries) and run again on this page
   await frame.locator('body').evaluate(() => {
     type E = { id: string; data?: { edge: { retries?: number } } };
