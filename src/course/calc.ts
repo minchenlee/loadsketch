@@ -1,5 +1,5 @@
 const NUM_UNIT =
-  /(?:\b\d+(?:\.\d+)?%?\s+(?:(?:(?:requests|reads|writes)(?:\/s)?|(?:request|read|write)\/s|ms|s|servers?|slots?|connections?|messages?|minutes?|rounds?|times?|uploads?|retries|busy|at a time|a second)\b|(?:個請求|個槽|條連線|次讀取|次寫入|分鐘|忙碌|在忙|[台個秒輪則倍條次分]))|(?:超過|more than)\s+\d+(?:\.\d+)?\b)/g;
+  /(?:\b\d+(?:\.\d+)?%?\s+(?:(?:(?:requests|reads|writes)(?:\/s)?|(?:request|read|write)\/s)\b|ms\b|s\b|servers?|slots?|connections?|messages?|minutes?|rounds?|times?|uploads?|retries\b|busy\b|at a time\b|a second\b|(?:個請求|個槽|條連線|次讀取|次寫入|分鐘|忙碌|在忙|[台個秒輪則倍條次分]))|(?:超過|more than)\s+\d+(?:\.\d+)?)/g;
 
 export interface CalcPart {
   text: string;

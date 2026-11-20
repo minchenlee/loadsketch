@@ -290,5 +290,7 @@ describe('arithmetic line wrapping', () => {
     expect(kept('3 servers × 4 at a time ÷ 9 ms ≈ 1300 requests/s')).toEqual(['3 servers', '4 at a time', '9 ms', '1300 requests/s']);
     expect(kept('3 台 × 同時 4 個 ÷ 9 ms ≈ 每秒 1300 個請求')).toEqual(['3 台', '4 個', '9 ms', '1300 個請求']);
     expect(kept('尖峰：每秒 600 個 × 3 = 每秒 1800 個請求，超過 1300')).toEqual(['600 個', '1800 個請求', '超過 1300']);
+    expect(kept('超過 2.7ms')).toEqual(['超過 2.7']);
+    expect(kept('more than 2.7ms')).toEqual(['more than 2.7']);
   });
 });
