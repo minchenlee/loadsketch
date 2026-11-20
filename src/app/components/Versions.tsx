@@ -7,12 +7,12 @@ import { MAX_VERSIONS, parseVersionFile, versionFile, type Version } from '../ve
 import { MAX_COMPARE, type CompareItem } from '../compare.ts';
 import { fmtMs, pct } from '../ui.ts';
 import { fmtUsd } from '../../learn/cost.ts';
-import { getLang, t } from '../../i18n/index.ts';
+import { getLocaleInfo, t } from '../../i18n/index.ts';
 
 /** The time of a version: the clock today, the date and clock before. */
 export function fmtWhen(at: number, now = Date.now()): string {
   const d = new Date(at);
-  const locale = getLang() === 'en' ? 'en-US' : 'zh-TW';
+  const locale = getLocaleInfo().intlLocale;
   const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   return new Date(now).toDateString() === d.toDateString() ? time : `${d.toLocaleDateString(locale, { month: 'numeric', day: 'numeric' })} ${time}`;
 }

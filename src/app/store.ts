@@ -21,7 +21,7 @@ import {
 } from '../schema/design.ts';
 import { freshId, toDesign, toFlow, type SdEdge, type SdNode } from './convert.ts';
 import { connect, live, resetLive, send } from './runtime.ts';
-import { getLang, pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
+import { getLang, getLocaleInfo, pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
 import { localizeDesign } from '../i18n/content.ts';
 import { DEFAULT_SLO, type Slo } from '../learn/sla.ts';
 import { GUESS_LOG_KEY, addEntries, entriesForRun, logFile, parseLog, type GuessEntry } from '../learn/guessLog.ts';
@@ -60,7 +60,7 @@ function initialLang(): Lang {
 }
 function applyLang(l: Lang) {
   setLang(l);
-  document.documentElement.lang = l === 'en' ? 'en' : 'zh-Hant';
+  document.documentElement.lang = getLocaleInfo(l).htmlLang;
   document.title = t('loadsketch: system design simulator');
 }
 applyLang(initialLang());

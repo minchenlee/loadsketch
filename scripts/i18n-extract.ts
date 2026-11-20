@@ -1,17 +1,17 @@
 // Collects every English message id and writes src/i18n/zh-TW.ts, keeping the Traditional Chinese
-// translations already there.
+// translations already there. Also checks all locales in src/i18n/locales/*.ts.
 // Sources: t('…') and tx('…') calls in src and cli, the component specs (KINDS) and the examples.
 // Run: node scripts/i18n-extract.ts [--check] [--strict]
-//   --check: exit 1 if zh-TW.ts is out of date or placeholders mismatch; warn (list) when entries lack Chinese
-//   --strict: with --check, also exit 1 when any entry lacks Chinese (for nightly checks)
+//   --check: exit 1 if zh-TW.ts is out of date or placeholders mismatch; warn (list) when entries lack Chinese; check other locales
+//   --strict: with --check, also exit 1 when any entry lacks translation (for zh-TW and any other locale)
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { CATEGORY_LABEL, EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { ZH } from '../src/i18n/zh-TW.ts';
 import { SAME_IN_ZH } from '../src/i18n/same.ts';
 
 const root = join(import.meta.dirname, '..');
-
 
 const ids = new Set<string>();
 const add = (s: unknown) => {
@@ -21,8 +21,12 @@ const add = (s: unknown) => {
 function walk(dir: string, out: string[]): string[] {
   for (const f of readdirSync(dir)) {
     const p = join(dir, f);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.(ts|tsx)$/.test(f) && !p.endsWith(join('i18n', 'zh-TW.ts'))) out.push(p);
+    if (statSync(p).isDirectory()) {
+      if (p.endsWith(join('src', 'i18n', 'locales'))) continue;
+      walk(p, out);
+    } else if (/\.(ts|tsx)$/.test(f) && !p.endsWith(join('i18n', 'zh-TW.ts'))) {
+      out.push(p);
+    }
   }
   return out;
 }
@@ -120,6 +124,8 @@ const stripContext = (s: string) => {
 const holes = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
 const sorted = [...ids].sort();
+
+// Check zh-TW
 for (const k of sorted) {
   const zh = ZH[k];
   if (zh) {
@@ -165,14 +171,60 @@ function closestDropped(target: string, candidates: string[]): string | null {
   return bestScore >= 0.3 ? best : null;
 }
 
-if (process.argv.includes('--check')) {
+const isCheck = process.argv.includes('--check');
+const strict = process.argv.includes('--strict');
+
+// Check other locales in src/i18n/locales
+const localesDir = join(root, 'src/i18n/locales');
+let otherLocalesFailed = false;
+
+if (existsSync(localesDir)) {
+  for (const file of readdirSync(localesDir)) {
+    if (!file.endsWith('.ts') && !file.endsWith('.js')) continue;
+    if (file === 'zh-TW.ts') continue;
+    const locMod = await import(pathToFileURL(join(localesDir, file)).href);
+    const locDef = (locMod.default ?? Object.values(locMod).find((v) => v && typeof v === 'object' && 'code' in v && 'messages' in v)) as { code: string; messages: Record<string, string> } | undefined;
+    const cat = locDef?.messages ?? (locMod as Record<string, string>);
+    const code = locDef?.code ?? file.replace(/\.(ts|js)$/, '');
+
+    let locMissing = 0;
+    for (const k of sorted) {
+      const val = cat[k];
+      if (!val) {
+        locMissing++;
+      } else {
+        const enH = holes(stripContext(k));
+        const locH = holes(val);
+        if (enH.join() !== locH.join()) {
+          console.error(`placeholder mismatch in ${code} for ${JSON.stringify(k)}: en {${enH.join(', ')}} vs ${code} {${locH.join(', ')}}`);
+          bad++;
+        }
+      }
+    }
+
+    const extraKeys = Object.keys(cat).filter((k) => !ids.has(k));
+    if (extraKeys.length > 0) {
+      console.warn(`warning: ${code} has ${extraKeys.length} extra key(s) no longer in source: ${extraKeys.slice(0, 5).join(', ')}${extraKeys.length > 5 ? '...' : ''}`);
+    }
+
+    if (locMissing > 0) {
+      if (strict) {
+        console.error(`strict check failed: ${code} has ${locMissing} missing translation(s)`);
+        otherLocalesFailed = true;
+      } else {
+        console.warn(`warning: ${code} has ${locMissing} missing translation(s) (falling back to English)`);
+      }
+    }
+  }
+}
+
+if (isCheck) {
   const same = readFileSync(path, 'utf8') === text;
-  const strict = process.argv.includes('--strict');
   console.log(`${sorted.length} messages, ${missing} without Chinese${same ? '' : ', zh-TW.ts is out of date'}`);
   if (missing > 0) {
     for (const k of missingKeys) console.warn(`  missing zh-TW: ${JSON.stringify(k)}`);
   }
-  process.exit(same && !bad && (!strict || missing === 0) ? 0 : 1);
+  process.exit(same && !bad && !otherLocalesFailed && (!strict || missing === 0) ? 0 : 1);
 }
 
 writeFileSync(path, text);
@@ -185,4 +237,4 @@ if (dropped.length > 0 && missingKeys.length > 0) {
     }
   }
 }
-if (bad) process.exit(1);
+if (bad || otherLocalesFailed) process.exit(1);

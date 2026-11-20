@@ -12,6 +12,7 @@ Thanks for your interest in contributing to loadsketch! This document provides g
 - [Add an Example in 5 Minutes](#add-an-example-in-5-minutes)
 - [Adding a Terraform Resource Mapping](#adding-a-terraform-resource-mapping)
 - [Add a Practice Question](#add-a-practice-question)
+- [Add a Language](#add-a-language)
 - [Commit Messages](#commit-messages)
 - [Pull Request Process](#pull-request-process)
 
@@ -434,6 +435,47 @@ npx vitest run tests/briefs.test.ts        # for design briefs
 ```
 
 CI verifies strict schema and filename/id matching (`tests/practice-data.test.ts`), that `src/i18n/zh-TW.ts` is up to date with matching placeholders (`npm run i18n:check`; the nightly run on main also requires every entry to have Chinese), and simulation behavior: `naive` fails while `solution` or `reference` passes (`tests/oncall.test.ts`, `tests/constraints.test.ts`, `tests/briefs.test.ts`).
+
+## Add a Language
+
+Add one new file under the locales directory: `src/i18n/locales/` (for example, `ja.ts`).
+Do not edit any other code file.
+
+### 1. Copy the template
+
+Copy `src/i18n/locales/zh-TW.ts` to your new locale file name.
+
+### 2. Update the locale metadata
+
+Update these fields in your new file:
+
+- `code`: The language code matching the file stem (for example, `'ja'`).
+- `label`: The display name shown in the language menu (for example, `'日本語'`).
+- `intlLocale`: The BCP 47 locale for number and date formatting (for example, `'ja-JP'`).
+- `htmlLang`: The lang attribute for the HTML document (for example, `'ja'`).
+- `wordSeparator`: Separator between narrative words (`''` for Japanese/Chinese, `' '` for space-separated languages).
+- `messages`: Translation dictionary mapping English message IDs to your language.
+
+### 3. Translate messages
+
+Translate English message keys in `messages`. Keep all `{name}` placeholders identical:
+
+- Missing translations fall back to English automatically.
+- Partial translations are welcome.
+- Machine translations are allowed. If the translations are not human proofread, add a note at the top of the file:
+  `// machine-translated, not proofread`
+
+### 4. Verify
+
+Run verification commands:
+
+```sh
+npm run i18n:check
+npm run test:quick
+```
+
+- `npm run i18n:check` prints warnings for missing keys and fails if `{name}` placeholders mismatch.
+- `npm run i18n:strict` requires 100% translated keys (used in release checks).
 
 ## Commit Messages
 

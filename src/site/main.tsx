@@ -10,7 +10,7 @@ import '../app/index.css';
 import './site.css';
 import logoBlack from '../app/assets/logo-black.svg';
 import logoWhite from '../app/assets/logo-white.svg';
-import { pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
+import { getAllLocales, getLocaleInfo, pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
 import { REPO } from '../repo.ts';
 
 const APP = './app/';
@@ -449,10 +449,13 @@ function Site() {
   const [theme, setTheme] = useState<Theme>(() => (document.documentElement.classList.contains('dark') ? 'dark' : 'light'));
   setLang(lang);
   useEffect(() => {
-    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+    document.documentElement.lang = getLocaleInfo(lang).htmlLang;
   }, [lang]);
   const flipLang = () => {
-    const l: Lang = lang === 'en' ? 'zh-TW' : 'en';
+    const all = getAllLocales();
+    const idx = all.findIndex((x) => x.code === lang);
+    const next = all[(idx + 1) % all.length] ?? all[0];
+    const l: Lang = next.code;
     save('loadsketch-lang', l);
     setL(l);
   };

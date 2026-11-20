@@ -1,9 +1,9 @@
-import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ZH } from '../src/i18n/zh-TW.ts';
-import { setLang, stripContext, t } from '../src/i18n/index.ts';
+import { getLang, pickLang, registerLocale, setLang, stripContext, t, unregisterLocale } from '../src/i18n/index.ts';
 import { localizeDesign, localizeScenario } from '../src/i18n/content.ts';
 import { simulate } from '../src/engine/index.ts';
 import { checkDesign, type Design, type Scenario } from '../src/schema/design.ts';
@@ -92,5 +92,65 @@ describe('English and Traditional Chinese output', () => {
     const out = execFileSync('node', ['cli/loadsketch.ts', 'run', 'examples/designs/priority-shedding.json', '--scenario', 'examples/scenarios/spike.json', '--duration', '20', '--lang', 'en'], { cwd: root, encoding: 'utf8' });
     expect(out).toContain('Bottleneck');
     expect(out.split('\n').filter((l) => CJK.test(l))).toEqual([]);
+  });
+
+  it('discovers a new language, translates matched keys, falls back to English, and i18n-extract checks it', () => {
+    const fakeLangCode = 'xx-test';
+    const fakeFile = join(root, 'src/i18n/locales', `${fakeLangCode}.ts`);
+    const keyWithPlaceholder = 'Second {at}: traffic {m}×{span}';
+    const keyMissing = 'Off@@not-used';
+
+    try {
+      // 1. Write the fake locale file
+      writeFileSync(
+        fakeFile,
+        `export default {\n  code: '${fakeLangCode}',\n  label: 'TestLang',\n  intlLocale: 'en-US',\n  htmlLang: 'xx',\n  wordSeparator: ' ',\n  messages: {\n    ${JSON.stringify(keyWithPlaceholder)}: 'FAKE_TRANSLATION {at} {m}{span}',\n  },\n};\n`,
+        'utf8',
+      );
+
+      // 2. Register into memory for runtime t() and pickLang() verification
+      registerLocale({
+        code: fakeLangCode,
+        label: 'TestLang',
+        intlLocale: 'en-US',
+        htmlLang: 'xx',
+        wordSeparator: ' ',
+        messages: {
+          [keyWithPlaceholder]: 'FAKE_TRANSLATION {at} {m}{span}',
+        },
+      });
+
+      expect(pickLang(fakeLangCode)).toBe(fakeLangCode);
+      expect(pickLang('xx_TEST')).toBe(fakeLangCode);
+      expect(pickLang('xx-custom')).toBe(fakeLangCode);
+
+      setLang(fakeLangCode);
+      expect(getLang()).toBe(fakeLangCode);
+
+      // Translated message
+      expect(t(keyWithPlaceholder, { at: 10, m: 2, span: '' })).toBe('FAKE_TRANSLATION 10 2');
+      // Missing message falls back to English (without @@context)
+      expect(t(keyMissing)).toBe('Off');
+
+      // 3. i18n-extract --check passes with warning for new language with missing translations
+      // Notice console.warn outputs to stderr
+      const res = spawnSync('node', ['scripts/i18n-extract.ts', '--check'], { cwd: root, encoding: 'utf8' });
+      expect(res.status).toBe(0);
+      expect(res.stderr).toContain(fakeLangCode);
+      expect(res.stderr).toContain('missing translation(s)');
+
+      // 4. i18n-extract --strict fails when missing translations
+      expect(() => {
+        execFileSync('node', ['scripts/i18n-extract.ts', '--check', '--strict'], { cwd: root, encoding: 'utf8', stdio: 'pipe' });
+      }).toThrow();
+    } finally {
+      unregisterLocale(fakeLangCode);
+      setLang('zh-TW');
+      try {
+        unlinkSync(fakeFile);
+      } catch {
+        /* already removed */
+      }
+    }
   });
 });
