@@ -1,14 +1,6 @@
 // Traditional Chinese locale definition.
+import type { LocaleDefinition } from '../locale.ts';
 import { ZH } from '../zh-TW.ts';
-
-export interface LocaleDefinition {
-  code: string;
-  label: string;
-  intlLocale: string;
-  htmlLang: string;
-  wordSeparator: string;
-  messages: Record<string, string>;
-}
 
 export const zhTW: LocaleDefinition = {
   code: 'zh-TW',

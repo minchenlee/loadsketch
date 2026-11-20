@@ -438,44 +438,70 @@ CI verifies strict schema and filename/id matching (`tests/practice-data.test.ts
 
 ## Add a Language
 
-Add one new file under the locales directory: `src/i18n/locales/` (for example, `ja.ts`).
+Add one new file under `src/i18n/locales/` (for example, `ja.ts`).
 Do not edit any other code file.
 
-### 1. Copy the template
+### 1. Generate the template
 
-Copy `src/i18n/locales/zh-TW.ts` to your new locale file name.
+Run the extractor with `--add` and your language code:
 
-### 2. Update the locale metadata
+```sh
+node scripts/i18n-extract.ts --add ja
+```
 
-Update these fields in your new file:
+This creates `ja.ts` under `src/i18n/locales/` with all metadata fields and every English message ID mapped to `""`.
 
-- `code`: The language code matching the file stem (for example, `'ja'`).
-- `label`: The display name shown in the language menu (for example, `'日本語'`).
-- `intlLocale`: The BCP 47 locale for number and date formatting (for example, `'ja-JP'`).
-- `htmlLang`: The lang attribute for the HTML document (for example, `'ja'`).
-- `wordSeparator`: Separator between narrative words (`''` for Japanese/Chinese, `' '` for space-separated languages).
-- `messages`: Translation dictionary mapping English message IDs to your language.
+### 2. Fill metadata and translations
 
-### 3. Translate messages
+Update the metadata fields at the top of the new file:
 
-Translate English message keys in `messages`. Keep all `{name}` placeholders identical:
+- `code`: Language code matching the file stem (for example, `'ja'`).
+- `label`: Display name shown in the language menu (for example, `'日本語'`).
+- `intlLocale`: BCP 47 locale for number and date formatting (for example, `'ja-JP'`).
+- `htmlLang`: `lang` attribute for the HTML document (for example, `'ja'`).
+- `wordSeparator`: Separator between narrative words (`''` for Chinese/Japanese, `' '` for space-separated languages).
+- `messages`: Dictionary mapping English message IDs to your language.
 
-- Missing translations fall back to English automatically.
+Minimal example:
+
+```ts
+// machine-translated, not proofread
+import type { LocaleDefinition } from '../locale.ts';
+
+const locale: LocaleDefinition = {
+  code: 'ja',
+  label: '日本語',
+  intlLocale: 'ja-JP',
+  htmlLang: 'ja',
+  wordSeparator: '',
+  messages: {
+    'Run': '実行',
+    'Stop': '停止',
+    'Second {at}: traffic {m}×{span}': '{at} 秒目: トラフィック {m}×{span}',
+  },
+};
+
+export default locale;
+```
+
+Rules for `messages`:
+
+- Empty values (`""`) and omitted keys fall back to English automatically.
 - Partial translations are welcome.
-- Machine translations are allowed. If the translations are not human proofread, add a note at the top of the file:
-  `// machine-translated, not proofread`
+- Keep all `{name}` placeholders identical to the English key.
+- If translations are machine-translated and not human proofread, keep `// machine-translated, not proofread` at the top of the file.
 
-### 4. Verify
+### 3. Verify
 
-Run verification commands:
+Run the check and quick tests:
 
 ```sh
 npm run i18n:check
 npm run test:quick
 ```
 
-- `npm run i18n:check` prints warnings for missing keys and fails if `{name}` placeholders mismatch.
-- `npm run i18n:strict` requires 100% translated keys (used in release checks).
+- `npm run i18n:check` warns on missing translations and fails if `{name}` placeholders mismatch or metadata is invalid.
+- `npm run i18n:strict` fails if any translation is missing (used in release checks).
 
 ## Commit Messages
 
