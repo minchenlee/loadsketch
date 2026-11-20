@@ -216,14 +216,16 @@ export function RunBar() {
           <Zap size={12} /> {t('Events: {n}', { n: events.length })}
         </span>
       )}
+      {/* on a phone only the icon: the panel opens in the drawer */}
       <button
-        className="btn sd-desk shrink-0"
+        className="btn shrink-0"
         onClick={openLimit}
         disabled={active}
         title={t('Raise steady traffic step by step to find about how many requests per second this design holds')}
+        aria-label={t('Find limit')}
         data-testid="find-limit-open"
       >
-        <TrendingUp size={14} /> {t('Find limit')}
+        <TrendingUp size={14} /> <span className="sd-desk">{t('Find limit')}</span>
       </button>
       {error && (
         <span className="sd-run-error ml-auto min-w-0 truncate text-[14px]" style={{ color: 'var(--bad-ink)' }} title={error}>

@@ -1,4 +1,4 @@
-import { isPhone, usePhone } from '../phone.ts';
+import { sheetOf, isPhone, usePhone } from '../phone.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CircleX, TrendingUp, TriangleAlert, X } from 'lucide-react';
 import { Background, BackgroundVariant, Controls, MarkerType, Panel, ReactFlow, getViewportForBounds, useReactFlow, useStoreApi, useUpdateNodeInternals, type Viewport } from '@xyflow/react';
@@ -12,6 +12,7 @@ import { startEdgeFlow } from '../edgeFlow.ts';
 import { t } from '../../i18n/index.ts';
 import { KINDS } from '../../schema/kinds.ts';
 import { limitBanner } from '../findLimit.ts';
+import { inView } from '../inView.ts';
 
 const nodeTypes = { component: ComponentNode };
 const edgeTypes = { flow: FlowEdge };
@@ -52,7 +53,7 @@ function firstView(nodes: SdNode[], w: number, h: number): Viewport {
     const v = getViewportForBounds(bounds, w, Math.max(200, h - top), FIT.minZoom, FIT.maxZoom, FIT.padding);
     return { ...v, y: v.y + top };
   }
-  const covered = useApp.getState().drawer ? Math.min(innerHeight * 0.56, 520) + 66 : 112;
+  const covered = sheetOf(useApp.getState()) ? Math.min(innerHeight * 0.56, 520) + 66 : 112;
   // a design brief's bar is at the top of the canvas
   const card = document.querySelector<HTMLElement>('.sd-brief');
   const top = card ? card.offsetHeight + 16 : 0;
@@ -165,6 +166,24 @@ function useRefitOnLimit() {
   }, [limitOpen, setViewport, store]);
 }
 
+/** The course page asked to look at a node: centre it, at the same zoom (no motion with reduced motion). */
+function useCentreAsked() {
+  const asked = useApp((s) => s.centreAsked);
+  const { setCenter, getZoom, getViewport } = useReactFlow();
+  const flow = useStoreApi();
+  useEffect(() => {
+    if (!asked) return;
+    const n = useApp.getState().nodes.find((x) => x.id === asked.node);
+    if (!n) return;
+    const w = n.measured?.width ?? 0;
+    const h = n.measured?.height ?? 0;
+    // a card already on screen stays where it is: centring it would push the rest of the design off
+    const { width, height } = flow.getState();
+    if (inView({ x: n.position.x, y: n.position.y, w, h }, getViewport(), { w: width, h: height })) return;
+    void setCenter(n.position.x + w / 2, n.position.y + h / 2, { zoom: getZoom(), duration: reducedMotion() ? 0 : 300 });
+  }, [asked, setCenter, getZoom, getViewport, flow]);
+}
+
 /**
  * A dragged card swings from the point it is held by: it leans against the direction it moves in,
  * and springs back level when it is let go.
@@ -258,6 +277,7 @@ export function Canvas() {
   const { screenToFlowPosition } = useReactFlow();
   const fly = useFlight(nodes);
   useRefitOnLimit();
+  useCentreAsked();
   const tilt = useDragTilt();
 
   const onDrop = useCallback(

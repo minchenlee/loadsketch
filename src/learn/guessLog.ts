@@ -28,6 +28,8 @@ export interface GuessEntry {
   /** ISO time the run ended. */
   at: string;
   example: string;
+  /** The course lesson (src/learn/course.ts) the guess was made in; without it, the side panel's lesson of `example` (LESSONS). */
+  lesson?: string;
   question: string;
   topic: string;
   /** Option ids, and their place in the question's order (options run from low to high). */
@@ -67,8 +69,8 @@ export interface GuessLogFile {
 /** How far off a guess was: 0 right; above 0 the guess was higher than the answer, below 0 lower. */
 export const gap = (e: Pick<GuessEntry, 'guessIdx' | 'answerIdx'>): number => e.guessIdx - e.answerIdx;
 
-/** The entries for one finished run: one per question the learner answered. */
-export function entriesForRun(lesson: Lesson, guesses: Record<string, string>, run: RunData, at: Date): GuessEntry[] {
+/** The entries for one finished run: one per question the learner answered. `course`: the course lesson id, when the guesses were made on the course page. */
+export function entriesForRun(lesson: Lesson, guesses: Record<string, string>, run: RunData, at: Date, course?: string): GuessEntry[] {
   const out: GuessEntry[] = [];
   for (const q of lesson.questions) {
     const guess = guesses[q.id];
@@ -76,9 +78,10 @@ export function entriesForRun(lesson: Lesson, guesses: Record<string, string>, r
     const answer = q.answer(run);
     const idx = (id: string) => q.options.findIndex((o) => o.id === id);
     out.push({
-      id: `${at.toISOString()}/${lesson.example}/${q.id}`,
+      id: course === undefined ? `${at.toISOString()}/${lesson.example}/${q.id}` : `${at.toISOString()}/course:${course}/${q.id}`,
       at: at.toISOString(),
       example: lesson.example,
+      ...(course === undefined ? {} : { lesson: course }),
       question: q.id,
       topic: topicOf(q),
       guess,
@@ -109,22 +112,29 @@ const isEntry = (x: unknown): x is GuessEntry => {
     ['id', 'at', 'example', 'question', 'topic', 'guess', 'answer', 'measured'].every((k) => typeof e[k] === 'string') &&
     Number.isInteger(e.guessIdx) && Number.isInteger(e.answerIdx) &&
     !Number.isNaN(Date.parse(e.at as string)) &&
+    (e.lesson === undefined || typeof e.lesson === 'string') &&
     (e.measuredIn === undefined || (typeof e.measuredIn === 'object' && e.measuredIn !== null && Object.values(e.measuredIn).every((v) => typeof v === 'string')))
   );
 };
 
-/** The entry fits the lesson's question: the option ids exist and sit at the places it says. */
-function fitsLesson(e: GuessEntry, lessons: Record<string, Lesson>): boolean {
+/** The lesson of an entry: its course lesson, else the side panel's lesson of its example. */
+export function lessonOfEntry(e: Pick<GuessEntry, 'example' | 'lesson'>, lessons: Record<string, Lesson>, course: Record<string, Lesson> = {}): Lesson | undefined {
   // own keys only: an example named like an Object member ("constructor") is not a lesson
-  const q = Object.hasOwn(lessons, e.example) ? lessons[e.example].questions.find((x) => x.id === e.question) : undefined;
+  if (e.lesson !== undefined) return Object.hasOwn(course, e.lesson) ? course[e.lesson] : undefined;
+  return Object.hasOwn(lessons, e.example) ? lessons[e.example] : undefined;
+}
+
+/** The entry fits the lesson's question: the option ids exist and sit at the places it says. */
+function fitsLesson(e: GuessEntry, lessons: Record<string, Lesson>, course?: Record<string, Lesson>): boolean {
+  const q = lessonOfEntry(e, lessons, course)?.questions.find((x) => x.id === e.question);
   if (!q) return false;
   const at = (id: string) => q.options.findIndex((o) => o.id === id);
   return at(e.guess) === e.guessIdx && at(e.answer) === e.answerIdx && e.guessIdx >= 0 && e.answerIdx >= 0;
 }
 
 /** Entries from stored or imported JSON; anything else gives an error message. */
-/** With `lessons` (an import): every entry must fit a question of these lessons. */
-export function parseLog(text: string, lessons?: Record<string, Lesson>): { ok: true; entries: GuessEntry[] } | { ok: false; error: string } {
+/** With `lessons` (an import): every entry must fit a question of these lessons (`course`: of these course lessons, for course entries). */
+export function parseLog(text: string, lessons?: Record<string, Lesson>, course?: Record<string, Lesson>): { ok: true; entries: GuessEntry[] } | { ok: false; error: string } {
   let v: unknown;
   try {
     v = JSON.parse(text);
@@ -136,7 +146,7 @@ export function parseLog(text: string, lessons?: Record<string, Lesson>): { ok: 
   const bad = f.entries.findIndex((e) => !isEntry(e));
   if (bad >= 0) return { ok: false, error: t('Entry {n} has a bad format.', { n: bad + 1 }) };
   if (lessons) {
-    const off = (f.entries as GuessEntry[]).findIndex((e) => !fitsLesson(e, lessons));
+    const off = (f.entries as GuessEntry[]).findIndex((e) => !fitsLesson(e, lessons, course));
     if (off >= 0) return { ok: false, error: t('Entry {n} does not match any current question or option.', { n: off + 1 }) };
   }
   return { ok: true, entries: f.entries as GuessEntry[] };

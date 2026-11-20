@@ -15,7 +15,7 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 - **"Why it happened".** After every run, the simulator tells the story of the run in time order: overload, retries that multiply the load, failures, recovery or a stuck system.
 - **16 kinds of component, and every parameter can be changed.** Load balancer, API server, cache, database, queue, CDN and more: instances, concurrency, timeouts, retries, circuit breakers, hit rates.
 - **Custom services and presets.** A service that is not in the catalog (search, a payment provider, email) is a custom service: you give its name, icon, service time, capacity, error rate, calls and price per instance. Save any component with its settings as a preset; your presets are in the palette, kept in this browser, and can be exported to a file.
-- **47 examples.** Retry storm, cache stampede, gray failure, split brain, a bad config push, poison messages in a FIFO queue, a region cutover, and more. Each one has a scenario and says what to look at.
+- **48 examples.** Retry storm, cache stampede, gray failure, split brain, a bad config push, poison messages in a FIFO queue, a region cutover, and more. Each one has a scenario and says what to look at.
 - **On-call practice (8 incidents).** A fault is hidden. You see only the users' error rate and p99, pay points to open a component's metrics, name the component and the kind of fault, then fix the design on the canvas.
 - **Design briefs (6).** Start from requirements and an almost empty canvas: you choose the components and their sizes, then a run shows if the design holds. The brief gives how fast each part is, so a smaller number is not an answer. A reference design is one click away.
 - **Constraint problems (3).** Meet error-rate and p99 targets inside a monthly budget and a complexity limit. Every run shows its cost at sample prices.
@@ -45,7 +45,7 @@ The examples are simplified models. Some refer to public information about well-
   <img alt="After a run, the simulator tells the story of the run in time order" src="src/site/media/why-en-light.webp">
 </picture>
 
-### 47 examples
+### 48 examples
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/site/media/examples-en-dark.webp">

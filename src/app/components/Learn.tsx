@@ -11,6 +11,7 @@ import { t } from '../../i18n/index.ts';
 import { SlaSection } from './Sla.tsx';
 import { CostSection } from './Constraints.tsx';
 import { useCauseHidden } from './OnCall.tsx';
+import { COURSE } from '../courseBridge.ts';
 
 /** Each part of the lesson is its own block, divided by a line. */
 const SECTION = 'border-t border-[var(--line)] pt-3 mt-4 first:mt-0 first:border-t-0 first:pt-0';
@@ -208,9 +209,11 @@ export function LessonJudge(): null {
 /** Questions before the run (a lesson's example), the story after it (any design), then challenges. */
 export function Learn() {
   const example = useApp((s) => s.example);
-  const lesson = example ? LESSONS[example] : undefined;
+  // in the course page the page itself shows the questions and the challenges
+  const lesson = example && !COURSE ? LESSONS[example] : undefined;
   const run = useRun();
   const hidden = useCauseHidden();
+  if (COURSE && !run) return <div className="muted text-[14px] leading-relaxed">{t('Press "Run". When the run ends, this tab shows the SLA, the cost, and what happened, in time order.')}</div>;
   if (!lesson && !run)
     return (
       <div>

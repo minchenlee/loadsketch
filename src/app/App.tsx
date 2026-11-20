@@ -18,7 +18,8 @@ import { t } from '../i18n/index.ts';
 import { PracticeOverlay } from './components/Practice.tsx';
 import { PhoneDrawer, PhoneTabs } from './components/Phone.tsx';
 import { CompareHost } from './components/Compare.tsx';
-import { isPhone, usePhone } from './phone.ts';
+import { isPhone, sheetOf, usePhone } from './phone.ts';
+import { useCourseBridge } from './courseBridge.ts';
 
 /**
  * Open the design and scenario of a share link (#s=…). A comparison link (#c=…) puts the baseline
@@ -150,6 +151,7 @@ export function App() {
   usePanelKeys();
   useUndoKeys();
   useLoop();
+  useCourseBridge();
   // Remounted when the language changes, so every text is made again; the hooks above stay.
   const lang = useApp((s) => s.lang);
   return <Shell key={lang} />;
@@ -157,9 +159,10 @@ export function App() {
 
 function Shell() {
   const saved = useApp((s) => s.panels);
-  const panels = EMBED ? { left: false, right: EMBED.right, bottom: EMBED.bottom } : saved;
+  const courseBottom = useApp((s) => s.courseBottom);
+  const panels = EMBED ? { left: false, right: EMBED.right, bottom: courseBottom ?? EMBED.bottom } : saved;
   const phone = usePhone() && (!EMBED || EMBED.phone);
-  const drawer = useApp((s) => s.drawer);
+  const drawer = useApp(sheetOf);
   const limitOpen = useApp((s) => s.limitOpen);
   // a phone: the canvas alone, with the panels in drawers that come up from the bottom
   if (phone)
