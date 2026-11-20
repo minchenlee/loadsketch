@@ -17,6 +17,16 @@ export function isLocaleFile(fileOrPath: string): boolean {
   return name.endsWith('.ts') && !name.endsWith('.d.ts');
 }
 
+/** Checks that `tag` is a syntactically valid BCP 47 locale tag accepted by Intl APIs. */
+export function isValidBcp47(tag: string): boolean {
+  if (tag.trim() !== tag || tag.length === 0) return false;
+  try {
+    return Intl.getCanonicalLocales(tag).length === 1;
+  } catch {
+    return false;
+  }
+}
+
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /** Extracts and validates a locale module export. Returns an error mentioning `file` on failure. */
@@ -42,8 +52,32 @@ export function parseLocaleModule(mod: unknown, file: string): { ok: true; local
     }
   }
 
-  if (candidate.code === 'en') {
-    return { ok: false, error: `${file}: locale code "en" is reserved for the built-in source language` };
+  const code = candidate.code as string;
+  const intlLocale = candidate.intlLocale as string;
+  const htmlLang = candidate.htmlLang as string;
+
+  for (const [field, val] of [
+    ['code', code],
+    ['intlLocale', intlLocale],
+    ['htmlLang', htmlLang],
+  ] as const) {
+    if (!isValidBcp47(val)) {
+      return { ok: false, error: `${file}: "${field}" (${JSON.stringify(val)}) is not a valid BCP 47 locale tag` };
+    }
+  }
+
+  const baseName = file.split(/[\\/]/).pop() ?? file;
+  const stem = baseName.replace(/\.ts$/, '');
+  if (code !== stem) {
+    return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} must match filename ${JSON.stringify(`${stem}.ts`)}` };
+  }
+
+  const lower = code.toLowerCase();
+  if (lower === 'en') {
+    return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} conflicts with built-in "en"` };
+  }
+  if (lower === 'zh-tw' && code !== 'zh-TW') {
+    return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} conflicts with built-in "zh-TW"` };
   }
 
   if (typeof candidate.wordSeparator !== 'string') {
@@ -63,10 +97,10 @@ export function parseLocaleModule(mod: unknown, file: string): { ok: true; local
   return {
     ok: true,
     locale: {
-      code: candidate.code as string,
+      code,
       label: candidate.label as string,
-      intlLocale: candidate.intlLocale as string,
-      htmlLang: candidate.htmlLang as string,
+      intlLocale,
+      htmlLang,
       wordSeparator: candidate.wordSeparator,
       messages: candidate.messages as Record<string, string>,
     },

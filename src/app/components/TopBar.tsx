@@ -155,7 +155,7 @@ export function TopBar() {
           sep: idx === 0 ? phone : false,
           icon: idx === 0 ? <Languages size={14} /> : undefined,
           onSelect: () => setLang(loc.code),
-          'data-testid': idx === 0 ? 'lang' : `lang-${loc.code}`,
+          'data-testid': `lang-${loc.code}`,
         }));
   const moreItems: MenuItem[] = [
     ...(phone ? phoneItems : []),

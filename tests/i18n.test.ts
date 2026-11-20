@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ZH } from '../src/i18n/zh-TW.ts';
-import { getAllLocales, getLocaleInfo, pickLang, setLang, stripContext, t } from '../src/i18n/index.ts';
+import { LANGS, getAllLocales, getLang, getLocaleInfo, loadLocalesFromDirForTest, pickLang, setLang, stripContext, t } from '../src/i18n/index.ts';
 import { isLocaleFile, parseLocaleModule } from '../src/i18n/locale.ts';
 import { localizeDesign, localizeScenario } from '../src/i18n/content.ts';
 import { simulate } from '../src/engine/index.ts';
@@ -49,8 +49,11 @@ describe('i18n catalog', () => {
     expect(t('主庫')).toBe('Primary');
   });
 
-  it('discovers built-in locales via import.meta.glob and ignores Object.prototype keys in pickLang', () => {
-    expect(getAllLocales().map((l) => l.code)).toEqual(['zh-TW', 'en']);
+  it('discovers built-in locales via import.meta.glob in expected order and ignores Object.prototype keys in pickLang', () => {
+    const codes = getAllLocales().map((l) => l.code);
+    expect(codes).toContain('zh-TW');
+    expect(codes).toContain('en');
+    expect(codes.indexOf('zh-TW')).toBeLessThan(codes.indexOf('en'));
     expect(pickLang('zh_TW')).toBe('zh-TW');
     expect(pickLang('zh-CN')).toBe('zh-TW');
     expect(pickLang('fr-FR')).toBe('en');
@@ -105,16 +108,30 @@ describe('English and Traditional Chinese output', () => {
     if (rawD.description && ZH[rawD.description]) expect(zhD.description).toMatch(CJK);
   });
 
-  it('the CLI prints English with --lang en', () => {
+  it('the CLI prints English with --lang en and ignores LOADSKETCH_LOCALES_DIR env var', () => {
     const out = execFileSync('node', ['cli/loadsketch.ts', 'run', 'examples/designs/priority-shedding.json', '--scenario', 'examples/scenarios/spike.json', '--duration', '20', '--lang', 'en'], { cwd: root, encoding: 'utf8' });
     expect(out).toContain('Bottleneck');
     expect(out.split('\n').filter((l) => CJK.test(l))).toEqual([]);
+
+    const emptyDir = mkdtempSync(join(tmpdir(), 'loadsketch-ignore-env-'));
+    try {
+      const helpRes = spawnSync('node', ['cli/loadsketch.ts', '--help'], {
+        cwd: root,
+        env: { ...process.env, LOADSKETCH_LOCALES_DIR: emptyDir },
+        encoding: 'utf8',
+      });
+      expect(helpRes.status).toBe(0);
+      expect(helpRes.stdout).toContain('--lang zh-TW|en');
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
+    }
   });
 });
 
 describe('adding a third language (isolated fixture)', () => {
-  it('auto-discovers a third language in a fresh process, translates matched keys including SAME_IN_ZH, falls back to English, and checks with i18n-extract', () => {
+  it('discovers a third language via the Node directory loader, translates matched keys including SAME_IN_ZH, falls back to English, and checks with i18n-extract', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'loadsketch-i18n-'));
+    let restore: (() => void) | undefined;
     try {
       const fakeLangCode = 'xx-test';
       const keyWithPlaceholder = 'Second {at}: traffic {m}×{span}';
@@ -136,41 +153,24 @@ describe('adding a third language (isolated fixture)', () => {
         'utf8',
       );
 
-      // 1. Real Node discovery path in a fresh process with LOADSKETCH_LOCALES_DIR
-      const probe = `
-        import assert from 'node:assert/strict';
-        import { LANGS, getAllLocales, getLang, getLocaleInfo, pickLang, setLang, t } from './src/i18n/index.ts';
-        assert.ok(LANGS.includes('xx-test'), 'LANGS should include xx-test');
-        assert.ok(getAllLocales().some((l) => l.code === 'xx-test' && l.label === 'TestLang'));
-        assert.equal(pickLang('xx-test'), 'xx-test');
-        assert.equal(pickLang('xx_TEST'), 'xx-test');
-        assert.equal(pickLang('xx-custom'), 'xx-test');
-        assert.equal(pickLang('toString'), 'en');
-        setLang('xx-test');
-        assert.equal(getLang(), 'xx-test');
-        assert.equal(getLocaleInfo().wordSeparator, ' ');
-        assert.equal(t(${JSON.stringify(keyWithPlaceholder)}, { at: 10, m: 2, span: '' }), 'FAKE_TRANSLATION 10 2');
-        assert.equal(t(${JSON.stringify(sameInZhKey)}, { v: 500 }), 'P99 <= 500');
-        assert.equal(t('Off@@not-used'), 'Off');
-        assert.equal(t('Database@@kind'), 'Database');
-        assert.equal(t('主庫'), 'Primary');
-        assert.equal(t('壓測@@臺北'), '壓測@@臺北');
-      `;
-      const runtimeRes = spawnSync('node', ['--input-type=module', '-e', probe], {
-        cwd: root,
-        env: { ...process.env, LOADSKETCH_LOCALES_DIR: dir },
-        encoding: 'utf8',
-      });
-      expect(runtimeRes.status, runtimeRes.stderr).toBe(0);
+      // 1. Real Node directory discovery path via Vitest-only loader helper (no env override)
+      restore = await loadLocalesFromDirForTest(dir);
+      expect(LANGS).toContain(fakeLangCode);
+      expect(getAllLocales().some((l) => l.code === fakeLangCode && l.label === 'TestLang')).toBe(true);
+      expect(pickLang(fakeLangCode)).toBe(fakeLangCode);
+      expect(pickLang('xx_TEST')).toBe(fakeLangCode);
+      expect(pickLang('xx-custom')).toBe(fakeLangCode);
+      expect(pickLang('toString')).toBe('en');
 
-      // CLI --help reflects discovered languages
-      const helpRes = spawnSync('node', ['cli/loadsketch.ts', '--help'], {
-        cwd: root,
-        env: { ...process.env, LOADSKETCH_LOCALES_DIR: dir },
-        encoding: 'utf8',
-      });
-      expect(helpRes.status).toBe(0);
-      expect(helpRes.stdout).toContain('zh-TW|en|xx-test');
+      setLang(fakeLangCode);
+      expect(getLang()).toBe(fakeLangCode);
+      expect(getLocaleInfo().wordSeparator).toBe(' ');
+      expect(t(keyWithPlaceholder, { at: 10, m: 2, span: '' })).toBe('FAKE_TRANSLATION 10 2');
+      expect(t(sameInZhKey, { v: 500 })).toBe('P99 <= 500');
+      expect(t('Off@@not-used')).toBe('Off');
+      expect(t('Database@@kind')).toBe('Database');
+      expect(t('主庫')).toBe('Primary');
+      expect(t('壓測@@臺北')).toBe('壓測@@臺北');
 
       // 2. i18n-extract --check exits 0, warns about missing keys, and accepts SAME_IN_ZH keys
       const checkRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dir], {
@@ -191,54 +191,110 @@ describe('adding a third language (isolated fixture)', () => {
       expect(strictRes.stderr).toContain(fakeLangCode);
       expect(strictRes.stderr).toContain('missing translation(s)');
 
-      // 4. i18n-extract --add creates a valid scaffold with metadata and full English IDs (including SAME_IN_ZH)
-      const addRes = spawnSync('node', ['scripts/i18n-extract.ts', '--add', 'zz-new', '--locales-dir', dir], {
+      // 4. Rejects mutually exclusive --check --add flags without writing file
+      const mutexRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--add', 'pt-BR', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(mutexRes.status).not.toBe(0);
+      expect(existsSync(join(dir, 'pt-BR.ts'))).toBe(false);
+
+      // 5. i18n-extract --add creates a valid scaffold with metadata and full English IDs (including SAME_IN_ZH)
+      const addRes = spawnSync('node', ['scripts/i18n-extract.ts', '--add', 'pt-BR', '--locales-dir', dir], {
         cwd: root,
         encoding: 'utf8',
       });
       expect(addRes.status, addRes.stderr).toBe(0);
-      const addedFile = join(dir, 'zz-new.ts');
+      const addedFile = join(dir, 'pt-BR.ts');
       expect(existsSync(addedFile)).toBe(true);
       const addedText = readFileSync(addedFile, 'utf8');
       expect(addedText).toContain('machine-translated, not proofread');
-      expect(addedText).toContain(`code: "zz-new"`);
+      expect(addedText).toContain(`code: "pt-BR"`);
       expect(addedText).toContain(`"p99 ≤ {v}": ""`);
       expect(addedText).toContain(`"Second {at}: traffic {m}×{span}": ""`);
+
+      // Re-running --add for an existing file fails via wx flag without overwriting
+      const addDupRes = spawnSync('node', ['scripts/i18n-extract.ts', '--add', 'pt-BR', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(addDupRes.status).not.toBe(0);
+      expect(addDupRes.stderr).toContain('already exists');
 
       const checkAdded = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dir], {
         cwd: root,
         encoding: 'utf8',
       });
       expect(checkAdded.status).toBe(0);
-      expect(checkAdded.stderr).toContain('zz-new');
+      expect(checkAdded.stderr).toContain('pt-BR');
     } finally {
+      restore?.();
+      setLang('zh-TW');
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('rejects invalid locale files with filename in checker, skips and warns at runtime, and ignores non-.ts files', () => {
+  it('rejects invalid metadata (BCP 47, filename stem, built-in case conflicts, duplicates), nonexistent --locales-dir, and non-.ts files', async () => {
     expect(isLocaleFile('ja.ts')).toBe(true);
     expect(isLocaleFile('ja.js')).toBe(false);
     expect(isLocaleFile('ja.d.ts')).toBe(false);
-    expect(parseLocaleModule({ default: { code: 'bad', label: 'Bad', intlLocale: 'bad', htmlLang: 'bad', messages: {} } }, 'bad.ts')).toEqual({
+
+    // Missing wordSeparator
+    expect(parseLocaleModule({ default: { code: 'bad', label: 'Bad', intlLocale: 'en-US', htmlLang: 'en', messages: {} } }, 'bad.ts')).toEqual({
       ok: false,
       error: 'bad.ts: "wordSeparator" must be a string',
     });
+    // Non-string message value
     expect(
       parseLocaleModule(
-        { default: { code: 'bad', label: 'Bad', intlLocale: 'bad', htmlLang: 'bad', wordSeparator: ' ', messages: { Run: 123 } } },
+        { default: { code: 'bad', label: 'Bad', intlLocale: 'en-US', htmlLang: 'en', wordSeparator: ' ', messages: { Run: 123 } } },
         'bad.ts',
       ),
     ).toEqual({
       ok: false,
       error: 'bad.ts: messages["Run"] must be a string',
     });
+    // Invalid BCP 47 tag (underscore ja_JP would throw RangeError in Intl toLocaleTimeString)
+    expect(
+      parseLocaleModule(
+        { default: { code: 'ja', label: '日本語', intlLocale: 'ja_JP', htmlLang: 'ja', wordSeparator: '', messages: {} } },
+        'ja.ts',
+      ).ok,
+    ).toBe(false);
+    // Code must match filename stem
+    expect(
+      parseLocaleModule(
+        { default: { code: 'fr', label: 'Français', intlLocale: 'fr-FR', htmlLang: 'fr', wordSeparator: ' ', messages: {} } },
+        'ja.ts',
+      ).ok,
+    ).toBe(false);
+    // Built-in case-only conflicts
+    expect(
+      parseLocaleModule(
+        { default: { code: 'EN', label: 'English', intlLocale: 'en-US', htmlLang: 'en', wordSeparator: ' ', messages: {} } },
+        'EN.ts',
+      ).ok,
+    ).toBe(false);
+    expect(
+      parseLocaleModule(
+        { default: { code: 'zh-tw', label: '繁體中文', intlLocale: 'zh-TW', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} } },
+        'zh-tw.ts',
+      ).ok,
+    ).toBe(false);
+
+    // Nonexistent --locales-dir fails instead of silently passing
+    const missingDirRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', join(tmpdir(), 'loadsketch-does-not-exist-xyz')], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    expect(missingDirRes.status).not.toBe(0);
 
     const dir = mkdtempSync(join(tmpdir(), 'loadsketch-bad-locale-'));
+    let restore: (() => void) | undefined;
     try {
       writeFileSync(
         join(dir, 'bad-locale.ts'),
-        `export default { code: 'bad', label: 'Bad', intlLocale: 'bad', htmlLang: 'bad', messages: { Run: 'X' } };\n`,
+        `export default { code: 'bad-locale', label: 'Bad', intlLocale: 'ja_JP', htmlLang: 'ja', wordSeparator: ' ', messages: { Run: 'X' } };\n`,
         'utf8',
       );
       writeFileSync(
@@ -256,21 +312,44 @@ describe('adding a third language (isolated fixture)', () => {
       expect(checkRes.stderr).toContain('bad-locale.ts');
       expect(checkRes.stderr).not.toContain('ignored.js');
 
+      // Duplicate locale code across directories warns and skips at runtime
+      const dupDir = mkdtempSync(join(tmpdir(), 'loadsketch-dup-locale-'));
+      let dupRestore: (() => void) | undefined;
+      try {
+        writeFileSync(
+          join(dupDir, 'zh-TW.ts'),
+          `export default { code: 'zh-TW', label: '繁體中文', intlLocale: 'zh-TW', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} };\n`,
+          'utf8',
+        );
+        const dupWarns: string[] = [];
+        const origWarn = console.warn;
+        console.warn = (...args: unknown[]) => dupWarns.push(args.map(String).join(' '));
+        try {
+          dupRestore = await loadLocalesFromDirForTest(dupDir);
+        } finally {
+          console.warn = origWarn;
+        }
+        expect(dupWarns.some((w) => w.includes('duplicate locale code'))).toBe(true);
+      } finally {
+        dupRestore?.();
+        rmSync(dupDir, { recursive: true, force: true });
+      }
+
       // Runtime Node loader skips invalid file with console.warn(filename) and ignores .js
-      const probe = `
-        import assert from 'node:assert/strict';
-        import { LANGS } from './src/i18n/index.ts';
-        assert.deepEqual(LANGS, ['zh-TW', 'en']);
-      `;
-      const runtimeRes = spawnSync('node', ['--input-type=module', '-e', probe], {
-        cwd: root,
-        env: { ...process.env, LOADSKETCH_LOCALES_DIR: dir },
-        encoding: 'utf8',
-      });
-      expect(runtimeRes.status, runtimeRes.stderr).toBe(0);
-      expect(runtimeRes.stderr).toContain('bad-locale.ts');
-      expect(runtimeRes.stderr).not.toContain('ignored.js');
+      const warns: string[] = [];
+      const origWarn = console.warn;
+      console.warn = (...args: unknown[]) => warns.push(args.map(String).join(' '));
+      try {
+        restore = await loadLocalesFromDirForTest(dir);
+      } finally {
+        console.warn = origWarn;
+      }
+      expect(LANGS).not.toContain('bad-locale');
+      expect(LANGS).not.toContain('ignored');
+      expect(warns.some((w) => w.includes('bad-locale.ts'))).toBe(true);
+      expect(warns.some((w) => w.includes('ignored.js'))).toBe(false);
     } finally {
+      restore?.();
       rmSync(dir, { recursive: true, force: true });
     }
   });

@@ -5,27 +5,71 @@
 //   --check: exit 1 if zh-TW.ts is out of date, placeholders mismatch, or a locale file is invalid; warn when entries lack translation
 //   --strict: with --check, also exit 1 when any entry lacks translation (for zh-TW and any other locale)
 //   --add <code>: create src/i18n/locales/<code>.ts with complete metadata and all English message ids
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CATEGORY_LABEL, EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { ZH } from '../src/i18n/zh-TW.ts';
 import { SAME_IN_ZH } from '../src/i18n/same.ts';
-import { isLocaleFile, parseLocaleModule } from '../src/i18n/locale.ts';
+import { isLocaleFile, isValidBcp47, parseLocaleModule } from '../src/i18n/locale.ts';
 
 const root = join(import.meta.dirname, '..');
 
-function getFlagValue(name: string): string | undefined {
-  const prefix = `--${name}=`;
-  for (let i = 2; i < process.argv.length; i++) {
-    const arg = process.argv[i];
-    if (arg.startsWith(prefix)) return arg.slice(prefix.length);
-    if (arg === `--${name}` && i + 1 < process.argv.length && !process.argv[i + 1].startsWith('--')) {
-      return process.argv[i + 1];
+function parseCliArgs(argv: string[]) {
+  let isCheck = false;
+  let strict = false;
+  let addCode: string | undefined;
+  let hasAdd = false;
+  let localesDirArg: string | undefined;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--check') {
+      isCheck = true;
+    } else if (arg === '--strict') {
+      strict = true;
+    } else if (arg === '--add' || arg.startsWith('--add=')) {
+      hasAdd = true;
+      if (arg.startsWith('--add=')) {
+        addCode = arg.slice('--add='.length);
+      } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+        addCode = argv[++i];
+      } else {
+        console.error('--add requires a locale code (for example: --add ja)');
+        process.exit(1);
+      }
+    } else if (arg === '--locales-dir' || arg.startsWith('--locales-dir=')) {
+      if (arg.startsWith('--locales-dir=')) {
+        localesDirArg = arg.slice('--locales-dir='.length);
+      } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+        localesDirArg = argv[++i];
+      } else {
+        console.error('--locales-dir requires a directory path');
+        process.exit(1);
+      }
+    } else {
+      console.error(`unknown argument: ${arg}`);
+      process.exit(1);
     }
   }
-  return undefined;
+
+  if (hasAdd && (isCheck || strict)) {
+    console.error('--add cannot be combined with --check or --strict');
+    process.exit(1);
+  }
+
+  const localesDir = localesDirArg !== undefined ? resolve(process.cwd(), localesDirArg) : join(root, 'src/i18n/locales');
+  if (localesDirArg !== undefined) {
+    if (!existsSync(localesDir) || !statSync(localesDir).isDirectory()) {
+      console.error(`locales directory does not exist: ${localesDir}`);
+      process.exit(1);
+    }
+  }
+
+  return { isCheck, strict, hasAdd, addCode, localesDir };
 }
+
+const { isCheck, strict, hasAdd, addCode, localesDir } = parseCliArgs(process.argv.slice(2));
 
 const allIds = new Set<string>();
 const add = (s: unknown) => {
@@ -138,23 +182,15 @@ const stripContext = (s: string) => {
 const holes = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
 const sortedAll = [...allIds].sort();
-const localesDirArg = getFlagValue('locales-dir') ?? process.env.LOADSKETCH_LOCALES_DIR;
-const localesDir = localesDirArg ? resolve(root, localesDirArg) : join(root, 'src/i18n/locales');
 
 // --add <code>: generate a new locale file with complete metadata and all English IDs
-const hasAddFlag = process.argv.some((a) => a === '--add' || a.startsWith('--add='));
-if (hasAddFlag) {
-  const code = getFlagValue('add');
-  if (!code || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(code) || code === 'en' || code === 'zh-TW') {
-    console.error(`invalid locale code for --add: ${JSON.stringify(code ?? '')} (expected e.g. ja or pt-BR; not en or zh-TW)`);
+if (hasAdd) {
+  const code = addCode ?? '';
+  if (!isValidBcp47(code) || !/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(code) || code.toLowerCase() === 'en' || code.toLowerCase() === 'zh-tw') {
+    console.error(`invalid locale code for --add: ${JSON.stringify(code)} (expected a BCP 47 tag e.g. ja or pt-BR; not en or zh-TW)`);
     process.exit(1);
   }
-  mkdirSync(localesDir, { recursive: true });
   const target = join(localesDir, `${code}.ts`);
-  if (existsSync(target)) {
-    console.error(`${target} already exists`);
-    process.exit(1);
-  }
   const msgLines = sortedAll.map((k) => `    ${JSON.stringify(k)}: "",`);
   const content =
     `// Locale catalog for ${code}. Empty values ("") fall back to English.\n` +
@@ -170,7 +206,17 @@ if (hasAddFlag) {
     `  messages: {\n${msgLines.join('\n')}\n  },\n` +
     `};\n\n` +
     `export default locale;\n`;
-  writeFileSync(target, content, 'utf8');
+  try {
+    writeFileSync(target, content, { encoding: 'utf8', flag: 'wx' });
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === 'EEXIST') {
+      console.error(`${target} already exists`);
+    } else {
+      console.error(`failed to write ${target}: ${e.message}`);
+    }
+    process.exit(1);
+  }
   console.log(`Created ${target} with ${sortedAll.length} message keys.`);
   process.exit(bad ? 1 : 0);
 }
@@ -225,12 +271,9 @@ function closestDropped(target: string, candidates: string[]): string | null {
   return bestScore >= 0.3 ? best : null;
 }
 
-const isCheck = process.argv.includes('--check');
-const strict = process.argv.includes('--strict');
-
 // Check all locales in localesDir using the shared file rule and validator
 let otherLocalesFailed = false;
-const seenCodes = new Set<string>(['en']);
+const seenLower = new Set<string>(['en']);
 
 if (existsSync(localesDir)) {
   for (const file of readdirSync(localesDir).sort()) {
@@ -250,12 +293,13 @@ if (existsSync(localesDir)) {
       continue;
     }
     const { code, messages: cat } = parsed.locale;
-    if (seenCodes.has(code)) {
+    const lower = code.toLowerCase();
+    if (seenLower.has(lower)) {
       console.error(`${file}: duplicate locale code ${JSON.stringify(code)}`);
       bad++;
       continue;
     }
-    seenCodes.add(code);
+    seenLower.add(lower);
     if (code === 'zh-TW') continue;
 
     let locMissing = 0;

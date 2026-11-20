@@ -338,12 +338,12 @@ test('English UI: no Chinese text, the toggle switches back, an edited design ke
     const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let n = walk.nextNode(); n; n = walk.nextNode()) {
       const s = n.textContent ?? '';
-      if (/[一-鿿]/.test(s) && !n.parentElement?.closest('[data-testid="lang"]')) out.push(s.trim());
+      if (/[一-鿿]/.test(s) && !n.parentElement?.closest('[data-testid="lang"], [data-testid^="lang-"]')) out.push(s.trim());
     }
     for (const el of document.querySelectorAll('[title],[aria-label]')) {
       for (const a of ['title', 'aria-label']) {
         const s = el.getAttribute(a) ?? '';
-        if (/[一-鿿]/.test(s) && !el.closest('[data-testid="lang"]')) out.push(`${a}: ${s}`);
+        if (/[一-鿿]/.test(s) && !el.closest('[data-testid="lang"], [data-testid^="lang-"]')) out.push(`${a}: ${s}`);
       }
     }
     return out;
@@ -354,7 +354,7 @@ test('English UI: no Chinese text, the toggle switches back, an edited design ke
   // switch to Chinese: an unedited example comes back in Chinese
   await page.getByTestId('stop').or(page.getByRole('button', { name: 'Stop' })).first().click();
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang').click();
+  await page.getByTestId('lang-zh-TW').or(page.getByTestId('lang')).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
   await expect(page.getByTestId('run')).toContainText('執行');
   await expect(page.locator('[data-node]').first()).toContainText(/[一-鿿]/);
@@ -370,7 +370,7 @@ test('English UI: no Chinese text, the toggle switches back, an edited design ke
   const view = () => page.locator('.react-flow__viewport').getAttribute('style');
   const before = await view();
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang').click();
+  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
   await expect(page.getByTestId('run')).toContainText('Run');
   await expect(page.locator('[data-node]').filter({ hasText: '我的入口' })).toHaveCount(1);
   // the other, unedited labels are English again, and the edited one stays
@@ -390,7 +390,7 @@ test('a language change during a run: late messages from the stopped run are dro
   await page.goto('/app/?example=three-tier&scenario=spike&speed=10&autorun=1&lang=en');
   await waitForClock(page, 3);
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang').click();
+  await page.getByTestId('lang-zh-TW').or(page.getByTestId('lang')).click();
   await page.waitForTimeout(1500);
   const st = await page.evaluate(() => {
     const s = (window as unknown as { __loadsketch: { getState(): { status: string; result: unknown; timeline: unknown[]; windows: unknown[] } } }).__loadsketch.getState();
@@ -596,7 +596,7 @@ test('undo review fixes', async ({ page }) => {
   await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): St } }).__loadsketch.getState().updateNode('api', { params: { instances: 8 } }));
   expect((await st()).past).toBe(1);
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang').click();
+  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
   expect((await st()).past).toBe(0);
   await expect(page.getByTestId('undo')).toBeDisabled();
 });
@@ -678,7 +678,7 @@ test('SLA: availability against the SLO, the budget, and a changed target', asyn
   await page.screenshot({ path: join(SHOTS, 'sla.png') });
   // English: no Chinese in the SLA texts
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang').click();
+  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
   await page.getByRole('button', { name: /^(Run|Run again)$/ }).click();
   await page.getByRole('button', { name: 'Skip to end' }).click();
   await expect(page.getByTestId('sla-summary')).toContainText('Availability');
@@ -1346,11 +1346,11 @@ test('constraints: cost of a run, then a problem judged on limits; a passed run 
   // a language change translates the problem's design too
   await page.getByTestId('problem-start-solo-shortener').click();
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang').click();
+  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   expect(await store((s) => s.doc.name)).toBe('A URL shortener run by one person');
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang').click();
+  await page.getByTestId('lang-zh-TW').or(page.getByTestId('lang')).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
   expect(await store((s) => s.doc.name)).toBe('一個人顧的短網址');
   // another design loaded: the problem is over
@@ -1849,8 +1849,10 @@ test('intro site: it opens the simulator, and its live panels are the simulator 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('site-zoom')).toHaveCount(0);
   expect(await page.evaluate(() => document.getElementById('root')!.inert)).toBe(false);
-  // the language button changes the page text
-  await page.getByTestId('site-lang').click();
+  // the language button cycles languages until Traditional Chinese
+  while ((await page.locator('html').getAttribute('lang')) !== 'zh-Hant') {
+    await page.getByTestId('site-lang').click();
+  }
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('畫出系統 灌流量 看哪裡先壞');
   await expect(carousel.getByRole('img', { name: '從需求開始設計' })).toHaveAttribute('src', /brief-zh-light/);
   // the page does not scroll sideways on a phone
