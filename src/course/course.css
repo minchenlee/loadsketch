@@ -203,10 +203,6 @@ html.course #root {
   font-variant-numeric: tabular-nums;
   overflow-wrap: break-word;
 }
-.course-calc-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  overflow-wrap: anywhere;
-}
 :lang(en) .course-calc-title {
   text-transform: uppercase;
   letter-spacing: 0.025em;

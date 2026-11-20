@@ -252,8 +252,7 @@ function RunButton({ status, clock, onRun, onSkip }: { status: Status; clock: Cl
   );
 }
 
-const CJK = /[\u3000-\u303f\u4e00-\u9fff\uf900-\ufaff]/;
-const NUM_UNIT = /(?:\b\d+(?:\.\d+)?%?\s+(?:(?:requests|reads|writes)\/s|ms\b|s\b|servers?|slots?|connections?|messages?|minutes?|rounds?|times?|uploads?|retries\b|busy\b|at a time\b|a second\b|(?:個請求|個槽|條連線|次讀取|次寫入|分鐘|忙碌|在忙|[台個秒輪則倍條次分]))|(?:超過|more than)\s+\d+(?:\.\d+)?)/g;
+const NUM_UNIT = /(?:\b\d+(?:\.\d+)?%?\s+(?:(?:requests?|reads?|writes?)(?:\/s)?\b|ms\b|s\b|servers?|slots?|connections?|messages?|minutes?|rounds?|times?|uploads?|retries\b|busy\b|at a time\b|a second\b|(?:個請求|個槽|條連線|次讀取|次寫入|分鐘|忙碌|在忙|[台個秒輪則倍條次分]))|(?:超過|more than)\s+\d+(?:\.\d+)?)/g;
 
 /** Wrap `<number> <unit>` pairs in nowrap spans so line breaks never split a number from its unit. */
 function renderCalcLine(line: string): React.ReactNode {
@@ -300,19 +299,19 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
       )}
       <dl className="course-answer-meta mt-2">
         {guess && mine !== answer && (
-          <div className="course-answer-row">
-            <dt className="faint">{t('Your guess')}</dt>
+          <div className="course-answer-row" data-answer-field="guess">
+            <dt className="muted">{t('Your guess')}</dt>
             <dd>{t(guess.text)}</dd>
           </div>
         )}
         {right && (
-          <div className="course-answer-row">
-            <dt className="faint">{t('Answer')}</dt>
+          <div className="course-answer-row" data-answer-field="answer">
+            <dt className="muted">{t('Answer')}</dt>
             <dd>{t(right.text)}</dd>
           </div>
         )}
-        <div className="course-answer-row">
-          <dt className="faint">{t('Measured')}</dt>
+        <div className="course-answer-row" data-answer-field="measured">
+          <dt className="muted">{t('Measured')}</dt>
           <dd className="num">{q.measured(run)}</dd>
         </div>
       </dl>
@@ -324,14 +323,9 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
             {t('The arithmetic')}
           </div>
           <div className="space-y-0.5">
-            {q.calc.map((line, k) => {
-              const s = t(line);
-              return (
-                <div key={k} className={CJK.test(s) ? undefined : 'course-calc-mono'}>
-                  {renderCalcLine(s)}
-                </div>
-              );
-            })}
+            {q.calc.map((line, k) => (
+              <div key={k}>{renderCalcLine(t(line))}</div>
+            ))}
           </div>
         </div>
       )}

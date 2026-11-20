@@ -59,9 +59,13 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   // the run happens in the frame; the answers are read from that run
   await page.getByTestId('course-run').click();
   await expect(page.getByTestId('course-answers')).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId('course-answer-recover')).toContainText('Measured');
+  const recoverMeasured = page.getByTestId('course-answer-recover').locator('[data-answer-field="measured"]');
+  await expect(recoverMeasured.locator('dt')).toHaveText('Measured');
+  await expect(recoverMeasured.locator('dd')).toContainText('No recovery before the end');
   await expect(page.getByTestId('course-answer-recover')).toHaveAttribute('data-right', 'true');
-  await expect(page.getByTestId('course-answer-amp')).toContainText('Measured');
+  const ampMeasured = page.getByTestId('course-answer-amp').locator('[data-answer-field="measured"]');
+  await expect(ampMeasured.locator('dt')).toHaveText('Measured');
+  await expect(ampMeasured.locator('dd')).toContainText(/At most \d/);
   // the frame got the guesses too, as in the simulator (its guess log records them)
   const guesses = await frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { guesses: Record<string, string> } } }).__loadsketch.getState().guesses);
   expect(guesses).toEqual({ recover: 'never', amp: 'x3' });
@@ -126,7 +130,9 @@ test('course: lesson 2.1 from its course file — guess, run, answers from the r
   await page.getByTestId('course-next').click();
   await page.getByTestId('course-run').click();
   await expect(page.getByTestId('course-answer-hit')).toContainText('Hit ratio', { timeout: 60_000 });
-  await expect(page.getByTestId('course-answer-db-share')).toContainText('Measured');
+  const dbMeasured = page.getByTestId('course-answer-db-share').locator('[data-answer-field="measured"]');
+  await expect(dbMeasured.locator('dt')).toHaveText('Measured');
+  await expect(dbMeasured.locator('dd')).toContainText(/\d+ of every 100 requests reach the database/);
   expect(errors).toEqual([]);
 });
 
@@ -345,7 +351,9 @@ test('course: a second guess on the same example waits for its own run (2.4)', a
   // the try step shows the answer to the second guess, from the run with the change
   await expect(page.getByTestId('course-answer-primary-busy')).toBeVisible({ timeout: 60_000 });
   // with the 200 ms limit every read goes to the primary: 10% to 30% busy (without the change, under 10%)
-  await expect(page.getByTestId('course-answer-primary-busy')).toContainText(/Answer\s*10% to 30%/);
+  const primaryAnswer = page.getByTestId('course-answer-primary-busy').locator('[data-answer-field="answer"]');
+  await expect(primaryAnswer.locator('dt')).toHaveText('Answer');
+  await expect(primaryAnswer.locator('dd')).toHaveText('10% to 30%');
 });
 
 test('course: a run again shows the answer of that run; the score keeps the first', async ({ page }) => {
@@ -358,7 +366,9 @@ test('course: a run again shows the answer of that run; the score keeps the firs
   await page.getByTestId('course-next').click();
   await page.getByTestId('course-run').click();
   const recover = page.getByTestId('course-answer-recover');
-  await expect(recover).toContainText(/Answer\s*It stays broken/, { timeout: 60_000 });
+  const recoverAnswer = recover.locator('[data-answer-field="answer"]');
+  await expect(recoverAnswer.locator('dt')).toHaveText('Answer');
+  await expect(recoverAnswer.locator('dd')).toHaveText('It stays broken', { timeout: 60_000 });
   // fix the storm (a retry budget on every connection that retries) and run again on this page
   await frame.locator('body').evaluate(() => {
     type E = { id: string; data?: { edge: { retries?: number } } };
@@ -369,7 +379,7 @@ test('course: a run again shows the answer of that run; the score keeps the firs
   await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
   await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
   // the answer and its explanation follow the run shown; a note says what the score counted
-  await expect(recover).not.toContainText(/Answer\s*It stays broken/);
+  await expect(recoverAnswer.locator('dd')).not.toHaveText('It stays broken');
   await expect(page.getByTestId('course-scored-recover')).toContainText('It stays broken');
   while (!(await page.getByTestId('course-finish').isVisible())) await page.getByTestId('course-next').click();
   // never was right on the first run: the score keeps it
