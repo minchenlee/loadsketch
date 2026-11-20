@@ -89,7 +89,7 @@ export const MEASURES: Record<string, Measure> = {
   },
   throughput: { label: tx('Successful requests per second'), of: (r) => ({ value: r.result.summary.throughputRps }), fmt: (x) => `${Math.round(x)}/s`, better: 'higher' },
   busiest: {
-    label: tx('Busiest component'),
+    label: tx('Busiest component (average)'),
     of: (r) => {
       let best: Reading | null = null;
       for (const n of nodes(r)) if (typeof n.utilization === 'number' && (!best || n.utilization > best.value)) best = { value: n.utilization, who: nameOf(n) };

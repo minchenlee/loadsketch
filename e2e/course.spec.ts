@@ -59,9 +59,9 @@ test('course: a lesson step by step — guess, run in the simulator, see the ans
   // the run happens in the frame; the answers are read from that run
   await page.getByTestId('course-run').click();
   await expect(page.getByTestId('course-answers')).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId('course-answer-recover')).toContainText('Measured:');
+  await expect(page.getByTestId('course-answer-recover')).toContainText('Measured');
   await expect(page.getByTestId('course-answer-recover')).toHaveAttribute('data-right', 'true');
-  await expect(page.getByTestId('course-answer-amp')).toContainText('Measured:');
+  await expect(page.getByTestId('course-answer-amp')).toContainText('Measured');
   // the frame got the guesses too, as in the simulator (its guess log records them)
   const guesses = await frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: { getState: () => { guesses: Record<string, string> } } }).__loadsketch.getState().guesses);
   expect(guesses).toEqual({ recover: 'never', amp: 'x3' });
@@ -126,7 +126,7 @@ test('course: lesson 2.1 from its course file — guess, run, answers from the r
   await page.getByTestId('course-next').click();
   await page.getByTestId('course-run').click();
   await expect(page.getByTestId('course-answer-hit')).toContainText('Hit ratio', { timeout: 60_000 });
-  await expect(page.getByTestId('course-answer-db-share')).toContainText('Measured:');
+  await expect(page.getByTestId('course-answer-db-share')).toContainText('Measured');
   expect(errors).toEqual([]);
 });
 
@@ -345,7 +345,7 @@ test('course: a second guess on the same example waits for its own run (2.4)', a
   // the try step shows the answer to the second guess, from the run with the change
   await expect(page.getByTestId('course-answer-primary-busy')).toBeVisible({ timeout: 60_000 });
   // with the 200 ms limit every read goes to the primary: 10% to 30% busy (without the change, under 10%)
-  await expect(page.getByTestId('course-answer-primary-busy')).toContainText('Answer: 10% to 30%');
+  await expect(page.getByTestId('course-answer-primary-busy')).toContainText(/Answer\s*10% to 30%/);
 });
 
 test('course: a run again shows the answer of that run; the score keeps the first', async ({ page }) => {
@@ -358,7 +358,7 @@ test('course: a run again shows the answer of that run; the score keeps the firs
   await page.getByTestId('course-next').click();
   await page.getByTestId('course-run').click();
   const recover = page.getByTestId('course-answer-recover');
-  await expect(recover).toContainText('Answer: It stays broken', { timeout: 60_000 });
+  await expect(recover).toContainText(/Answer\s*It stays broken/, { timeout: 60_000 });
   // fix the storm (a retry budget on every connection that retries) and run again on this page
   await frame.locator('body').evaluate(() => {
     type E = { id: string; data?: { edge: { retries?: number } } };
@@ -369,7 +369,7 @@ test('course: a run again shows the answer of that run; the score keeps the firs
   await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
   await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
   // the answer and its explanation follow the run shown; a note says what the score counted
-  await expect(recover).not.toContainText('Answer: It stays broken');
+  await expect(recover).not.toContainText(/Answer\s*It stays broken/);
   await expect(page.getByTestId('course-scored-recover')).toContainText('It stays broken');
   while (!(await page.getByTestId('course-finish').isVisible())) await page.getByTestId('course-next').click();
   // never was right on the first run: the score keeps it
@@ -665,7 +665,7 @@ test('course: after a run the step shows what it measured, next to the run befor
   // without a show: p99, failed requests and the busiest component
   await expect(box.locator('[data-measure]')).toHaveCount(3);
   await expect(box.locator('[data-measure="p99"]')).toContainText(/\d/);
-  await expect(box.locator('[data-measure="busiest"]')).toContainText('Busiest component');
+  await expect(box.locator('[data-measure="busiest"]')).toContainText('Busiest component (average)');
   await expect(box.locator('[data-before]')).toHaveCount(0);
   // a second run is compared with the first
   await page.getByTestId('course-run').click();
@@ -715,10 +715,10 @@ test('course: after a language switch, the measurements name components in the n
   await page.getByTestId('course-run').click();
   const busiest = page.getByTestId('course-measured').locator('[data-measure="busiest"]');
   await expect(busiest).toBeVisible({ timeout: 60_000 });
-  await expect(busiest).toContainText(/Busiest component · [A-Za-z]/);
+  await expect(busiest).toContainText(/Busiest component \(average\) · [A-Za-z]/);
   await page.getByTestId('course-lang').click();
   // the label and the component's name are both Chinese now: no English word left in the row
-  await expect(busiest).toContainText('最忙的元件');
+  await expect(busiest).toContainText('最忙的元件（平均）');
   await expect(busiest).not.toContainText(/[A-Za-z]{3,}/);
 });
 

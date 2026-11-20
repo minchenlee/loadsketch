@@ -252,6 +252,28 @@ function RunButton({ status, clock, onRun, onSkip }: { status: Status; clock: Cl
   );
 }
 
+const CJK = /[\u3000-\u303f\u4e00-\u9fff\uf900-\ufaff]/;
+const NUM_UNIT = /(?:\b\d+(?:\.\d+)?%?\s+(?:(?:requests|reads|writes)\/s|ms\b|s\b|servers?|slots?|connections?|messages?|minutes?|rounds?|times?|uploads?|retries\b|busy\b|at a time\b|a second\b|(?:個請求|個槽|條連線|次讀取|次寫入|分鐘|忙碌|在忙|[台個秒輪則倍條次分]))|(?:超過|more than)\s+\d+(?:\.\d+)?)/g;
+
+/** Wrap `<number> <unit>` pairs in nowrap spans so line breaks never split a number from its unit. */
+function renderCalcLine(line: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of line.matchAll(NUM_UNIT)) {
+    const at = m.index ?? 0;
+    if (at > last) parts.push(line.slice(last, at));
+    parts.push(
+      <span key={at} className="whitespace-nowrap">
+        {m[0]}
+      </span>,
+    );
+    last = at + m[0].length;
+  }
+  if (last === 0) return line;
+  if (last < line.length) parts.push(line.slice(last));
+  return parts;
+}
+
 /**
  * One question's answer, read from `run` (the latest run that answers it): the measurement, the
  * answer and the explanation agree. `scored`: the answer of the first run, which the score keeps;
@@ -263,28 +285,58 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
   const right = q.options.find((o) => o.id === answer);
   const guess = q.options.find((o) => o.id === mine);
   return (
-    <div data-testid={`course-answer-${q.id}`} data-right={mine === answer || undefined}>
-      <div className="text-[15px] leading-snug">{t(q.text)}</div>
-      <div className="mt-1.5 flex gap-1.5 text-[15px] font-medium">
-        {mine === undefined ? null : mine === answer ? <CircleCheck size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} /> : <CircleX size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--bad)' }} />}
-        <span>{mine === undefined ? t('Measured: {m}', { m: q.measured(run) }) : mine === answer ? t('Right. Measured: {m}', { m: q.measured(run) }) : t('Not quite. Measured: {m}', { m: q.measured(run) })}</span>
+    <div className="course-answer" data-testid={`course-answer-${q.id}`} data-right={mine === answer || undefined}>
+      <div className="text-[15px] font-semibold leading-snug" style={{ color: 'var(--ink-strong)' }}>
+        {t(q.text)}
       </div>
-      {guess && mine !== answer && <div className="muted mt-0.5 text-[14px]">{t('Your guess: {g}', { g: t(guess.text) })}</div>}
-      {right && <div className="muted mt-0.5 text-[14px]">{t('Answer: {a}', { a: t(right.text) })}</div>}
-      <div className="mt-1 text-[15px] leading-relaxed">{t(q.explainFor?.[answer] || q.explain)}</div>
+      {mine !== undefined && (
+        <div
+          className="mt-2 flex items-center gap-1.5 text-[15px] font-medium"
+          style={{ color: mine === answer ? 'var(--ok-ink)' : 'var(--bad-ink)' }}
+        >
+          {mine === answer ? <CircleCheck size={16} className="shrink-0" style={{ color: 'var(--ok)' }} /> : <CircleX size={16} className="shrink-0" style={{ color: 'var(--bad)' }} />}
+          <span>{mine === answer ? t('Right@@answer') : t('Not quite')}</span>
+        </div>
+      )}
+      <dl className="course-answer-meta mt-2">
+        {guess && mine !== answer && (
+          <div className="course-answer-row">
+            <dt className="faint">{t('Your guess')}</dt>
+            <dd>{t(guess.text)}</dd>
+          </div>
+        )}
+        {right && (
+          <div className="course-answer-row">
+            <dt className="faint">{t('Answer')}</dt>
+            <dd>{t(right.text)}</dd>
+          </div>
+        )}
+        <div className="course-answer-row">
+          <dt className="faint">{t('Measured')}</dt>
+          <dd className="num">{q.measured(run)}</dd>
+        </div>
+      </dl>
+      <p className="course-prose mt-3 text-[15px]">{t(q.explainFor?.[answer] || q.explain)}</p>
       {q.calc && q.calc.length > 0 && (
-        <div className="course-calc mt-2" data-testid={`course-calc-${q.id}`}>
-          <div className="faint mb-1 flex items-center gap-1.5 text-[13px] font-medium uppercase tracking-wide">
+        <div className="course-calc mt-3" data-testid={`course-calc-${q.id}`}>
+          <div className="course-calc-title faint mb-1 flex items-center gap-1.5 text-[13px] font-medium">
             <Calculator size={13} />
             {t('The arithmetic')}
           </div>
-          {q.calc.map((line, k) => (
-            <div key={k}>{t(line)}</div>
-          ))}
+          <div className="space-y-0.5">
+            {q.calc.map((line, k) => {
+              const s = t(line);
+              return (
+                <div key={k} className={CJK.test(s) ? undefined : 'course-calc-mono'}>
+                  {renderCalcLine(s)}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
       {first && (
-        <div className="faint mt-1 text-[14px]" data-testid={`course-scored-${q.id}`}>
+        <div className="faint mt-2.5 text-[14px]" data-testid={`course-scored-${q.id}`}>
           {t('The design changed since the first run. Your score counts that run, whose answer was: {a}', { a: t(first.text) })}
         </div>
       )}
@@ -334,7 +386,7 @@ function ChallengeCard({ c, verdict, passed }: { c: Challenge; verdict: Verdict 
           </span>
         )}
       </div>
-      <div className="mt-1 text-[15px] leading-relaxed">{t(c.text)}</div>
+      <div className="course-prose mt-1 text-[15px]">{t(c.text)}</div>
       {verdict && (
         <ul className="mt-2 space-y-1 text-[15px]" data-testid="course-verdict">
           {verdict.goals.map((g, i) => (
@@ -364,7 +416,7 @@ function ChallengeCard({ c, verdict, passed }: { c: Challenge; verdict: Verdict 
           <Lightbulb size={14} />
           {t('Hint')}
         </summary>
-        <div className="muted mt-1 text-[14px] leading-relaxed">{t(c.hint)}</div>
+        <div className="course-prose muted mt-1 text-[14px]">{t(c.hint)}</div>
       </details>
     </div>
   );
@@ -616,11 +668,11 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const answeredHere = askedHere.filter((x) => answerRuns[x.id]);
   const answers = (run: RunData | undefined) =>
     answeredHere.length > 0 ? (
-      <div className="mt-5 space-y-4" data-testid="course-answers">
+      <div className="mt-5" data-testid="course-answers">
         {answeredHere.map((x) => (
           <Answer key={x.id} q={x} run={answerRuns[x.id]} mine={progress.guesses[x.id]} scored={progress.answers[x.id]} />
         ))}
-        <div className="faint text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</div>
+        <div className="faint mt-5 text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</div>
       </div>
     ) : (
       run && <p className="faint mt-2 text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</p>
@@ -646,17 +698,17 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     case 'read':
       body = (
         <>
-          <p className="text-[16px] leading-relaxed">{t(page.text)}</p>
+          <p className="course-prose text-[16px]">{t(page.text)}</p>
           {page.key && (
             <div className="course-key mt-3" data-testid="course-key">
               <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide">
                 <KeyRound size={13} />
                 {t('Key idea')}
               </div>
-              <div className="text-[16px] leading-relaxed">{t(page.key)}</div>
+              <div className="course-prose text-[16px]">{t(page.key)}</div>
             </div>
           )}
-          {i === 0 && <p className="muted mt-3 text-[15px] leading-relaxed">{t('How a lesson goes: guess the answers first, then run the simulator. The answers are read from that run. Then change the design to pass the challenges.')}</p>}
+          {i === 0 && <p className="course-prose muted mt-3 text-[15px]">{t('How a lesson goes: guess the answers first, then run the simulator. The answers are read from that run. Then change the design to pass the challenges.')}</p>}
         </>
       );
       break;
@@ -696,7 +748,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       const run = runs[ctxKey(ctx)];
       body = (
         <>
-          <p className="text-[16px] leading-relaxed">{page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')}</p>
+          <p className="course-prose text-[16px]">{page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')}</p>
           {!run && askedHere.some((x) => !progress.guesses[x.id]) && <p className="muted mt-2 text-[14px]">{t('Some questions have no guess yet. Go back to guess, or run without one.')}</p>}
           <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
           {measuredHere(page.show)}
@@ -708,7 +760,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     case 'try':
       body = (
         <>
-          <p className="text-[16px] leading-relaxed">{t(page.text)}</p>
+          <p className="course-prose text-[16px]">{t(page.text)}</p>
           {page.patch && page.patch.length > 0 && (
             <button
               className="btn mt-3"
@@ -747,7 +799,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     case 'practice':
       body = (
         <>
-          <p className="text-[16px] leading-relaxed">{page.text ? t(page.text) : t('To practise what this lesson showed, try these problems in the simulator, under "Practice".')}</p>
+          <p className="course-prose text-[16px]">{page.text ? t(page.text) : t('To practise what this lesson showed, try these problems in the simulator, under "Practice".')}</p>
           <ul className="mt-3 space-y-1.5 text-[15px]">
             {page.items.map((p) => (
               <li key={`${p.kind}:${p.id}`} className="flex flex-wrap gap-x-2">

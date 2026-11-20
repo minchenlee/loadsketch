@@ -147,6 +147,43 @@ html.course #root {
   }
 }
 
+/* readable measure and line height for explanation and step prose */
+.course-prose {
+  max-width: 34em;
+  line-height: 1.7;
+}
+.course-prose + .course-prose {
+  margin-top: 0.75em;
+}
+
+/* answer block hierarchy: separated questions, label + value rows, arithmetic box */
+.course-answer + .course-answer {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+.course-answer-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.75rem;
+  row-gap: 0.3rem;
+  align-items: baseline;
+}
+.course-answer-row {
+  display: contents;
+}
+.course-answer-row > dt {
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.course-answer-row > dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
 /* what the lesson teaches (Lesson.learn), the key idea of a read step, the arithmetic of an answer */
 .course-learn summary {
   cursor: pointer;
@@ -158,12 +195,19 @@ html.course #root {
   border-radius: 0 0.5rem 0.5rem 0;
 }
 .course-calc {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 14px;
-  line-height: 1.6;
-  padding: 0.5rem 0.75rem;
+  line-height: 1.65;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+.course-calc-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
+}
+:lang(en) .course-calc-title {
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }
