@@ -54,12 +54,37 @@ describe('i18n catalog', () => {
     expect(codes).toContain('zh-TW');
     expect(codes).toContain('en');
     expect(codes.indexOf('zh-TW')).toBeLessThan(codes.indexOf('en'));
-    expect(pickLang('zh_TW')).toBe('zh-TW');
-    expect(pickLang('zh-CN')).toBe('zh-TW');
-    expect(pickLang('fr-FR')).toBe('en');
     for (const key of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
       expect(pickLang(key)).toBe('en');
       expect(getLocaleInfo(key).code).toBe('en');
+    }
+  });
+
+  it('picks the closest registered locale via BCP 47 subtag truncation in an isolated fixture registry', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loadsketch-picklang-'));
+    let restore: (() => void) | undefined;
+    try {
+      writeFileSync(
+        join(dir, 'zh-Hant.ts'),
+        `export default { code: 'zh-Hant', label: '繁中', intlLocale: 'zh-Hant', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} };\n`,
+        'utf8',
+      );
+      writeFileSync(
+        join(dir, 'xx-test.ts'),
+        `export default { code: 'xx-test', label: 'Test', intlLocale: 'en-US', htmlLang: 'xx', wordSeparator: ' ', messages: {} };\n`,
+        'utf8',
+      );
+      restore = await loadLocalesFromDirForTest(dir, { isolated: true });
+      expect(pickLang('zh_TW')).toBe('zh-TW');
+      expect(pickLang('zh-Hant-TW')).toBe('zh-Hant');
+      expect(pickLang('zh_Hant_HK')).toBe('zh-Hant');
+      expect(pickLang('zh-Hant')).toBe('zh-Hant');
+      expect(pickLang('zh-CN')).toBe('zh-TW');
+      expect(pickLang('xx-custom')).toBe('xx-test');
+      expect(pickLang('fr-FR')).toBe('en');
+    } finally {
+      restore?.();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

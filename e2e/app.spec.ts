@@ -1,6 +1,9 @@
-import { existsSync, readFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
+import { createServer } from 'vite';
 import { readStoredZip } from '../scripts/zip.ts';
 import { plan } from '../tests/import/plan-helper.ts';
 import { importTerraform } from '../src/import/terraform/index.ts';
@@ -338,12 +341,12 @@ test('English UI: no Chinese text, the toggle switches back, an edited design ke
     const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let n = walk.nextNode(); n; n = walk.nextNode()) {
       const s = n.textContent ?? '';
-      if (/[一-鿿]/.test(s) && !n.parentElement?.closest('[data-testid="lang"], [data-testid^="lang-"]')) out.push(s.trim());
+      if (/[一-鿿]/.test(s) && !n.parentElement?.closest('[data-testid="lang"]')) out.push(s.trim());
     }
     for (const el of document.querySelectorAll('[title],[aria-label]')) {
       for (const a of ['title', 'aria-label']) {
         const s = el.getAttribute(a) ?? '';
-        if (/[一-鿿]/.test(s) && !el.closest('[data-testid="lang"], [data-testid^="lang-"]')) out.push(`${a}: ${s}`);
+        if (/[一-鿿]/.test(s) && !el.closest('[data-testid="lang"]')) out.push(`${a}: ${s}`);
       }
     }
     return out;
@@ -354,7 +357,7 @@ test('English UI: no Chinese text, the toggle switches back, an edited design ke
   // switch to Chinese: an unedited example comes back in Chinese
   await page.getByTestId('stop').or(page.getByRole('button', { name: 'Stop' })).first().click();
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang-zh-TW').or(page.getByTestId('lang')).click();
+  await page.getByTestId('lang').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
   await expect(page.getByTestId('run')).toContainText('執行');
   await expect(page.locator('[data-node]').first()).toContainText(/[一-鿿]/);
@@ -370,7 +373,7 @@ test('English UI: no Chinese text, the toggle switches back, an edited design ke
   const view = () => page.locator('.react-flow__viewport').getAttribute('style');
   const before = await view();
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
+  await page.getByTestId('lang').click();
   await expect(page.getByTestId('run')).toContainText('Run');
   await expect(page.locator('[data-node]').filter({ hasText: '我的入口' })).toHaveCount(1);
   // the other, unedited labels are English again, and the edited one stays
@@ -390,7 +393,7 @@ test('a language change during a run: late messages from the stopped run are dro
   await page.goto('/app/?example=three-tier&scenario=spike&speed=10&autorun=1&lang=en');
   await waitForClock(page, 3);
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang-zh-TW').or(page.getByTestId('lang')).click();
+  await page.getByTestId('lang').click();
   await page.waitForTimeout(1500);
   const st = await page.evaluate(() => {
     const s = (window as unknown as { __loadsketch: { getState(): { status: string; result: unknown; timeline: unknown[]; windows: unknown[] } } }).__loadsketch.getState();
@@ -398,6 +401,81 @@ test('a language change during a run: late messages from the stopped run are dro
   });
   expect(st).toEqual({ status: 'idle', result: null, timeline: 0, windows: 0 });
   await expect(page.getByTestId('clock')).toContainText('尚未執行');
+});
+
+test('third language menu, labels and switching (isolated Vite fixture)', async ({ page }) => {
+  const fixture = {
+    code: 'xx-test',
+    label: 'Test語',
+    intlLocale: 'ja-JP',
+    htmlLang: 'xx',
+    wordSeparator: '',
+    messages: {
+      Run: 'TEST_RUN',
+      Results: 'TEST_RESULTS',
+    },
+  };
+  const cacheDir = mkdtempSync(join(tmpdir(), 'loadsketch-vite-e2e-'));
+  const server = await createServer({
+    configFile: join(import.meta.dirname, '..', 'vite.config.ts'),
+    cacheDir,
+    server: { host: '127.0.0.1', port: 0, strictPort: false },
+    plugins: [
+      {
+        name: 'e2e-third-locale-fixture',
+        enforce: 'pre',
+        transform(code, id) {
+          if (!id.endsWith('/src/i18n/index.ts')) return null;
+          return code.replace(
+            "import.meta.glob('./locales/*.ts', { eager: true })",
+            `({ ...import.meta.glob('./locales/*.ts', { eager: true }), './locales/xx-test.ts': { default: ${JSON.stringify(fixture)} } })`,
+          );
+        },
+      },
+    ],
+  });
+  await server.listen();
+  const base = `http://127.0.0.1:${(server.httpServer!.address() as AddressInfo).port}`;
+  try {
+    await page.goto(`${base}/app/?example=three-tier&lang=en`);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await page.getByTestId('more-menu').click();
+    await expect(page.getByTestId('lang')).toHaveCount(0);
+    await expect(page.getByTestId('lang-zh-TW')).toHaveText('繁體中文');
+    await expect(page.getByTestId('lang-en')).toHaveText('✓ English');
+    await expect(page.getByTestId('lang-xx-test')).toHaveText('Test語');
+
+    await page.getByTestId('lang-xx-test').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'xx');
+    await expect(page.getByTestId('run')).toContainText('TEST_RUN');
+    await expect(page.getByTestId('tab-learn')).toContainText('TEST_RESULTS');
+    // Untranslated UI labels fall back to English
+    await expect(page.getByTestId('open-examples')).toContainText('Examples');
+
+    await page.getByTestId('more-menu').click();
+    await expect(page.getByTestId('lang-xx-test')).toHaveText('✓ Test語');
+    await page.getByTestId('lang-zh-TW').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
+    await expect(page.getByTestId('run')).toContainText('執行');
+
+    await page.getByTestId('more-menu').click();
+    await page.getByTestId('lang-en').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.getByTestId('run')).toContainText('Run');
+
+    // Intro site cycles through the 3rd language (using English fallback screenshots) and reaches Traditional Chinese
+    await page.goto(`${base}/?lang=en&theme=light`);
+    await expect(page.getByTestId('site-lang')).toContainText('Test語');
+    await page.getByTestId('site-lang').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'xx');
+    await expect(page.getByTestId('site-carousel').locator('img').first()).toHaveAttribute('src', /-en-light/);
+    await page.getByTestId('site-lang').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('畫出系統 灌流量 看哪裡先壞');
+  } finally {
+    await server.close();
+    rmSync(cacheDir, { recursive: true, force: true });
+  }
 });
 
 test('retry-storm lesson: guess, run, see the answer and the story, then pass a challenge', async ({ page }) => {
@@ -596,7 +674,7 @@ test('undo review fixes', async ({ page }) => {
   await page.evaluate(() => (window as unknown as { __loadsketch: { getState(): St } }).__loadsketch.getState().updateNode('api', { params: { instances: 8 } }));
   expect((await st()).past).toBe(1);
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
+  await page.getByTestId('lang').click();
   expect((await st()).past).toBe(0);
   await expect(page.getByTestId('undo')).toBeDisabled();
 });
@@ -678,7 +756,7 @@ test('SLA: availability against the SLO, the budget, and a changed target', asyn
   await page.screenshot({ path: join(SHOTS, 'sla.png') });
   // English: no Chinese in the SLA texts
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
+  await page.getByTestId('lang').click();
   await page.getByRole('button', { name: /^(Run|Run again)$/ }).click();
   await page.getByRole('button', { name: 'Skip to end' }).click();
   await expect(page.getByTestId('sla-summary')).toContainText('Availability');
@@ -1346,11 +1424,11 @@ test('constraints: cost of a run, then a problem judged on limits; a passed run 
   // a language change translates the problem's design too
   await page.getByTestId('problem-start-solo-shortener').click();
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang-en').or(page.getByTestId('lang')).click();
+  await page.getByTestId('lang').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   expect(await store((s) => s.doc.name)).toBe('A URL shortener run by one person');
   await page.getByTestId('more-menu').click();
-  await page.getByTestId('lang-zh-TW').or(page.getByTestId('lang')).click();
+  await page.getByTestId('lang').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
   expect(await store((s) => s.doc.name)).toBe('一個人顧的短網址');
   // another design loaded: the problem is over
@@ -1849,10 +1927,13 @@ test('intro site: it opens the simulator, and its live panels are the simulator 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('site-zoom')).toHaveCount(0);
   expect(await page.evaluate(() => document.getElementById('root')!.inert)).toBe(false);
-  // the language button cycles languages until Traditional Chinese
-  while ((await page.locator('html').getAttribute('lang')) !== 'zh-Hant') {
+  // the language button cycles languages (bounded) until Traditional Chinese text appears
+  const maxClicks = 5;
+  for (let i = 0; i < maxClicks; i++) {
+    if ((await page.locator('html').getAttribute('lang')) === 'zh-Hant') break;
     await page.getByTestId('site-lang').click();
   }
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('畫出系統 灌流量 看哪裡先壞');
   await expect(carousel.getByRole('img', { name: '從需求開始設計' })).toHaveAttribute('src', /brief-zh-light/);
   // the page does not scroll sideways on a phone

@@ -103,11 +103,16 @@ function syncLangs(): void {
 syncLangs();
 
 /** @internal Test-only helper (Vitest mode) to exercise the Node directory loader against an isolated fixture dir. */
-export async function loadLocalesFromDirForTest(dir: string): Promise<() => void> {
+export async function loadLocalesFromDirForTest(dir: string, opts?: { isolated?: boolean }): Promise<() => void> {
   if (typeof import.meta.env === 'undefined' || !import.meta.env.VITEST) {
     throw new Error('loadLocalesFromDirForTest is only available in Vitest test runs');
   }
   const snapshot = new Map(LOCALES);
+  if (opts?.isolated) {
+    LOCALES.clear();
+    LOCALES.set('en', EN_LOCALE);
+    LOCALES.set('zh-TW', snapshot.get('zh-TW') ?? ZH_FALLBACK_LOCALE);
+  }
   const seenLower = new Set<string>([...LOCALES.keys()].map((k) => k.toLowerCase()));
   await scanNodeLocalesDir(dir, LOCALES, seenLower);
   syncLangs();
@@ -158,17 +163,22 @@ export function pickLang(code: string | null | undefined): Lang {
     if (key.toLowerCase() === normLower) return key;
   }
 
-  const prefix = normLower.split('-')[0];
-  if (prefix) {
+  // Strip trailing BCP 47 subtags progressively (e.g. zh-Hant-TW -> zh-Hant -> zh)
+  const parts = normLower.split('-').filter(Boolean);
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const sub = parts.slice(0, i).join('-');
     for (const key of LANGS) {
-      if (key.toLowerCase() === prefix) return key;
+      if (key.toLowerCase() === sub) return key;
     }
+  }
+
+  const prefix = parts[0];
+  if (prefix === 'zh' && LOCALES.has('zh-TW')) return 'zh-TW';
+  if (prefix) {
     for (const key of LANGS) {
       if (key.toLowerCase().split('-')[0] === prefix) return key;
     }
   }
-
-  if (/^zh/i.test(raw) && LOCALES.has('zh-TW')) return 'zh-TW';
   return 'en';
 }
 
