@@ -74,15 +74,25 @@ describe('i18n catalog', () => {
         `export default { code: 'xx-test', label: 'Test', intlLocale: 'en-US', htmlLang: 'xx', wordSeparator: ' ', messages: {} };\n`,
         'utf8',
       );
+      writeFileSync(
+        join(dir, 'iw.ts'),
+        `export default { code: 'iw', label: 'עברית', intlLocale: 'iw', htmlLang: 'iw', wordSeparator: ' ', messages: {} };\n`,
+        'utf8',
+      );
       restore = await loadLocalesFromDirForTest(dir, { isolated: true });
       expect(pickLang('zh_TW')).toBe('zh-TW');
       expect(pickLang('zho')).toBe('zh-TW');
       expect(pickLang('zho-TW')).toBe('zh-TW');
       expect(pickLang('zho_TW')).toBe('zh-TW');
+      expect(pickLang('zhx')).toBe('zh-TW');
       expect(pickLang('zh-Hant-TW')).toBe('zh-Hant');
       expect(pickLang('zh_Hant_HK')).toBe('zh-Hant');
       expect(pickLang('zh-Hant')).toBe('zh-Hant');
       expect(pickLang('zh-CN')).toBe('zh-TW');
+      expect(pickLang('iw')).toBe('iw');
+      expect(pickLang('IW')).toBe('iw');
+      expect(pickLang('iw-IL')).toBe('iw');
+      expect(pickLang('he-IL')).toBe('iw');
       expect(pickLang('xx-custom')).toBe('xx-test');
       expect(pickLang('fr-FR')).toBe('en');
     } finally {
@@ -307,6 +317,18 @@ describe('adding a third language (isolated fixture)', () => {
       parseLocaleModule(
         { default: { code: 'zh-tw', label: '繁體中文', intlLocale: 'zh-TW', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} } },
         'zh-tw.ts',
+      ).ok,
+    ).toBe(false);
+    expect(
+      parseLocaleModule(
+        { default: { code: 'eng', label: 'English', intlLocale: 'en-US', htmlLang: 'en', wordSeparator: ' ', messages: {} } },
+        'eng.ts',
+      ).ok,
+    ).toBe(false);
+    expect(
+      parseLocaleModule(
+        { default: { code: 'zho-TW', label: '繁體中文', intlLocale: 'zh-TW', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} } },
+        'zho-TW.ts',
       ).ok,
     ).toBe(false);
 

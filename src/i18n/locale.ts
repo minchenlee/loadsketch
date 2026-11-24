@@ -17,6 +17,17 @@ export function isLocaleFile(fileOrPath: string): boolean {
   return name.endsWith('.ts') && !name.endsWith('.d.ts');
 }
 
+/** Normalizes a locale tag via Intl.getCanonicalLocales when syntactically valid; falls back to `_ -> -`. */
+export function canonicalLocaleTag(tag: string): string {
+  const replaced = tag.trim().replace(/_/g, '-');
+  if (!replaced) return '';
+  try {
+    return Intl.getCanonicalLocales(replaced)[0] ?? replaced;
+  } catch {
+    return replaced;
+  }
+}
+
 /** Checks that `tag` is a syntactically valid BCP 47 locale tag accepted by Intl APIs. */
 export function isValidBcp47(tag: string): boolean {
   if (tag.trim() !== tag || tag.length === 0) return false;
@@ -73,10 +84,11 @@ export function parseLocaleModule(mod: unknown, file: string): { ok: true; local
   }
 
   const lower = code.toLowerCase();
-  if (lower === 'en') {
+  const canonLower = canonicalLocaleTag(code).toLowerCase();
+  if (lower === 'en' || canonLower === 'en') {
     return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} conflicts with built-in "en"` };
   }
-  if (lower === 'zh-tw' && code !== 'zh-TW') {
+  if ((lower === 'zh-tw' || canonLower === 'zh-tw') && code !== 'zh-TW') {
     return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} conflicts with built-in "zh-TW"` };
   }
 

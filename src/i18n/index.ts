@@ -6,7 +6,7 @@
 // Placeholders are written {name}: t('{s} s@@at', { s: 20 }).
 import { ZH } from './zh-TW.ts';
 import { SAME_IN_ZH } from './same.ts';
-import { isLocaleFile, parseLocaleModule, type LocaleDefinition, type LocaleInfo } from './locale.ts';
+import { canonicalLocaleTag, isLocaleFile, parseLocaleModule, type LocaleDefinition, type LocaleInfo } from './locale.ts';
 
 export type Lang = string;
 export type { LocaleInfo, LocaleDefinition };
@@ -157,33 +157,33 @@ export function pickLang(code: string | null | undefined): Lang {
   if (!raw) return 'en';
   if (LOCALES.has(raw)) return raw;
 
-  const replaced = raw.replace(/_/g, '-');
-  let canonical = replaced;
-  try {
-    canonical = Intl.getCanonicalLocales(replaced)[0] ?? replaced;
-  } catch {
-    // Keep replaced form for partial/non-standard tags
+  const replacedLower = raw.replace(/_/g, '-').toLowerCase();
+  const inputCanon = canonicalLocaleTag(raw).toLowerCase();
+  const registered = LANGS.map((key) => ({
+    key,
+    lower: key.toLowerCase(),
+    canon: canonicalLocaleTag(key).toLowerCase(),
+  }));
+
+  for (const r of registered) {
+    if (r.lower === replacedLower || r.canon === inputCanon) return r.key;
   }
 
-  const normLower = canonical.toLowerCase();
-  for (const key of LANGS) {
-    if (key.toLowerCase() === normLower) return key;
-  }
-
-  // Strip trailing BCP 47 subtags progressively (e.g. zh-Hant-TW -> zh-Hant -> zh)
-  const parts = normLower.split('-').filter(Boolean);
+  // Strip trailing BCP 47 subtags progressively (e.g. zh-Hant-TW -> zh-Hant -> zh; he-IL -> he matches iw)
+  const parts = inputCanon.split('-').filter(Boolean);
   for (let i = parts.length - 1; i >= 1; i--) {
     const sub = parts.slice(0, i).join('-');
-    for (const key of LANGS) {
-      if (key.toLowerCase() === sub) return key;
+    for (const r of registered) {
+      if (r.lower === sub || r.canon === sub) return r.key;
     }
   }
 
+  if (/^zh/i.test(raw) && LOCALES.has('zh-TW')) return 'zh-TW';
+
   const prefix = parts[0];
-  if (prefix === 'zh' && LOCALES.has('zh-TW')) return 'zh-TW';
   if (prefix) {
-    for (const key of LANGS) {
-      if (key.toLowerCase().split('-')[0] === prefix) return key;
+    for (const r of registered) {
+      if (r.canon.split('-')[0] === prefix || r.lower.split('-')[0] === prefix) return r.key;
     }
   }
   return 'en';

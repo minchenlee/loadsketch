@@ -11,13 +11,15 @@ export default defineConfig({
       ? [
           {
             name: 'e2e-builtin-locales',
+            apply: 'serve' as const,
             enforce: 'pre' as const,
             transform(code: string, id: string) {
               if (!id.replace(/\\/g, '/').endsWith('/src/i18n/index.ts') || code.includes('./locales/xx-test.ts')) return null;
-              return code.replace(
-                "import.meta.glob('./locales/*.ts', { eager: true })",
-                "import.meta.glob('./locales/zh-TW.ts', { eager: true })",
-              );
+              const pattern = /import\.meta\.glob\((['"])\.\/locales\/\*\.ts\1,\s*\{\s*eager:\s*true\s*\}\)/;
+              if (!pattern.test(code)) {
+                throw new Error('e2e-builtin-locales: expected locales glob not found in src/i18n/index.ts');
+              }
+              return code.replace(pattern, "import.meta.glob('./locales/zh-TW.ts', { eager: true })");
             },
           },
         ]

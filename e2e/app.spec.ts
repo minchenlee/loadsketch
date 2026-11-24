@@ -429,8 +429,12 @@ test('third language menu, labels and switching (isolated Vite fixture)', async 
             enforce: 'pre',
             transform(code, id) {
               if (!id.replace(/\\/g, '/').endsWith('/src/i18n/index.ts')) return null;
+              const pattern = /import\.meta\.glob\((['"])\.\/locales\/(?:\*|zh-TW)\.ts\1,\s*\{\s*eager:\s*true\s*\}\)/;
+              if (!pattern.test(code)) {
+                throw new Error('e2e-third-locale-fixture: expected locales glob not found in src/i18n/index.ts');
+              }
               return code.replace(
-                /import\.meta\.glob\('\.\/locales\/(?:\*|zh-TW)\.ts',\s*\{\s*eager:\s*true\s*\}\)/,
+                pattern,
                 `({ ...import.meta.glob('./locales/zh-TW.ts', { eager: true }), './locales/xx-test.ts': { default: ${JSON.stringify(fixture)} } })`,
               );
             },
