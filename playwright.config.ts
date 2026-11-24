@@ -18,7 +18,9 @@ export default defineConfig({
   webServer: {
     command: 'npx vite',
     url: 'http://127.0.0.1:5317/app/',
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    // Restrict the main e2e server to built-in locales so extra files in src/i18n/locales/ do not break bilingual specs.
+    env: { LOADSKETCH_E2E_LOCALES: 'builtin' },
   },
 });

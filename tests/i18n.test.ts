@@ -76,6 +76,9 @@ describe('i18n catalog', () => {
       );
       restore = await loadLocalesFromDirForTest(dir, { isolated: true });
       expect(pickLang('zh_TW')).toBe('zh-TW');
+      expect(pickLang('zho')).toBe('zh-TW');
+      expect(pickLang('zho-TW')).toBe('zh-TW');
+      expect(pickLang('zho_TW')).toBe('zh-TW');
       expect(pickLang('zh-Hant-TW')).toBe('zh-Hant');
       expect(pickLang('zh_Hant_HK')).toBe('zh-Hant');
       expect(pickLang('zh-Hant')).toBe('zh-Hant');

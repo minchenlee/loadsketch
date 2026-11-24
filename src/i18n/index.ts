@@ -157,8 +157,15 @@ export function pickLang(code: string | null | undefined): Lang {
   if (!raw) return 'en';
   if (LOCALES.has(raw)) return raw;
 
-  const normalized = raw.replace(/_/g, '-');
-  const normLower = normalized.toLowerCase();
+  const replaced = raw.replace(/_/g, '-');
+  let canonical = replaced;
+  try {
+    canonical = Intl.getCanonicalLocales(replaced)[0] ?? replaced;
+  } catch {
+    // Keep replaced form for partial/non-standard tags
+  }
+
+  const normLower = canonical.toLowerCase();
   for (const key of LANGS) {
     if (key.toLowerCase() === normLower) return key;
   }

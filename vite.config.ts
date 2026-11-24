@@ -4,7 +4,25 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(process.env.LOADSKETCH_E2E_LOCALES === 'builtin'
+      ? [
+          {
+            name: 'e2e-builtin-locales',
+            enforce: 'pre' as const,
+            transform(code: string, id: string) {
+              if (!id.replace(/\\/g, '/').endsWith('/src/i18n/index.ts') || code.includes('./locales/xx-test.ts')) return null;
+              return code.replace(
+                "import.meta.glob('./locales/*.ts', { eager: true })",
+                "import.meta.glob('./locales/zh-TW.ts', { eager: true })",
+              );
+            },
+          },
+        ]
+      : []),
+  ],
   server: { host: '127.0.0.1', port: 5317, strictPort: true },
   preview: { host: '127.0.0.1', port: 5318, strictPort: true },
   worker: { format: 'es' },
