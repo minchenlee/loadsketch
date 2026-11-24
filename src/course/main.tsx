@@ -4,13 +4,15 @@
 // (src/app/courseBridge.ts). Every answer and verdict is read from that run. Progress is kept in
 // this browser (src/course/progress.ts).
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, ChartLine, SkipForward, Calculator, Check, Circle, KeyRound, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Sun, Trophy, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, ChartLine, SkipForward, Calculator, Check, Circle, KeyRound, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Search, Sun, Trophy, Wrench, X } from 'lucide-react';
 import '../app/index.css';
 import './course.css';
 import logoBlack from '../app/assets/logo-black.svg';
 import logoWhite from '../app/assets/logo-white.svg';
 import { pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
+import { useExit, useModal } from '../app/modal.ts';
 import { judge, runOf, sameScenario, type Challenge, type Lesson, type PracticeLink, type Question, type Verdict } from '../learn/lesson.ts';
 import { INCIDENT_BY_ID } from '../learn/oncall.ts';
 import { PROBLEM_BY_ID } from '../learn/constraints.ts';
@@ -83,7 +85,25 @@ const savedCharts = () => {
   }
 };
 
-function Bar({ lang, theme, onLang, onTheme, onHome, charts }: { lang: Lang; theme: Theme; onLang: () => void; onTheme: () => void; onHome: (() => void) | null; charts: { on: boolean; toggle: () => void } | null }) {
+/** Render `\n\n`-separated prose as separate `.course-prose` paragraphs; single-paragraph text keeps identical markup. */
+function Prose({ text, className = '', space }: { text: string; className?: string; space?: string }) {
+  const parts = text
+    .split(/\n\s*\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  return (
+    <>
+      {parts.map((p, k) => (
+        <p key={k} className={`course-prose${k === 0 && space ? ` ${space}` : ''}${className ? ` ${className}` : ''}`}>
+          {p}
+        </p>
+      ))}
+    </>
+  );
+}
+
+function Bar({ lang, theme, onLang, onTheme, onHome, onGlossary, charts }: { lang: Lang; theme: Theme; onLang: () => void; onTheme: () => void; onHome: (() => void) | null; onGlossary: () => void; charts: { on: boolean; toggle: () => void } | null }) {
   return (
     <header className="course-bar panel flex items-center gap-2 border-b px-3 py-2">
       <a href="../" className="flex shrink-0 items-center gap-2" aria-label="loadsketch">
@@ -100,6 +120,10 @@ function Bar({ lang, theme, onLang, onTheme, onHome, charts }: { lang: Lang; the
         <span className="muted truncate text-[15px]">{t('Course')}</span>
       )}
       <span className="flex-1" />
+      <button className="btn shrink-0" onClick={onGlossary} aria-label={t('Glossary')} title={t('Glossary')} data-testid="course-glossary-open">
+        <BookOpen size={16} />
+        <span className="course-wide">{t('Glossary')}</span>
+      </button>
       {charts && (
         <button className={`btn shrink-0 ${charts.on ? 'btn-on' : ''}`} onClick={charts.toggle} aria-pressed={charts.on} aria-label={t('Charts')} title={t('Charts under the canvas: requests, latency and how busy each component is, over time')} data-testid="course-charts">
           <ChartLine size={16} />
@@ -117,6 +141,223 @@ function Bar({ lang, theme, onLang, onTheme, onHome, charts }: { lang: Lang; the
         {t('Open the simulator')}
       </a>
     </header>
+  );
+}
+
+/** Course-wide glossary and visual simulator guide modal. */
+function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpenLesson: (id: string) => void }) {
+  const [closing, close] = useExit(onClose);
+  const box = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+  useModal(box, close);
+  const [tab, setTab] = useState<'terms' | 'guide'>('terms');
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    search.current?.focus();
+  }, []);
+
+  const items = useMemo(
+    () =>
+      ALL_LESSONS.flatMap((entry) =>
+        (entry.lesson?.terms ?? []).map((item) => ({
+          lessonId: entry.id,
+          lessonTitle: entry.title,
+          term: item.term,
+          plain: item.plain,
+          example: item.example,
+        })),
+      ),
+    [],
+  );
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? items.filter((item) =>
+        `${t(item.term)} ${t(item.plain)} ${item.example ? t(item.example) : ''} ${item.lessonId} ${t(item.lessonTitle)}`.toLowerCase().includes(needle),
+      )
+    : items;
+
+  const statusColors: { color: string; name: string; text: string }[] = [
+    { color: 'var(--ok)', name: t('Green'), text: t('Comfortable room: plenty of spare capacity.') },
+    { color: 'var(--warn)', name: t('Amber'), text: t('Getting busy: starting to fill up.') },
+    { color: 'var(--bad)', name: t('Red'), text: t('Overloaded or queuing: requests are waiting or failing.') },
+  ];
+  const dotColors: { color: string; name: string; text: string }[] = [
+    { color: 'var(--read)', name: t('Blue dot'), text: t('Read request: fetching data, like opening a page.') },
+    { color: 'var(--write)', name: t('Orange dot'), text: t('Write request: saving or changing data.') },
+  ];
+  const numbersToWatch: { label: string; text: string }[] = [
+    { label: t('Busy %'), text: t('How full a component is (utilization). Near 100% means a traffic jam is forming.') },
+    { label: t('p99'), text: t('Slowest 1% response time: how long the slowest 1 in 100 users wait.') },
+    { label: t('Error rate'), text: t('Share of requests that failed or timed out.') },
+    { label: t('Bottleneck'), text: t('The part that fills up first and sets the limit for the whole system.') },
+  ];
+
+  return createPortal(
+    <div className="sd-backdrop fixed inset-0 z-50 flex items-center justify-center p-6" data-closing={closing || undefined} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div
+        ref={box}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('Glossary')}
+        className="panel sd-dialog flex max-h-[min(680px,90dvh)] w-[min(680px,100%)] flex-col overflow-hidden rounded-xl border shadow-2xl"
+        data-testid="course-glossary"
+      >
+        <div className="flex shrink-0 items-center gap-2 border-b border-[var(--line)] px-4 py-3">
+          <BookOpen size={18} className="muted shrink-0" />
+          <div className="text-[16px] font-semibold">{t('Glossary')}</div>
+          {tab === 'terms' && items.length > 0 && (
+            <span className="faint num text-[13px]">
+              {needle ? t('{n} of {all}', { n: shown.length, all: items.length }) : items.length}
+            </span>
+          )}
+          <button className="btn ml-auto shrink-0" onClick={close} aria-label={t('Close')}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="shrink-0 space-y-2.5 border-b border-[var(--line)] px-4 py-2.5">
+          <div className="seg" role="tablist" aria-label={t('Glossary')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'terms'}
+              className={`btn ${tab === 'terms' ? 'btn-on' : ''}`}
+              onClick={() => setTab('terms')}
+              data-testid="course-glossary-tab-terms"
+            >
+              {t('Terms')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'guide'}
+              className={`btn ${tab === 'guide' ? 'btn-on' : ''}`}
+              onClick={() => setTab('guide')}
+              data-testid="course-glossary-tab-guide"
+            >
+              {t('How to read the simulator')}
+            </button>
+          </div>
+          {tab === 'terms' && (
+            <label className="field flex w-full items-center gap-2">
+              <Search size={14} className="faint shrink-0" />
+              <input
+                ref={search}
+                className="w-full min-w-0 bg-transparent outline-none"
+                placeholder={t('Search terms or explanations')}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                aria-label={t('Search terms or explanations')}
+                data-testid="course-glossary-search"
+              />
+            </label>
+          )}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {tab === 'terms' ? (
+            items.length === 0 ? (
+              <div className="muted text-[14px]">{t('No glossary terms yet.')}</div>
+            ) : shown.length === 0 ? (
+              <div className="muted text-[14px]">{t('No matching terms.')}</div>
+            ) : (
+              <dl className="space-y-2.5">
+                {shown.map((item, k) => (
+                  <div key={`${item.lessonId}:${k}`} className="card p-3" data-testid="course-glossary-item">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <dt className="min-w-0 break-words text-[15px] font-semibold leading-snug" style={{ color: 'var(--ink-strong)' }}>
+                        {t(item.term)}
+                      </dt>
+                      <button
+                        type="button"
+                        className="course-glossary-badge num shrink-0"
+                        onClick={() => {
+                          onOpenLesson(item.lessonId);
+                          close();
+                        }}
+                        title={t('Open lesson {id}: {title}', { id: item.lessonId, title: t(item.lessonTitle) })}
+                        aria-label={t('Open lesson {id}: {title}', { id: item.lessonId, title: t(item.lessonTitle) })}
+                      >
+                        {item.lessonId}
+                      </button>
+                    </div>
+                    <dd className="mt-1 break-words text-[14.5px] leading-relaxed">{t(item.plain)}</dd>
+                    {item.example && (
+                      <dd className="muted mt-1 break-words text-[13.5px] leading-relaxed">
+                        {t('Example: {text}', { text: t(item.example) })}
+                      </dd>
+                    )}
+                  </div>
+                ))}
+              </dl>
+            )
+          ) : (
+            <div className="space-y-3" data-testid="course-glossary-guide">
+              <section className="card p-3">
+                <h3 className="text-[15px] font-semibold" style={{ color: 'var(--ink-strong)' }}>
+                  {t('Card status colors')}
+                </h3>
+                <ul className="mt-2 space-y-1.5 text-[14.5px] leading-relaxed">
+                  {statusColors.map((s) => (
+                    <li key={s.name} className="flex items-start gap-2">
+                      <span className="course-guide-dot" style={{ background: s.color }} aria-hidden />
+                      <span className="min-w-0">
+                        <strong className="font-semibold" style={{ color: 'var(--ink-strong)' }}>
+                          {s.name}
+                        </strong>
+                        {' — '}
+                        {s.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section className="card p-3">
+                <h3 className="text-[15px] font-semibold" style={{ color: 'var(--ink-strong)' }}>
+                  {t('Moving dots on lines')}
+                </h3>
+                <ul className="mt-2 space-y-1.5 text-[14.5px] leading-relaxed">
+                  {dotColors.map((d) => (
+                    <li key={d.name} className="flex items-start gap-2">
+                      <span className="course-guide-dot" style={{ background: d.color }} aria-hidden />
+                      <span className="min-w-0">
+                        <strong className="font-semibold" style={{ color: 'var(--ink-strong)' }}>
+                          {d.name}
+                        </strong>
+                        {' — '}
+                        {d.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section className="card p-3">
+                <h3 className="text-[15px] font-semibold" style={{ color: 'var(--ink-strong)' }}>
+                  {t('4 numbers to watch')}
+                </h3>
+                <dl className="mt-2 space-y-2 text-[14.5px] leading-relaxed">
+                  {numbersToWatch.map((n) => (
+                    <div key={n.label}>
+                      <dt className="font-semibold" style={{ color: 'var(--ink-strong)' }}>
+                        {n.label}
+                      </dt>
+                      <dd className="muted mt-0.5 text-[14px]">{n.text}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+              <section className="card p-3">
+                <h3 className="text-[15px] font-semibold" style={{ color: 'var(--ink-strong)' }}>
+                  {t('How to edit')}
+                </h3>
+                <p className="mt-1.5 text-[14.5px] leading-relaxed">
+                  {t('Click any card or connecting line in the simulator to change its settings in the right-hand panel, then press Run.')}
+                </p>
+              </section>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -149,12 +390,24 @@ function StatePill({ s }: { s: State }) {
 function Catalog({ progress, open }: { progress: Progress; open: (id: string) => void }) {
   const ready = ALL_LESSONS.filter((l) => l.lesson);
   const done = ready.filter((l) => progress[l.id]?.done).length;
+  const starterReady = Boolean(findLesson('0.0')?.lesson);
   return (
     <main className="course-wrap pb-16 pt-8" data-testid="course-catalog">
       <h1 className="text-[28px] font-semibold leading-tight sm:text-[34px]">{t('Learn system design by running it')}</h1>
       <p className="muted mt-3 max-w-[680px] text-[16px] leading-relaxed">
         {t('Each lesson opens a design in the simulator. Guess what happens, run it, read why, then change the design and run it again. Every number comes from the simulation, not from the text.')}
       </p>
+      <p className="muted mt-2 max-w-[680px] text-[15px] leading-relaxed" data-testid="course-beginner-note">
+        {t('New to system design? Start with 0.0 — no background needed. Every new term is explained in plain words when it first appears.')}
+      </p>
+      {done === 0 && starterReady && (
+        <div className="mt-3">
+          <button className="btn btn-primary" onClick={() => open('0.0')} data-testid="course-start-beginner">
+            {t('Start from 0.0: Follow one click')}
+            <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
       <p className="faint mt-2 text-[14px]" data-testid="course-count">
         {t('{done} of {ready} ready lessons done. {soon} more are coming soon.', { done, ready: ready.length, soon: ALL_LESSONS.length - ready.length })}
       </p>
@@ -310,7 +563,7 @@ function Answer({ q, run, mine, scored }: { q: Question; run: RunData; mine: str
           <dd className="num">{q.measured(run)}</dd>
         </div>
       </dl>
-      <p className="course-prose mt-3 text-[15px]">{t(q.explainFor?.[answer] || q.explain)}</p>
+      <Prose text={t(q.explainFor?.[answer] || q.explain)} space="mt-3" className="text-[15px]" />
       {q.calc && q.calc.length > 0 && (
         <div className="course-calc mt-3" data-testid={`course-calc-${q.id}`}>
           <div className="course-calc-title faint mb-1 flex items-center gap-1.5 text-[13px] font-medium">
@@ -375,7 +628,7 @@ function ChallengeCard({ c, verdict, passed }: { c: Challenge; verdict: Verdict 
           </span>
         )}
       </div>
-      <div className="course-prose mt-1 text-[15px]">{t(c.text)}</div>
+      <Prose text={t(c.text)} space="mt-1" className="text-[15px]" />
       {verdict && (
         <ul className="mt-2 space-y-1 text-[15px]" data-testid="course-verdict">
           {verdict.goals.map((g, i) => (
@@ -405,7 +658,7 @@ function ChallengeCard({ c, verdict, passed }: { c: Challenge; verdict: Verdict 
           <Lightbulb size={14} />
           {t('Hint')}
         </summary>
-        <div className="course-prose muted mt-1 text-[14px]">{t(c.hint)}</div>
+        <Prose text={t(c.hint)} space="mt-1" className="muted text-[14px]" />
       </details>
     </div>
   );
@@ -687,14 +940,14 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     case 'read':
       body = (
         <>
-          <p className="course-prose text-[16px]">{t(page.text)}</p>
+          <Prose text={t(page.text)} className="text-[16px]" />
           {page.key && (
             <div className="course-key mt-3" data-testid="course-key">
               <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide">
                 <KeyRound size={13} />
                 {t('Key idea')}
               </div>
-              <div className="course-prose text-[16px]">{t(page.key)}</div>
+              <Prose text={t(page.key)} className="text-[16px]" />
             </div>
           )}
           {i === 0 && <p className="course-prose muted mt-3 text-[15px]">{t('How a lesson goes: guess the answers first, then run the simulator. The answers are read from that run. Then change the design to pass the challenges.')}</p>}
@@ -737,7 +990,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       const run = runs[ctxKey(ctx)];
       body = (
         <>
-          <p className="course-prose text-[16px]">{page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')}</p>
+          <Prose text={page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')} className="text-[16px]" />
           {!run && askedHere.some((x) => !progress.guesses[x.id]) && <p className="muted mt-2 text-[14px]">{t('Some questions have no guess yet. Go back to guess, or run without one.')}</p>}
           <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
           {measuredHere(page.show)}
@@ -749,7 +1002,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     case 'try':
       body = (
         <>
-          <p className="course-prose text-[16px]">{t(page.text)}</p>
+          <Prose text={t(page.text)} className="text-[16px]" />
           {page.patch && page.patch.length > 0 && (
             <button
               className="btn mt-3"
@@ -788,7 +1041,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     case 'practice':
       body = (
         <>
-          <p className="course-prose text-[16px]">{page.text ? t(page.text) : t('To practise what this lesson showed, try these problems in the simulator, under "Practice".')}</p>
+          <Prose text={page.text ? t(page.text) : t('To practise what this lesson showed, try these problems in the simulator, under "Practice".')} className="text-[16px]" />
           <ul className="mt-3 space-y-1.5 text-[15px]">
             {page.items.map((p) => (
               <li key={`${p.kind}:${p.id}`} className="flex flex-wrap gap-x-2">
@@ -889,6 +1142,26 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
               </ul>
             </details>
           )}
+          {lesson.terms && lesson.terms.length > 0 && (
+            <details className="course-terms card mt-3" data-testid="course-terms">
+              <summary className="course-terms-sum text-[14px] font-medium">
+                {t('New terms in this lesson')} <span className="faint num">{lesson.terms.length}</span>
+              </summary>
+              <dl className="course-terms-list">
+                {lesson.terms.map((item, k) => (
+                  <div key={k} className="course-term">
+                    <dt className="font-semibold">{t(item.term)}</dt>
+                    <dd className="course-term-plain">{t(item.plain)}</dd>
+                    {item.example && (
+                      <dd className="course-term-example muted">
+                        {t('Example: {text}', { text: t(item.example) })}
+                      </dd>
+                    )}
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
           <div className="mt-4">{body}</div>
           <div className="mt-6 flex gap-2">
             <button className="btn" onClick={() => go(i - 1)} disabled={i === 0} data-testid="course-back">
@@ -925,6 +1198,7 @@ function Course() {
     setChartsOn(on);
   }, []);
   const [id, go] = useRoute();
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
   setLang(lang);
   useEffect(() => {
     document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
@@ -966,7 +1240,15 @@ function Course() {
   }, []);
   return (
     <div className="course-page">
-      <Bar lang={lang} theme={theme} onLang={flipLang} onTheme={flipTheme} onHome={entry && lesson ? () => go(null) : null} charts={entry && lesson ? { on: charts, toggle: () => setCharts(!charts) } : null} />
+      <Bar
+        lang={lang}
+        theme={theme}
+        onLang={flipLang}
+        onTheme={flipTheme}
+        onHome={entry && lesson ? () => go(null) : null}
+        onGlossary={() => setGlossaryOpen(true)}
+        charts={entry && lesson ? { on: charts, toggle: () => setCharts(!charts) } : null}
+      />
       {entry && lesson ? (
         <LessonView
           key={entry.id}
@@ -984,6 +1266,7 @@ function Course() {
       ) : (
         <Catalog progress={progress} open={go} />
       )}
+      {glossaryOpen && <GlossaryDialog onClose={() => setGlossaryOpen(false)} onOpenLesson={go} />}
     </div>
   );
 }

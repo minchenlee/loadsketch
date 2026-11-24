@@ -122,6 +122,16 @@ export type Step = StepBase &
     | { kind: 'practice'; text?: string; items: PracticeLink[] }
   );
 
+/** A key term introduced in a course lesson, shown in its collapsible Key Terms card and the course glossary. */
+export interface Term {
+  /** The term name (message id via tx), e.g. tx('Latency'). */
+  term: string;
+  /** One-sentence plain-language explanation (message id via tx). */
+  plain: string;
+  /** Optional everyday analogy (message id via tx). */
+  example?: string;
+}
+
 export interface Lesson {
   example: string;
   /** Course lessons (src/learn/course/): the number in the outline, e.g. "2.1". Unique. */
@@ -141,6 +151,8 @@ export interface Lesson {
   learnAt?: number[];
   /** Course lessons: the points to remember, shown on the last page above the score (message ids). */
   recap?: string[];
+  /** Course lessons: new terms introduced in this lesson, shown in a collapsible card and in the course glossary. */
+  terms?: Term[];
   /** Course lessons: other examples the lesson opens (a pair: the problem, then the fix). */
   extraExamples?: string[];
   /** Course lessons: the steps in order. Without it: stepsOf() (intro, guess all, run, challenges). */

@@ -12,12 +12,12 @@ const noSideways = async (page: Page) => {
   expect(sw).toBeLessThanOrEqual(w);
 };
 
-test('course: the table of contents lists 7 units and 33 lessons, unwritten ones as coming soon', async ({ page }) => {
+test('course: the table of contents lists 7 units and 34 lessons, unwritten ones as coming soon', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/learn/?lang=en');
   await expect(page.getByTestId('course-unit')).toHaveCount(7);
-  await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
+  await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(34);
   // lessons with a course file are links
   await expect(page.getByTestId('course-lesson-2.1')).toHaveAttribute('data-state', 'ready');
   // 3.1 is written: a link; 1.4 is not yet: grey, no link
@@ -151,14 +151,14 @@ test('course: broken saved progress or no storage still opens the course', async
     Object.defineProperty(window, 'localStorage', { get: no });
   });
   await page2.goto('/learn/?lang=en');
-  await expect(page2.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
+  await expect(page2.locator('[data-testid^="course-lesson-"]')).toHaveCount(34);
 });
 
 for (const theme of ['light', 'dark'] as const) {
   test(`course: no sideways scroll at phone width (${theme})`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/learn/?lang=en&theme=${theme}`);
-    await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(33);
+    await expect(page.locator('[data-testid^="course-lesson-"]')).toHaveCount(34);
     await noSideways(page);
     await page.screenshot({ path: join(SHOTS, `course-catalog-phone-${theme}.png`) });
     await page.getByTestId('course-lesson-3.1').locator('a').click();
@@ -797,4 +797,56 @@ test('course: on a phone, pointing at a component opens its settings drawer', as
   await toFrame(page, { kind: 'focus', node: 'db' });
   await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('data-open', '');
   await expect(frame.getByTestId('phone-drawer')).toHaveAttribute('aria-label', 'Settings');
+});
+
+test('course: beginner CTA opens 0.0 with key terms, glossary filters terms and shows simulator guide, no sideways scroll on phone', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/learn/?lang=en');
+  await expect(page.getByTestId('course-beginner-note')).toContainText('0.0');
+  await page.getByTestId('course-start-beginner').click();
+  await expect(page).toHaveURL(/lesson=0\.0/);
+  await expect(page.getByTestId('course-lesson')).toBeVisible();
+
+  // Key terms card exists and is collapsed by default
+  const terms = page.getByTestId('course-terms');
+  await expect(terms).toBeVisible();
+  await expect(terms).not.toHaveAttribute('open', '');
+  await terms.locator('summary').click();
+  await expect(terms).toHaveAttribute('open', '');
+  await expect(terms.locator('dt').first()).toBeVisible();
+
+  // Course-wide glossary modal: filter terms and switch to visual simulator guide
+  await page.getByTestId('course-glossary-open').click();
+  const dialog = page.getByTestId('course-glossary');
+  await expect(dialog).toBeVisible();
+  const total = await dialog.getByTestId('course-glossary-item').count();
+  expect(total).toBeGreaterThan(5);
+  await page.getByTestId('course-glossary-search').fill('Latency');
+  const filtered = await dialog.getByTestId('course-glossary-item').count();
+  expect(filtered).toBeGreaterThan(0);
+  expect(filtered).toBeLessThan(total);
+
+  await page.getByTestId('course-glossary-tab-guide').click();
+  await expect(dialog.getByTestId('course-glossary-guide')).toBeVisible();
+  await expect(dialog.getByTestId('course-glossary-guide')).toContainText('Card status colors');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+
+  // 390px phone width: zero sideways scroll in both EN and zh-TW with Glossary button in the bar
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByTestId('course-glossary-open')).toBeVisible();
+  await noSideways(page);
+  await page.getByTestId('course-glossary-open').click();
+  await expect(dialog).toBeVisible();
+  await noSideways(page);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+
+  await page.getByTestId('course-lang').click();
+  await noSideways(page);
+  await page.getByTestId('course-glossary-open').click();
+  await expect(dialog).toBeVisible();
+  await noSideways(page);
+  expect(errors).toEqual([]);
 });

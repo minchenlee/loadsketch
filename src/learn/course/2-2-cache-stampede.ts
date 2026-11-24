@@ -6,7 +6,7 @@ import { noMoreCapacity, type Lesson } from '../lesson.ts';
 import type { RunData } from '../metrics.ts';
 import { errorsUnder, failShareOf, hitRatio, ms, pct } from '../lessonKit.ts';
 
-const INTRO = tx('Cache-aside: the API reads Redis first; on a miss it reads Postgres and writes the value back. Values live 10 s in Redis (TTL). Users send 3000 reads a second, and a few keys are very hot: the hottest gets about 1000 reads a second. A Postgres read takes 100 ms and there are 16 connections. Guess what happens when a hot key expires, then press Run.');
+const INTRO = tx('Cached data cannot stay in memory forever, because the original data in the database can change. To keep answers fresh, caches give each item a TTL (time to live) — an expiration timer, like a "best before" date on milk. Once the timer runs out, the next read misses and fetches a fresh copy from the database.\n\nIn this design, the API uses cache-aside: it checks Redis first, and on a miss it reads Postgres and writes the fresh value back to Redis. When a very popular key expires, trouble starts. Every read of that key misses while the first database lookup is still running, so dozens of requests rush Postgres for the exact same row at once. That sudden flood is called a cache stampede (or thundering herd).\n\nHere, users send 3000 reads a second, and the hottest key gets about 1000 reads a second. Values live for a 10-second TTL in Redis. Postgres has 16 connections, and each read takes 100 ms. Guess what happens each time that hot key expires, then press Run.');
 
 const db = (run: RunData) => run.result.nodes.db;
 
@@ -18,16 +18,43 @@ const lesson: Lesson = {
   minutes: 20,
   wave: 1,
   learn: [
-    tx("See how a 98% hit ratio can still fail requests"),
-    tx("See why bursts, not the average, size the database"),
-    tx("See why a longer TTL only makes the bursts rarer"),
-    tx("Stop a stampede with a lease"),
+    tx('See how a 98% hit ratio can still cause failures'),
+    tx('See why sudden bursts, not averages, overwhelm a database'),
+    tx('See why a longer TTL makes bursts rarer, not smaller'),
+    tx('Stop a cache stampede with a lease'),
   ],
   learnAt: [2, 2, 3, 5],
   recap: [
-    tx("An expiring hot key sends a burst of reads to the database; the hit ratio averages it away."),
-    tx("A longer TTL makes the bursts rarer, not smaller."),
-    tx("Coalescing needs read-through; with cache-aside, use a lease: one request reads, the others wait a little."),
+    tx('When a hot key expires, a sudden burst of reads hits the database even when the average hit ratio looks high.'),
+    tx('A longer TTL makes stampedes happen less often, but each stampede is just as big.'),
+    tx('Coalescing works when the cache queries the database; when the API queries the database, use a lease so only one request fetches the row.'),
+  ],
+  terms: [
+    {
+      term: tx('TTL (time to live)'),
+      plain: tx('How long an item stays in the cache before it expires and must be fetched again.'),
+      example: tx('A "best before" date on milk — once it passes, you throw it out and grab a fresh carton.'),
+    },
+    {
+      term: tx('Cache stampede'),
+      plain: tx('A sudden flood of database reads when a popular cached item expires and many requests miss at once.'),
+      example: tx('A store announces a hot item is back, and 100 shoppers rush the same stockroom clerk at once.'),
+    },
+    {
+      term: tx('Request coalescing'),
+      plain: tx('Merging identical in-flight cache misses into a single database read when the cache fetches from the database itself.'),
+      example: tx('A front desk clerk makes one trip to the filing cabinet and hands copies to everyone waiting at the counter.'),
+    },
+    {
+      term: tx('Lease'),
+      plain: tx('A short lock given to the first cache miss so only that request queries the database while other requests wait briefly for the cache to refill.'),
+      example: tx('One person walks to the filing cabinet while everyone else who asked for the same page waits for that one copy.'),
+    },
+    {
+      term: tx('TTL jitter'),
+      plain: tx('Adding a small random offset to each item’s expiration time so items saved together do not all expire in the exact same second.'),
+      example: tx('Staggering alarm clocks across a few minutes so everyone does not crowd the hallway at once.'),
+    },
   ],
   example: 'cache-stampede',
   scenario: 'hot-key-expiry',
@@ -37,7 +64,7 @@ const lesson: Lesson = {
     {
       id: 'hit-fail',
       topic: 'cache',
-      text: tx('Redis answers about 98% of reads. What share of requests fail?'),
+      text: tx('Over the full run, Redis answers about 98% of reads. What share of user requests still fail?'),
       options: [
         { id: 'none', text: tx('Almost none (under 0.1%)') },
         { id: 'few', text: tx('A few (0.1% to 1%)') },
@@ -48,17 +75,17 @@ const lesson: Lesson = {
         return e < 0.001 ? 'none' : e < 0.01 ? 'few' : 'some';
       },
       measured: (run) => t('Hit ratio {h}, {e} failed', { h: pct(hitRatio(run, 'redis')), e: pct(failShareOf(run)) }),
-      calc: [tx('1000 reads/s × 100 ms ≈ 100 reads of the same row at once'), tx('100 ÷ 16 connections ≈ 6 rounds of 100 ms')],
-      explain: tx('When the hottest key expires, every read of it misses until one DB read writes it back: about 100 requests read the same row at once. The 16 connections serve them 16 at a time, so the last of them waits about 6 rounds; the DB queue fills, and requests behind it time out or are turned away. The hit ratio averages over the whole minute and hides these bursts.'),
+      calc: [tx('1000 reads/s × 100 ms ≈ 100 reads of the same row at once'), tx('100 reads ÷ 16 connections ≈ 6 rounds of 100 ms')],
+      explain: tx('While the first miss spends 100 ms reading Postgres, about 100 more requests for that same hot key arrive and miss too. All of them hit Postgres at once.\n\nPostgres has only 16 connections, so it processes those 100 reads in about 6 waves of 100 ms each. The database queue fills up, and requests behind the burst time out or get rejected. The 98% hit ratio averages across the whole minute and hides these sharp bursts.'),
       explainFor: {
-        none: tx('Almost none fail: when a hot key expires, only one request reads the DB (a lease), and the others wait a moment for the value.'),
-        few: tx('A few fail: the expiry bursts are small enough that the DB queue mostly holds them.'),
+        none: tx('Almost no requests fail. When a hot key expires, a lease lets only one request query the database while the others wait briefly for the fresh value.'),
+        few: tx('Only a few requests fail because the expiry bursts are small enough for the database queue to absorb most of them.'),
       },
     },
     {
       id: 'db-wait',
       topic: 'queueing',
-      text: tx('Postgres is busy under half the time on average. How long does a read wait for a connection, on average?'),
+      text: tx('On average, Postgres is busy less than half the time. How long does a database read wait for a connection, on average?'),
       options: [
         { id: 'short', text: tx('Under 100 ms') },
         { id: 'long', text: tx('100 to 300 ms') },
@@ -72,9 +99,9 @@ const lesson: Lesson = {
         const n = db(run);
         return t('Wait {w}; {u} busy on average, {p} at the peak', { w: ms(n?.waitMs ?? 0), u: pct(n?.utilization ?? 0), p: pct(n?.peakUtilization ?? 0) });
       },
-      explain: tx('The DB is idle most of the time and swamped right after each expiry. The reads that arrive in a burst wait for the whole burst ahead of them, so the average wait is long although the average load is low. Bursts, not the average, size the database.'),
+      explain: tx('Postgres sits almost idle between expirations, then gets hit by a sudden wave the moment a hot key expires.\n\nRequests arriving in that wave have to wait behind everyone else in the same wave. That makes the average wait time long even though average utilization looks low. Short bursts, not the average, determine whether the database holds up.'),
       explainFor: {
-        short: tx('Reads barely wait: each expiry sends one read to the DB, so there is no burst to queue behind.'),
+        short: tx('Reads barely wait because each expiration sends only one read to the database, so no burst queues up.'),
       },
     },
   ],
@@ -82,19 +109,19 @@ const lesson: Lesson = {
     {
       id: 'stampede/no-fail',
       title: tx('Stop the stampede'),
-      text: tx('Without a bigger database or more machines, make the stampede fail almost nothing (under 0.1% of requests).'),
+      text: tx('Keep the error rate under 0.1% across the whole run, without adding machines or making the database bigger.'),
       goals: [errorsUnder(0.001, tx('Error rate under 0.1% for the whole run'))],
       rules: [noMoreCapacity],
-      hint: tx('A longer TTL makes expiries rarer, but each one is the same burst. The burst itself must go: let only one request read the DB when a key expires, and the others wait for the value.'),
+      hint: tx('A longer TTL makes expirations less frequent, but each expiration still triggers the same burst.\n\nYou need to stop the burst itself. Select Redis and change “Stampede protection” so only one request reads the database when a key expires while the others wait briefly for the result.'),
     },
   ],
   steps: [
-    { kind: 'read', title: tx('Cache-aside with hot keys'), text: INTRO, key: tx('When a hot key expires, every read of it goes to the database at once.') },
-    { kind: 'guess', title: tx('Failures and the wait'), questions: ['hit-fail', 'db-wait'] },
+    { kind: 'read', title: tx('When a hot key expires'), text: INTRO, key: tx('When a hot key expires, every read during the database lookup misses and hits the database at once.') },
+    { kind: 'guess', title: tx('Failures and wait time'), questions: ['hit-fail', 'db-wait'] },
     { kind: 'run', title: tx('Run'), show: ['hitRatio', 'failRate', 'p99'], look: { panel: 'bottom' } },
-    { kind: 'try', title: tx('A longer TTL'), text: tx('Set the TTL to 60 s and run again. The hit ratio goes up: do the failures stop?'), patch: [{ node: 'redis', params: { ttlS: 60 } }], show: ['hitRatio', 'failRate', 'p99'], look: { panel: 'bottom' } },
-    { kind: 'try', title: tx('Coalesce'), text: tx('Set “Stampede protection” to Coalesce and run again. Does anything change?'), patch: [{ node: 'redis', params: { stampede: 'coalesce' } }], show: ['hitRatio', 'failRate', 'p99'] },
-    { kind: 'run', title: tx('A lease and TTL jitter'), example: 'cache-lease', text: tx('Coalescing works only when the cache reads the DB itself (read-through); here the API reads the DB, so the cache never sees the misses together. Open “Cache lease + TTL jitter”: the same design with a lease, so one request reads the DB per expiry and the others ask Redis again every 20 ms, and with TTL jitter, so keys written together do not all expire in the same second. Run it: how many fail now, and what do the waiting requests pay?'), show: ['failRate', 'p99', 'p50'] },
+    { kind: 'try', title: tx('A longer TTL'), text: tx('Set the TTL to 60 s and run again. The hit ratio climbs — do the failures stop?'), patch: [{ node: 'redis', params: { ttlS: 60 } }], show: ['hitRatio', 'failRate', 'p99'], look: { panel: 'bottom' } },
+    { kind: 'try', title: tx('Try coalescing'), text: tx('Request coalescing merges identical misses into a single database read. Set “Stampede protection” to Coalesce and run again. Does anything change here?'), patch: [{ node: 'redis', params: { stampede: 'coalesce' } }], show: ['hitRatio', 'failRate', 'p99'] },
+    { kind: 'run', title: tx('A lease and TTL jitter'), example: 'cache-lease', text: tx('Request coalescing only works when the cache itself fetches from the database (called read-through), like a front desk clerk going to the filing cabinet once for everyone in line. Here, the API server queries Postgres instead of Redis (cache-aside), so Redis cannot combine those database queries on its own.\n\nOpen “Cache lease + TTL jitter” to see the fix. First, a lease lets one miss query the database while the other requests wait 20 ms and check Redis again — like one person walking to the filing cabinet while everyone else waits for that one copy. Second, TTL jitter slightly randomizes each key’s expiration time so keys saved together do not all expire in the exact same second.\n\nRun it: how many requests fail now, and what extra cost do the waiting requests pay?'), show: ['failRate', 'p99', 'p50'] },
     { kind: 'challenge', title: tx('Stop the stampede'), challenges: ['stampede/no-fail'] },
   ],
 };

@@ -8,7 +8,9 @@ import type { RunData } from '../metrics.ts';
 import { errorsUnder, failShareOf, ms, p99Under, pct } from '../lessonKit.ts';
 import { mostMachines, onlyMachinesOf } from '../courseMachines.ts';
 
-const INTRO = tx('The same three-tier site at a steady 800 requests a second: a load balancer, 3 API servers, Redis and Postgres. Nothing is wrong yet. How much more traffic can it take, and which part gives up first? Guess, then press Run.');
+const INTRO = tx(
+  'A website that runs smoothly today can still crash tomorrow when traffic doubles. Before a product launch or sale, you need to know two things: your ceiling (the highest traffic the site can handle before breaking) and your headroom (the spare room left between today’s load and that ceiling).\n\nThis is the same three-tier site from 0.1: a load balancer, 3 API servers (4 slots each, about 9 ms per request), Redis (catching 85% of reads), and Postgres. Right now, a steady 800 requests arrive every second. Throughput—the number of requests the site actually finishes each second—matches 800/s, and nothing is broken yet.\n\nUtilization rises in step with traffic: if a part is 50% busy at 800/s, it hits 100% at 1,600/s. The busiest part hits 100% first and sets the ceiling for the entire site. Guess which component is busiest at 800/s, then press Run.',
+);
 
 const LAYERS = ['lb', 'api', 'cache', 'db'];
 const busiest = (run: RunData) => {
@@ -33,18 +35,35 @@ const lesson: Lesson = {
   minutes: 20,
   wave: 1,
   learn: [
-    tx("Find the busiest component: it gives up first"),
-    tx("Estimate the ceiling from how busy it is"),
-    tx("Check the ceiling with Find limit"),
-    tx("See that past the ceiling a system fails, it does not slow down gently"),
-    tx("Add capacity only at the bottleneck"),
+    tx('Identify the busiest component that limits the site'),
+    tx('Estimate the ceiling and headroom from current utilization'),
+    tx('Measure the real ceiling with Find limit'),
+    tx('See why pushing past the ceiling causes failures, not just slowness'),
+    tx('Add capacity only at the bottleneck'),
   ],
   learnAt: [2, 2, 3, 5, 6],
   recap: [
-    tx("Utilization grows with traffic: the busiest component reaches 100% first."),
-    tx("Ceiling ≈ traffic ÷ utilization of the busiest component."),
-    tx("Past the ceiling, queues fill and most of the extra fails."),
-    tx("Capacity added anywhere but the bottleneck does not move the ceiling."),
+    tx('The busiest component reaches 100% utilization first and sets the site’s ceiling.'),
+    tx('Rough ceiling = current traffic ÷ busiest utilization. Headroom is the spare room below that ceiling.'),
+    tx('Past the ceiling, throughput stops growing, queues fill up, and extra requests fail.'),
+    tx('Adding capacity anywhere except the bottleneck does not raise the ceiling.'),
+  ],
+  terms: [
+    {
+      term: tx('Throughput'),
+      plain: tx('How many requests a system actually finishes each second.'),
+      example: tx('A coffee shop handing out 40 finished drinks per hour, regardless of how many people are waiting.'),
+    },
+    {
+      term: tx('Ceiling'),
+      plain: tx('The highest traffic rate a system can handle before latency or error rates break its target.'),
+      example: tx('A bridge that safely holds 100 cars per minute before traffic gridlocks.'),
+    },
+    {
+      term: tx('Headroom'),
+      plain: tx('The spare capacity left between normal traffic and the system’s ceiling.'),
+      example: tx('Running a highway at 60 cars per minute when its ceiling is 100 leaves 40 cars/min of headroom.'),
+    },
   ],
   example: 'three-tier',
   scenario: 'steady',
@@ -53,31 +72,37 @@ const lesson: Lesson = {
     {
       id: 'ceiling-first',
       topic: 'capacity',
-      text: tx('At 800 requests a second, which component is the busiest, and so the first to give up as traffic grows?'),
+      text: tx('At a steady 800 requests/s, which component is the busiest—and therefore the first to give up as traffic grows?'),
       options: [
         { id: 'lb', text: tx('The load balancer') },
         { id: 'api', text: tx('The API servers') },
         { id: 'cache', text: tx('The Redis cache') },
-        { id: 'db', text: tx('The database') },
+        { id: 'db', text: tx('The Postgres database') },
       ],
       answer: busiest,
       measured: (run) => {
         const b = run.result.bottleneck;
         return b ? t('Busiest: {name}, {u} busy on average', { name: t(b.label), u: pct(b.utilization) }) : t('No bottleneck');
       },
-      calc: [tx('API servers: about 60% busy at 800 requests/s'), tx('100% busy at about 800 ÷ 0.6 ≈ 1300 requests/s')],
-      explain: tx('The API servers are about 60% busy at 800 a second; Redis and Postgres are under 10%. Utilisation grows in step with traffic, so the API servers reach 100% first, at about 1300 a second. Find limit (on the run bar) checks this by running more and more traffic until the target breaks.'),
+      calc: [
+        tx('3 API servers × 4 slots × (1000 ÷ 9 ms) ≈ 1300 requests/s max'),
+        tx('At 800/s, API servers are about 800 ÷ 1300 ≈ 60% busy'),
+        tx('Ceiling estimate: 800/s ÷ 0.60 ≈ 1300 requests/s (~500/s headroom)'),
+      ],
+      explain: tx(
+        'At 800 requests/s, the API servers are already about 60% busy, while Redis and Postgres stay under 10%. Because utilization grows in step with traffic, if 800/s uses 60% of the API servers, then 100% is roughly 800 ÷ 0.60 ≈ 1,300 requests/s.\n\nThat leaves about 500 requests/s of headroom. Pressing “Find limit” on the run bar tests this automatically by raising traffic until the site breaks its speed or error target.',
+      ),
       explainFor: {
-        lb: tx('Here the load balancer is the busiest: it is the first to give up as traffic grows.'),
-        cache: tx('Here the cache is the busiest: it is the first to give up as traffic grows.'),
-        db: tx('Here the database is the busiest: it is the first to give up as traffic grows.'),
+        lb: tx('Here the load balancer is the busiest: it is the first component to give up as traffic grows.'),
+        cache: tx('Here the cache is the busiest: it is the first component to give up as traffic grows.'),
+        db: tx('Here the database is the busiest: it is the first component to give up as traffic grows.'),
       },
     },
     {
       id: 'double',
       topic: 'capacity',
       scenario: 'overload',
-      text: tx('Open the scenario “Overload”: 1000 requests a second, then 2000 a second for 40 seconds. The target is the one Find limit uses: p99 under 1 s and under 1% of requests failing. What happens?'),
+      text: tx('Switch to the “Overload” scenario: 1,000 requests/s at first, then 2,000/s for 40 seconds. Using the same pass/fail target as Find limit (p99 under 1 s and under 1% failing), what happens?'),
       options: [
         { id: 'holds', text: tx('It meets the target') },
         { id: 'slow', text: tx('Few fail, but p99 goes over 1 s') },
@@ -85,10 +110,12 @@ const lesson: Lesson = {
       ],
       answer: (run) => (meetsTarget(run) ? 'holds' : failShareOf(run) >= DEFAULT_SLO.errorRate ? 'fails' : 'slow'),
       measured: (run) => t('{e} failed, p99 {p}', { e: pct(failShareOf(run)), p: ms(run.result.summary.latencyMs.p99) }),
-      explain: tx('Double traffic is well past the ceiling of about 1300 a second. The API queues fill, requests wait until they time out or are turned away, and most of the double-traffic part fails. Past the ceiling a system does not slow down gently: it fails.'),
+      explain: tx(
+        '2,000 requests/s is far past the site’s ~1,300/s ceiling. Throughput cannot rise above the ceiling, so the extra ~700 requests every second pile up in the API queues.\n\nOnce those queues fill up, requests wait until users give up or get turned away, and failures spike. Past its ceiling, a system does not slow down politely—it fails.',
+      ),
       explainFor: {
-        holds: tx('It meets the target: this design has room for double traffic.'),
-        slow: tx('Few fail but p99 is over 1 s: the design is right at its ceiling, where queues are long but still drain.'),
+        holds: tx('It meets the target: this design has enough headroom for double traffic.'),
+        slow: tx('Few fail, but p99 goes over 1 s: the design is sitting right at its ceiling, where queues grow long but still drain.'),
       },
     },
   ],
@@ -97,20 +124,22 @@ const lesson: Lesson = {
       id: 'ceiling/double',
       scenario: 'overload',
       title: tx('Room for double'),
-      text: tx('With the “Overload” scenario (2000 a second for 40 seconds), meet the target (under 1% fail, p99 under 1 s) with at most 5 API servers.'),
+      text: tx('Handle the “Overload” scenario (2,000 requests/s for 40 seconds) within the target—under 1% error rate and p99 under 1 s—using at most 5 API servers.'),
       goals: [apiAtMost5, errorsUnder(0.01, tx('Error rate under 1% for the whole run')), p99Under(1000, tx('p99 of successful requests under 1 s'))],
       rules: [onlyMachinesOf('api')],
-      hint: tx('One API server does about 4 ÷ 9 ms ≈ 450 requests a second. How many does 2000 a second need? Adding database connections does not help: the database was never the busy part.'),
+      hint: tx(
+        'One API server has 4 slots taking about 9 ms per request, so 1 server handles about 4 × (1000 ÷ 9) ≈ 440 requests/s.\n\nDivide 2,000/s by 440/s per server to see how many API servers you need. Adding database connections will not help because Postgres is not the bottleneck.',
+      ),
     },
   ],
   steps: [
-    { kind: 'read', title: tx('The site at 800/s'), text: INTRO, key: tx('The busiest component is the first to give up as traffic grows.') },
+    { kind: 'read', title: tx('The site at 800/s'), text: INTRO, key: tx('The busiest component hits 100% first and sets the ceiling for the whole site.') },
     { kind: 'guess', title: tx('The busiest component'), questions: ['ceiling-first'] },
     { kind: 'run', title: tx('Run at 800/s'), look: { tab: 'results' } },
-    { kind: 'try', title: tx('Find limit'), text: tx('Press “Find limit” on the run bar. It runs the design at more and more traffic and reports the most that met the target and the component that gave up first. Is that the component you picked?') },
+    { kind: 'try', title: tx('Find limit'), text: tx('Press “Find limit” on the run bar. It tests the site at higher and higher traffic until either p99 passes 1 second or errors pass 1%, then reports the ceiling and the component that gave up first.\n\nIs the component it names the same one you picked?') },
     { kind: 'guess', title: tx('Double traffic'), questions: ['double'] },
     { kind: 'run', title: tx('Run the overload'), scenario: 'overload', look: { panel: 'bottom' } },
-    { kind: 'try', title: tx('More database connections'), text: tx('Double the database connections and find the limit again. Does the ceiling move? Then set the API servers to 6 and find it again: which change moved it?'), patch: [{ node: 'db', params: { connections: 24 } }] },
+    { kind: 'try', title: tx('More database connections'), text: tx('Double the database’s connections (how many queries Postgres handles at once) from 12 to 24, then press “Find limit” again. Does the ceiling move?\n\nNext, change the API servers’ Instances to 6 and press “Find limit” again: which change actually raised the ceiling?'), patch: [{ node: 'db', params: { connections: 24 } }] },
     { kind: 'challenge', title: tx('Room for double'), challenges: ['ceiling/double'] },
   ],
 };

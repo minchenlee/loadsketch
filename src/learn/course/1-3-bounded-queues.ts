@@ -7,7 +7,9 @@ import type { RunData } from '../metrics.ts';
 import { errorsUnder, failShareOf, p99Under, paramOf, pct } from '../lessonKit.ts';
 import { KINDS } from '../../schema/kinds.ts';
 
-const INTRO = tx('Two API servers, 16 requests at a time each. A request holds its slot about 24 ms (20 ms of work plus the database call), so together they serve about 1300 requests a second. From second 20 to 60 users send 2000 a second, more than the servers can do, and each user gives up after 1 s. The queue in front of the servers holds up to 5000 requests. Guess how many fail and how, then press Run.');
+const INTRO = tx(
+  'When traffic exceeds a site’s ceiling, some requests are guaranteed to fail. Without adding more servers, you cannot save those extra requests—so the real question is how the site fails. Every user has a timeout: a patience limit after which they give up and leave. Here, users give up after 1 second (1,000 ms).\n\nThis site has 2 API servers with 16 slots each (32 slots total). Each request holds a slot for about 24 ms (20 ms of work plus a database query), so together they finish about 1,300 requests per second (32 × 1,000 ÷ 24). From second 20 to second 60, users send 2,000 requests/s—roughly 700/s more than the servers can handle.\n\nNormally, a waiting line serves requests in arrival order (First-In, First-Out, or FIFO). Capping that line’s length creates a bounded queue: once full, new requests are rejected immediately instead of waiting forever. Turning away excess work early to protect the rest is called load shedding.\n\nIn this starting design, the queue cap is huge (5,000), so it does not fill by size alone. Instead, the servers turn on two smart overload rules: when congested, they serve the newest request first (LIFO, Last-In First-Out) so fresh users still get answered before their 1-second timeout; and CoDel (Controlled Delay) checks each request when its turn arrives and drops it immediately if it has already waited over 5 ms. Guess how many requests fail and how they fail, then press Run.',
+);
 
 /** Failed requests that were turned away at once (queue full, CoDel) vs ones that waited for the timeout. */
 const failKinds = (run: RunData) => {
@@ -37,16 +39,43 @@ const lesson: Lesson = {
   minutes: 25,
   wave: 1,
   learn: [
-    tx("See that the part above capacity must fail"),
-    tx("See how a long FIFO queue makes every request late"),
-    tx("Trade delay for fast rejections with a queue limit"),
-    tx("Keep the served requests fresh with LIFO and CoDel"),
+    tx('See why traffic above the ceiling must fail one way or another'),
+    tx('Watch a long FIFO queue push every request past the user’s timeout'),
+    tx('Use a bounded queue to trade long waits for fast rejections'),
+    tx('Keep served requests fresh with LIFO and CoDel load shedding'),
   ],
   learnAt: [2, 3, 4, 5],
   recap: [
-    tx("Past capacity, the extra fails whatever you do; the queue decides how and when."),
-    tx("A long FIFO queue makes even the served requests wait past the users’ timeout."),
-    tx("A queue limit or CoDel turns the extra away at once: a fast failure costs the user less than a slow one."),
+    tx('Past capacity, excess requests must fail; your queue rules decide who fails and how long they wait.'),
+    tx('A huge FIFO queue makes even served requests wait past the user’s timeout, wasting server work.'),
+    tx('A bounded queue or CoDel sheds extra load right away: an instant error costs users far less than a slow timeout.'),
+  ],
+  terms: [
+    {
+      term: tx('Bounded queue'),
+      plain: tx('A waiting line with a strict maximum length that rejects new arrivals immediately once full.'),
+      example: tx('A restaurant with 10 waiting chairs that tells new guests “we’re full” instead of creating a 2-hour line.'),
+    },
+    {
+      term: tx('Timeout'),
+      plain: tx('The longest time a user or caller will wait before giving up and treating the request as failed.'),
+      example: tx('Hanging up the phone after being left on hold for 5 minutes.'),
+    },
+    {
+      term: tx('LIFO'),
+      plain: tx('Last-In, First-Out—serving the newest request in the queue first when overloaded so fresh users get answers before timing out.'),
+      example: tx('Answering the newest live customer call first instead of calling back someone who already hung up.'),
+    },
+    {
+      term: tx('CoDel'),
+      plain: tx('Controlled Delay—a rule that drops requests whose queue wait has grown too long so servers stop wasting work on stale requests.'),
+      example: tx('Throwing out a 1-hour-old cold food ticket so the kitchen cooks fresh orders for people still in the room.'),
+    },
+    {
+      term: tx('Load shedding'),
+      plain: tx('Deliberately rejecting excess requests early during overload so the remaining requests succeed quickly.'),
+      example: tx('A theme park pausing ticket sales at the gate so guests inside still have reasonable wait times.'),
+    },
   ],
   example: 'lifo-codel',
   scenario: 'overload',
@@ -55,10 +84,10 @@ const lesson: Lesson = {
     {
       id: 'overload-fail',
       topic: 'capacity',
-      text: tx('From second 20, users ask for 2000 a second and the servers can do about 1300. What share of all requests fail?'),
+      text: tx('From second 20 to 60, users send 2,000 requests/s while the servers can finish about 1,300/s. With adaptive LIFO and CoDel turned on, what share of all requests fail?'),
       options: [
         { id: 'few', text: tx('Under 10%') },
-        { id: 'excess', text: tx('About the part above capacity (10% to 40%)') },
+        { id: 'excess', text: tx('About the excess above capacity (10% to 40%)') },
         { id: 'most', text: tx('Most of them (over 40%)') },
       ],
       answer: (run) => {
@@ -66,20 +95,25 @@ const lesson: Lesson = {
         return e < 0.1 ? 'few' : e <= 0.4 ? 'excess' : 'most';
       },
       measured: (run) => t('{e} of requests failed', { e: pct(failShareOf(run)) }),
-      calc: [tx('2 servers × 16 slots ÷ 24 ms ≈ 1300 requests/s'), tx('2000/s asked − 1300/s served ≈ 700/s that must fail')],
-      explain: tx('About the part above capacity fails, and no more. The servers stay busy and work only on requests whose users are still waiting, because this design serves the newest request first when it is congested (adaptive LIFO) and drops a request that waited too long (CoDel).'),
+      calc: [
+        tx('2 servers × 16 slots × (1000 ÷ 24 ms) ≈ 1300 requests/s max'),
+        tx('2000/s arriving − 1300/s served ≈ 700/s that must fail'),
+      ],
+      explain: tx(
+        'Only the excess above capacity fails—not the whole site. Because adaptive LIFO picks the newest requests during overload, the servers spend their slots on users who are still waiting.\n\nAt the same time, CoDel drops requests that waited too long so no server work is wasted on users who already gave up.',
+      ),
       explainFor: {
-        few: tx('Few fail: this design has room for the overload.'),
-        most: tx('Most fail: the servers are busy, but with requests whose users already gave up. A long first-in-first-out queue makes every request wait longer than the 1 s timeout, so even the served ones count as failed.'),
+        few: tx('Few fail: this design has enough capacity to absorb the overload.'),
+        most: tx('Most fail: the servers stay 100% busy, but they are working on requests whose users already timed out. A long FIFO queue pushes nearly every request past the 1-second timeout, so even finished work counts as failed.'),
       },
     },
     {
       id: 'fail-how',
       topic: 'queueing',
-      text: tx('The requests that fail: how do they fail?'),
+      text: tx('Of the requests that fail, how do most of them fail?'),
       options: [
-        { id: 'fast', text: tx('Most are turned away at once') },
-        { id: 'slow', text: tx('Most wait until the 1 s timeout') },
+        { id: 'fast', text: tx('Most are rejected right away') },
+        { id: 'slow', text: tx('Most wait until the 1-second timeout') },
       ],
       answer: (run) => {
         const k = failKinds(run);
@@ -89,9 +123,11 @@ const lesson: Lesson = {
         const k = failKinds(run);
         return t('{fast} turned away at once, {slow} timed out', { fast: k.fast, slow: k.slow });
       },
-      explain: tx('CoDel drops a request whose wait passed its target (5 ms) when its turn comes, so a failure costs the user milliseconds, not a whole second. Turning work away early is the only way this engine slows the callers down: it has no backpressure, where the callers themselves send less.'),
+      explain: tx(
+        'Most failures happen right away instead of after a full second. Once the queue stays busy, CoDel drops requests whose wait passes 5 ms when their turn comes.\n\nA fast error hurts far less than making a user stare at a loading spinner for 1 second and still fail. In this simulator, shedding load early is how servers protect themselves when users keep sending full traffic.',
+      ),
       explainFor: {
-        slow: tx('Most fail by timeout: the queue is long enough that requests wait the full second before the user gives up. The user waits and still gets nothing, and the server may still do the work for nobody.'),
+        slow: tx('Most fail by timeout: the queue is so long that requests sit for a full second until the user gives up. The user waits for nothing, and the server may even waste work finishing a request nobody wants anymore.'),
       },
     },
   ],
@@ -99,19 +135,21 @@ const lesson: Lesson = {
     {
       id: 'queues/bounded-fifo',
       title: tx('A short FIFO queue'),
-      text: tx('Use a plain FIFO queue with CoDel off, and change only the queue limit: keep failures under 30% and p99 under 250 ms through the overload.'),
+      text: tx('Keep plain FIFO order with CoDel off, and change only “Max queue” on the API servers. Through the overload, keep the error rate under 30% and p99 latency under 250 ms.'),
       goals: [fifoPlain, errorsUnder(0.3, tx('Error rate under 30% for the whole run')), p99Under(250, tx('p99 of successful requests under 250 ms'))],
       rules: [noMoreCapacity],
-      hint: tx('Every request in the queue waits for the ones ahead of it: with 2 × 16 slots at about 24 ms each, 100 in the queue is about 80 ms of waiting. A limit turns the extra requests away at once instead. Find the largest limit that keeps p99 under 250 ms.'),
+      hint: tx(
+        'Every request waiting in line must wait for the requests ahead of it. At 1,300 requests/s (1.3 per ms), a line of 100 requests adds roughly 100 ÷ 1.3 ≈ 80 ms of wait time.\n\nA smaller “Max queue” sheds excess requests right away so the ones allowed in finish fast. Find the largest queue cap that keeps p99 under 250 ms.',
+      ),
     },
   ],
   steps: [
-    { kind: 'read', title: tx('An overload'), text: INTRO, key: tx('When more arrives than the servers can do, the extra must fail: the queue decides how.') },
+    { kind: 'read', title: tx('An overload'), text: INTRO, key: tx('When traffic exceeds capacity, the excess must fail—your queue rules decide how.') },
     { kind: 'guess', title: tx('How many fail, and how'), questions: ['overload-fail', 'fail-how'] },
     { kind: 'run', title: tx('Run the overload'), look: { panel: 'bottom' }, show: ['failRate', 'rejected', 'timedOut', 'p99'] },
-    { kind: 'try', title: tx('A plain FIFO queue'), text: tx('Set “Queue order” to FIFO and “CoDel queue target” to 0, and run again. The servers are just as busy: how many requests fail now, and how long do the others wait?'), patch: [{ node: 'api', params: { queueOrder: 'fifo', codelTargetMs: 0 } }], look: { panel: 'bottom' }, show: ['failRate', 'rejected', 'timedOut', 'p99'] },
-    { kind: 'try', title: tx('A shorter queue'), text: tx('Keep FIFO without CoDel, and set the queue limit to 10, then 100, then 300, with a run each time. As the limit grows, what happens to the failures, and to p99?'), show: ['failRate', 'rejected', 'timedOut', 'p99'] },
-    { kind: 'try', title: tx('A looser CoDel'), text: tx('This puts the queue back as it was (adaptive LIFO, limit 5000) with a CoDel target of 50 ms instead of 5. Run it: are more requests turned away at once, or do more wait for the timeout?'), patch: [{ node: 'api', params: { queueOrder: 'adaptive_lifo', queueLimit: 5000, codelTargetMs: 50 } }], show: ['failRate', 'rejected', 'timedOut', 'p99'] },
+    { kind: 'try', title: tx('A plain FIFO queue'), text: tx('Turn off both protections: set “Queue order” to First in, first out (FIFO) and “CoDel queue target” to 0, then run again.\n\nThe servers stay just as busy as before—how many requests fail now, and how long do the surviving ones wait?'), patch: [{ node: 'api', params: { queueOrder: 'fifo', codelTargetMs: 0 } }], look: { panel: 'bottom' }, show: ['failRate', 'rejected', 'timedOut', 'p99'] },
+    { kind: 'try', title: tx('A shorter queue'), text: tx('Keep plain FIFO with CoDel off, and turn the line into a bounded queue by setting “Max queue” to 10, then 100, then 300 (press Run after each change).\n\nAs the queue cap grows, what happens to the error rate and to p99 latency?'), show: ['failRate', 'rejected', 'timedOut', 'p99'] },
+    { kind: 'try', title: tx('A looser CoDel'), text: tx('This restores adaptive LIFO and Max queue 5,000, but loosens “CoDel queue target” from 5 ms to 50 ms.\n\nRun it: are more requests still rejected right away, or do more wait until the 1-second timeout?'), patch: [{ node: 'api', params: { queueOrder: 'adaptive_lifo', queueLimit: 5000, codelTargetMs: 50 } }], look: { panel: 'bottom' }, show: ['failRate', 'rejected', 'timedOut', 'p99'] },
     { kind: 'challenge', title: tx('A short FIFO queue'), challenges: ['queues/bounded-fifo'] },
   ],
 };

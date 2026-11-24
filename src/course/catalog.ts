@@ -24,6 +24,7 @@ export interface Unit {
 
 /** The outline: id, title, the example it is planned on, minutes, wave. */
 const OUTLINE: [string, string, string | undefined, number, 1 | 2][] = [
+  ['0.0', tx('Follow one click: how a website works'), 'three-tier', 8, 1],
   ['0.1', tx('Read a run'), 'three-tier', 15, 1],
   ['1.1', tx('Little’s law and one server'), 'single-server', 20, 1],
   ['1.2', tx('Where is the ceiling?'), 'three-tier', 20, 1],

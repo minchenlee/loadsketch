@@ -10,7 +10,7 @@ import { measureOf } from '../../src/course/measures.ts';
 import { design } from './run.ts';
 
 // ---- lessons 0.1–2.5 ----
-const IDS = ['0.1', '1.1', '1.2', '1.3', '1.5', '2.1', '2.2', '2.4', '2.5'];
+const IDS = ['0.0', '0.1', '1.1', '1.2', '1.3', '1.5', '2.1', '2.2', '2.4', '2.5'];
 const root = join(import.meta.dirname, '..', '..');
 const nodesOf = (example: string) => new Set((JSON.parse(readFileSync(join(root, 'examples', 'designs', `${example}.json`), 'utf8')).nodes as { id: string }[]).map((n) => n.id));
 
