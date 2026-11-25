@@ -17,12 +17,14 @@ export function openModals(): number {
 export function useModal(box: RefObject<HTMLElement | null>, onClose: () => void): void {
   const [me] = useState(() => ({}));
   useLayoutEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     stack.push(me);
     const app = document.getElementById('root');
     if (app) app.inert = true;
     return () => {
       stack.splice(stack.indexOf(me), 1);
       if (app && !stack.length) app.inert = false;
+      if (opener && opener.isConnected && (!app || !app.inert || !app.contains(opener))) opener.focus();
     };
   }, [me]);
   useEffect(() => {

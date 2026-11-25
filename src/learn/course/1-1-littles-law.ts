@@ -7,7 +7,7 @@ import { failUnder1, p99Under, paramOf, pct } from '../lessonKit.ts';
 import { meanOf, mostMachines } from '../courseMachines.ts';
 
 const INTRO = tx(
-  'Before sizing a large website, you need to understand how a single server behaves. Even a server that is only half busy can make requests wait in line, and once it nears 100% busy, wait times shoot up rapidly.\n\nThis simulation isolates 1 API server with zero network delay so the math stays crystal clear. Three numbers describe its workload: arrival rate (how many requests show up each second—here, 800/s, like customers walking into a coffee shop), service time (how long the server works on one request—here, 2.5 ms or 0.0025 s on average, like making one coffee), and concurrency (how many requests it works on at once—here, 4 slots, like 4 baristas behind the counter).\n\nLet’s do the math in plain words first. Because 1 second is 1,000 ms, one slot finishes 1,000 ÷ 2.5 = 400 requests per second. With 4 slots, the server can handle 4 × 400 = 1,600 requests per second. Since 800 arrive each second, the server is half busy: 800 ÷ 1,600 = 50%. That busy share is called utilization. In textbooks, you will see this written as ρ = λ ÷ (c × μ), where ρ is utilization, λ is arrival rate (800/s), c is concurrency (4 slots), and μ is one slot’s speed (400/s).\n\nTwo more ideas help you predict this run. First, requests arrive at random times rather than like clockwork, so tiny clusters briefly fill all 4 slots and cause short waits even at 50% busy. Second, Little’s Law connects traffic speed to headcount: average requests inside = arrival rate × average seconds each spends inside (written L = λ × W). For example, if 2 people enter a shop per minute and each stays 5 minutes, about 10 people are inside at once. Guess how long requests wait and how many sit inside the server at once, then press Run.',
+  'Before sizing a large website, you need to understand how a single server behaves. Even a server that is only half busy can make requests wait in line, and once it nears 100% busy, wait times shoot up rapidly.\n\nThis simulation isolates 1 API server with zero network delay so the math stays crystal clear. Three numbers describe its workload: arrival rate (how many requests show up each second—here, 800/s, like customers walking into a coffee shop), service time (how long the server works on one request—here, 2.5 ms or 0.0025 s on average, like making one coffee), and concurrency (how many requests it works on at once—here, 4 slots, like 4 baristas behind the counter).\n\nLet’s do the math in plain words first. Because 1 second is 1,000 ms, one slot finishes 1,000 ÷ 2.5 = 400 requests per second. With 4 slots, the server can handle 4 × 400 = 1,600 requests per second. Since 800 arrive each second, the server is half busy: 800 ÷ 1,600 = 50%. That busy share is called utilization. In textbooks, you will see this written as ρ = λ ÷ (c × μ), where ρ is utilization, λ is arrival rate (800/s), c is concurrency (4 slots), and μ is one slot’s speed (400/s).\n\nTwo more ideas help you predict this run. First, requests arrive at random times rather than like clockwork, so tiny clusters briefly fill all 4 slots and cause short waits even at 50% busy. Second, Little’s Law connects traffic speed to headcount: long-run average requests in a boundary = arrival rate × long-run average seconds each spends inside that same boundary (written L = λ × W). For example, if 2 people enter a shop per minute and each stays 5 minutes, about 10 people are inside at once. Guess how long requests wait and how many sit inside the server at once, then press Run.',
 );
 
 const api = (run: RunData) => run.result.nodes.api;
@@ -84,7 +84,7 @@ const lesson: Lesson = {
     },
     {
       term: tx('Little’s Law'),
-      plain: tx('A universal rule saying average items inside a system equal arrival rate times average time spent inside (L = λ × W).'),
+      plain: tx('A universal rule saying long-run average items in a boundary equal arrival rate times long-run average time spent in that same boundary (L = λ × W).'),
       example: tx('If 2 people enter a shop per minute and each stays 5 minutes, about 10 people are inside.'),
     },
     {
@@ -124,7 +124,7 @@ const lesson: Lesson = {
     {
       id: 'inside',
       topic: 'queueing',
-      text: tx('Use Little’s Law: requests inside = arrival rate × seconds spent inside. At 800 requests/s and roughly 2.5 ms (0.0025 s) inside, about how many requests are inside the server at once (working or waiting)?'),
+      text: tx('Use Little’s Law (L = λ × W): long-run average count = arrival rate × long-run average time in that same boundary. Here, 800 requests/s arrive, each takes 2.5 ms (0.0025 s) of active work, plus a tiny queue wait. About how many requests are inside the whole server at once (working plus waiting)?'),
       options: [
         { id: 'one', text: tx('About 1') },
         { id: 'two', text: tx('About 2') },
@@ -137,13 +137,12 @@ const lesson: Lesson = {
       },
       measured: (run) => t('{n} inside on average ({rps}/s × {ms} ms)', { n: inside(run).toFixed(1), rps: Math.round(api(run)?.rps ?? 0), ms: ((api(run)?.waitMs ?? 0) + (api(run)?.holdMs ?? 0)).toFixed(2) }),
       calc: [
-        tx('Plain words: requests inside = arrival rate × seconds inside'),
-        tx('With symbols (Little’s Law): L = λ × W'),
-        tx('800 requests/s × 0.0025 s (2.5 ms) = 2 working (+ tiny wait ≈ 2 inside)'),
-        tx('2 busy slots out of 4 slots = 50% utilization'),
+        tx('Little’s Law (L = λ × W): both sides must use the same boundary’s long-run average'),
+        tx('Active work only (slots): 800/s × 0.0025 s (2.5 ms service time) = 2.0 busy slots (50% of 4 slots)'),
+        tx('Queue + slots (whole server): Measured above adds queue wait to work time, giving slightly over 2.0 inside'),
       ],
       explain: tx(
-        'About 2 requests sit inside the server on average. Filling 2 of the 4 slots is the exact same 50% utilization seen from the inside.\n\nLittle’s Law holds for every waiting line, whether requests take uniform times or vary wildly: it turns a traffic rate and a duration into an average headcount.',
+        'Little’s Law works for any boundary you draw, as long as L (average headcount) and W (average time) describe that exact same boundary over the long run.\n\nIf the boundary covers only the active slots, W is the 2.5 ms service time, giving 800 × 0.0025 = 2.0 busy slots out of 4 (50% utilization). If the boundary includes the waiting line too, W is queue wait plus active work (see Measured above), giving the total average requests inside the server.',
       ),
       explainFor: {
         four: tx('About 4 inside: every slot is busy most of the time, so new requests start forming a queue.'),

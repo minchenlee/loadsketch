@@ -71,7 +71,7 @@ const grayFailure: Lesson = {
       options: errorOptions,
       answer: errorBand,
       measured: errorsMeasured,
-      explain: tx('Because the process has not crashed, the liveness check keeps saying instance 1 is healthy. Round robin keeps sending it 1/4 of every request.\n\nAt 15× slower speed, instance 1 falls far behind, its queue fills up, and almost every request sent to it times out or gets rejected for two-thirds of the run.'),
+      explain: tx('Because the process has not crashed, the liveness check keeps saying instance 1 is healthy. Round robin keeps sending it 1/4 of all requests.\n\nAt 15× slower speed, instance 1 falls far behind, its queue fills up, and almost every request sent to it times out or gets rejected for two-thirds of the run.'),
       calc: [tx('Slow instance share: 1 of 4 servers = 1/4 of traffic'), tx('Slow duration: 60 of 90 s = 2/3 of the run'), tx('Failed share: about 1/4 × 2/3 = 1/6 ≈ 17%')],
       look: { node: 'lb' },
       explainFor: {

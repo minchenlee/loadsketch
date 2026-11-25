@@ -816,10 +816,18 @@ test('course: beginner CTA opens 0.0 with key terms, glossary filters terms and 
   await expect(terms).toHaveAttribute('open', '');
   await expect(terms.locator('dt').first()).toBeVisible();
 
-  // Course-wide glossary modal: filter terms and switch to visual simulator guide
-  await page.getByTestId('course-glossary-open').click();
+  // Course-wide glossary modal: filter terms, keyboard tabs + ARIA, jump to lesson, restore focus on close
+  const glossaryBtn = page.getByTestId('course-glossary-open');
+  await glossaryBtn.click();
   const dialog = page.getByTestId('course-glossary');
   await expect(dialog).toBeVisible();
+  const termsTab = page.getByTestId('course-glossary-tab-terms');
+  const guideTab = page.getByTestId('course-glossary-tab-guide');
+  await expect(termsTab).toHaveAttribute('aria-controls', 'course-glossary-panel-terms');
+  await expect(guideTab).toHaveAttribute('aria-controls', 'course-glossary-panel-guide');
+  await expect(dialog.locator('#course-glossary-panel-terms')).toHaveAttribute('aria-labelledby', 'course-glossary-tab-terms');
+  await expect(dialog.locator('#course-glossary-panel-guide')).toHaveAttribute('aria-labelledby', 'course-glossary-tab-guide');
+
   const total = await dialog.getByTestId('course-glossary-item').count();
   expect(total).toBeGreaterThan(5);
   await page.getByTestId('course-glossary-search').fill('Latency');
@@ -827,11 +835,30 @@ test('course: beginner CTA opens 0.0 with key terms, glossary filters terms and 
   expect(filtered).toBeGreaterThan(0);
   expect(filtered).toBeLessThan(total);
 
-  await page.getByTestId('course-glossary-tab-guide').click();
+  // ArrowRight / ArrowLeft switch tabs when focus is on a tab
+  await termsTab.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(guideTab).toHaveAttribute('aria-selected', 'true');
+  await expect(guideTab).toBeFocused();
   await expect(dialog.getByTestId('course-glossary-guide')).toBeVisible();
   await expect(dialog.getByTestId('course-glossary-guide')).toContainText('Card status colors');
+  await page.keyboard.press('ArrowLeft');
+  await expect(termsTab).toHaveAttribute('aria-selected', 'true');
+  await expect(termsTab).toBeFocused();
+
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
+  await expect(glossaryBtn).toBeFocused();
+
+  // Clicking a lesson badge in Glossary jumps to that lesson and closes the modal
+  await glossaryBtn.click();
+  await expect(dialog).toBeVisible();
+  await page.getByTestId('course-glossary-search').fill('Little’s Law');
+  await dialog.locator('.course-glossary-badge', { hasText: '1.1' }).first().click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/lesson=1\.1/);
+  await page.goBack();
+  await expect(page).toHaveURL(/lesson=0\.0/);
 
   // 390px phone width: zero sideways scroll in both EN and zh-TW with Glossary button in the bar
   await page.setViewportSize({ width: 390, height: 844 });
@@ -900,5 +927,86 @@ test('course: complexity shows in Results, 1.1 opens Settings for queueing theor
   // Reset design button restores original concurrency (4) and serviceMs (2.5)
   await page.getByTestId('course-reset').click();
   await expect.poll(async () => (await apiParams())?.concurrency).toBe(4);
+  expect(errors).toEqual([]);
+});
+
+test('course: 0.0 guides re-running after reload on restore step, then finishes into 0.1', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/learn/?lang=en&speed=300&lesson=0.0');
+  await expect(page.getByTestId('course-frame-skeleton')).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '2:guess');
+  await page.getByTestId('course-option-db-quiet-quiet').click();
+  await page.getByTestId('course-option-healthy-run-healthy').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:run');
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+
+  // Step 4: drop to 1 API server and run
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(page.getByTestId('course-measured').locator('[data-measure="failRate"]')).toHaveAttribute('data-change', 'worse');
+
+  // Advance to step 5 (restore 3 API servers) and reload: missing baseline shows resume guidance back to step 4
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '5:try');
+  await page.reload();
+  await expect(page.getByTestId('course-frame-skeleton')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '5:try');
+  await expect(page.getByTestId('course-resume-note')).toBeVisible();
+  await page.getByTestId('course-resume-back').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+
+  // Re-run 1 server, advance to step 5 (no resume note), restore 3 servers, finish, and enter 0.1
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '5:try');
+  await expect(page.getByTestId('course-resume-note')).toHaveCount(0);
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(page.getByTestId('course-measured').locator('[data-measure="failRate"]')).toHaveAttribute('data-change', 'better');
+
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-finish')).toBeVisible();
+  await expect(page.getByTestId('course-recap')).toBeVisible();
+  await expect(page.getByTestId('course-score')).toHaveAttribute('data-right', '2');
+  await page.getByTestId('course-next-lesson').click();
+  await expect(page).toHaveURL(/lesson=0\.1/);
+  await expect(page.getByTestId('course-lesson')).toContainText('0.1');
+  expect(errors).toEqual([]);
+});
+
+test('course: on a phone, 0.0 runs overload (1 server) and recovery (3 servers) with no sideways scroll', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/learn/?lang=en&speed=300&lesson=0.0');
+  await expect(page.getByTestId('course-frame-skeleton')).toHaveCount(0, { timeout: 30_000 });
+
+  for (let k = 0; k < 4; k++) await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(page.getByTestId('course-measured')).toBeVisible();
+  await noSideways(page);
+
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '5:try');
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(page.getByTestId('course-measured').locator('[data-measure="failRate"]')).toHaveAttribute('data-change', 'better');
+  await noSideways(page);
   expect(errors).toEqual([]);
 });

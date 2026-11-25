@@ -48,8 +48,12 @@ const retryBudgets: Lesson = {
         return x < 4.5 ? 'x3' : x < 9 ? 'x6' : 'x10';
       },
       measured: (run) => t('At most {x} times the usual', { x: peakAmp(run, 'api', 20, 30).toFixed(1) }),
-      explain: tx('The retry budget counts first-try calls and retries over the last 10 seconds. Once retries reach 10% of first-try calls, the connection stops retrying and fails fast instead.\n\nDuring the spike, the API gets the 3× user spike plus only about 10% more in retries, so queues stay manageable. Only the very first second of the spike climbs near 4× because the budget saved up during the quiet seconds gets spent right away.'),
-      calc: [tx('First-try calls in the spike: 3 × usual traffic'), tx('Allowed retries: at most 10% of first-try calls'), tx('Peak at API: about 3 × 1.1 ≈ 3.3 × usual traffic')],
+      explain: tx('The retry budget counts first-try calls and retries over the last 10 seconds. Once retries reach 10% of first-try calls, the connection stops retrying and fails fast instead.\n\nFor most of the spike, the API gets the 3× user spike plus about 10% more in retries, so queues stay manageable. In the very first second of the spike, the measured peak shown above climbs higher than the steady-state estimate because the budget saved up during the quiet seconds gets spent right away.'),
+      calc: [
+        tx('First-try calls in the spike: 3 × usual traffic'),
+        tx('Allowed retries (steady-state): at most 10% of first-try calls'),
+        tx('Simplified steady-state estimate: 3 × 1.1 = 3.3 × usual traffic (the measured peak above is higher during the first second when saved budget is spent all at once)'),
+      ],
       look: { node: 'api' },
       explainFor: {
         x6: tx('The budget is larger than 10%, or not set on the connection into the API servers. More retries get through and multiply the spike.'),

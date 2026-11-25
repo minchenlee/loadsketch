@@ -149,12 +149,30 @@ function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpen
   const [closing, close] = useExit(onClose);
   const box = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const termsTabRef = useRef<HTMLButtonElement>(null);
+  const guideTabRef = useRef<HTMLButtonElement>(null);
   useModal(box, close);
   const [tab, setTab] = useState<'terms' | 'guide'>('terms');
   const [q, setQ] = useState('');
   useEffect(() => {
     search.current?.focus();
   }, []);
+  const switchTab = (next: 'terms' | 'guide', focus = false) => {
+    setTab(next);
+    if (focus) (next === 'terms' ? termsTabRef : guideTabRef).current?.focus();
+  };
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      switchTab(tab === 'terms' ? 'guide' : 'terms', true);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      switchTab('terms', true);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      switchTab('guide', true);
+    }
+  };
 
   const items = useMemo(
     () =>
@@ -187,7 +205,7 @@ function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpen
   ];
   const numbersToWatch: { label: string; text: string }[] = [
     { label: t('Busy %'), text: t('How full a component is (utilization). Near 100% means a traffic jam is forming.') },
-    { label: t('p99'), text: t('Slowest 1% response time: how long the slowest 1 in 100 users wait.') },
+    { label: t('p99'), text: t('The threshold 99% of successful requests stay under (the 99th slowest in 100). Failed requests are counted in Error rate instead.') },
     { label: t('Error rate'), text: t('Share of requests that failed or timed out.') },
     { label: t('Bottleneck'), text: t('The part that fills up first and sets the limit for the whole system.') },
   ];
@@ -215,23 +233,31 @@ function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpen
           </button>
         </div>
         <div className="shrink-0 space-y-2.5 border-b border-[var(--line)] px-4 py-2.5">
-          <div className="seg" role="tablist" aria-label={t('Glossary')}>
+          <div className="seg" role="tablist" aria-label={t('Glossary')} onKeyDown={onTabKeyDown}>
             <button
+              ref={termsTabRef}
+              id="course-glossary-tab-terms"
               type="button"
               role="tab"
               aria-selected={tab === 'terms'}
+              aria-controls="course-glossary-panel-terms"
+              tabIndex={tab === 'terms' ? 0 : -1}
               className={`btn ${tab === 'terms' ? 'btn-on' : ''}`}
-              onClick={() => setTab('terms')}
+              onClick={() => switchTab('terms')}
               data-testid="course-glossary-tab-terms"
             >
               {t('Terms')}
             </button>
             <button
+              ref={guideTabRef}
+              id="course-glossary-tab-guide"
               type="button"
               role="tab"
               aria-selected={tab === 'guide'}
+              aria-controls="course-glossary-panel-guide"
+              tabIndex={tab === 'guide' ? 0 : -1}
               className={`btn ${tab === 'guide' ? 'btn-on' : ''}`}
-              onClick={() => setTab('guide')}
+              onClick={() => switchTab('guide')}
               data-testid="course-glossary-tab-guide"
             >
               {t('How to read the simulator')}
@@ -253,8 +279,8 @@ function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpen
           )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {tab === 'terms' ? (
-            items.length === 0 ? (
+          <div id="course-glossary-panel-terms" role="tabpanel" aria-labelledby="course-glossary-tab-terms" hidden={tab !== 'terms'}>
+            {items.length === 0 ? (
               <div className="muted text-[14px]">{t('No glossary terms yet.')}</div>
             ) : shown.length === 0 ? (
               <div className="muted text-[14px]">{t('No matching terms.')}</div>
@@ -288,8 +314,9 @@ function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpen
                   </div>
                 ))}
               </dl>
-            )
-          ) : (
+            )}
+          </div>
+          <div id="course-glossary-panel-guide" role="tabpanel" aria-labelledby="course-glossary-tab-guide" hidden={tab !== 'guide'}>
             <div className="space-y-3" data-testid="course-glossary-guide">
               <section className="card p-3">
                 <h3 className="text-[15px] font-semibold" style={{ color: 'var(--ink-strong)' }}>
@@ -349,11 +376,11 @@ function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpen
                   {t('How to edit')}
                 </h3>
                 <p className="mt-1.5 text-[14.5px] leading-relaxed">
-                  {t('Click any card or connecting line in the simulator to change its settings in the right-hand panel, then press Run.')}
+                  {t('Click any card or connecting line in the simulator to open and change its settings, then press Run.')}
                 </p>
               </section>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>,
@@ -951,6 +978,15 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     progress,
   );
 
+  const prevExpStep = useMemo(() => {
+    if (page.kind !== 'try') return null;
+    const key = ctxKey(ctx);
+    for (let k = i - 1; k >= 0; k--) {
+      if ((pages[k].kind === 'run' || pages[k].kind === 'try') && ctxKey(ctxOf(lesson, pages, k)) === key) return k;
+    }
+    return null;
+  }, [lesson, pages, i, page.kind, ctx]);
+
   let body: React.ReactNode;
   switch (page.kind) {
     case 'read':
@@ -1015,9 +1051,22 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       );
       break;
     }
-    case 'try':
+    case 'try': {
+      const prev = prevExpStep !== null ? pages[prevExpStep] : null;
+      const prevTitle = prev ? (prev.kind !== 'done' && prev.title ? t(prev.title) : pageLabel(prev)) : '';
       body = (
         <>
+          {!pageRuns.last && prevExpStep !== null && (
+            <div className="card mb-3 p-3 text-[14px]" data-testid="course-resume-note">
+              <p className="muted">
+                {t('The simulator reloaded its starting design, so your earlier run (and any previous step’s change) is not here to compare against.')}
+              </p>
+              <button type="button" className="btn mt-2" onClick={() => go(prevExpStep)} data-testid="course-resume-back">
+                <ArrowLeft size={14} />
+                {t('Go back to "{title}"', { title: prevTitle })}
+              </button>
+            </div>
+          )}
           <Prose text={t(page.text)} className="text-[16px]" />
           {page.patch && page.patch.length > 0 && (
             <button
@@ -1039,6 +1088,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         </>
       );
       break;
+    }
     case 'challenge':
       body = (
         <>

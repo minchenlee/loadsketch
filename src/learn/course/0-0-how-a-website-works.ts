@@ -7,11 +7,11 @@ import type { RunData } from '../metrics.ts';
 import { failShareOf, ms, pct } from '../lessonKit.ts';
 
 const INTRO = tx(
-  'Welcome! You do not need any math or backend background to start here. Every time you open a webpage, scroll a feed, or tap “Buy”, your device sends a request to a website’s computers—just like placing an order at a restaurant.\n\nLook at the canvas on the right. A request travels left to right through four parts. First, a load balancer stands at the front door like a restaurant host and sends each request to whichever server is free. Next, 3 API servers act like kitchen cooks doing the actual work.\n\nTo build your page, an API server needs data. It first checks a cache (Redis, a super-fast notepad in memory holding popular answers). Here, 85% of read requests find their answer right on that notepad. Only the remaining misses and updates go to the database (Postgres, the main filing cabinet on disk that safely stores everything).',
+  'Welcome! You do not need any math or backend background to start here. Every time you open a webpage, scroll a feed, or tap “Buy”, your device sends a request to a website’s computers—just like placing an order at a restaurant.\n\nLook at the simulator canvas. A request travels left to right through four parts. First, a load balancer stands at the front door like a restaurant host and sends each request to whichever server is free. Next, 3 API servers (API = Application Programming Interface, the servers that run the website’s rules) act like kitchen cooks doing the actual work.\n\nRequests come in two kinds: a read looks up existing data (like opening a product page), while a write saves or changes data (like placing an order). To answer fast, an API server checks a cache first (Redis, a super-fast notepad in memory holding popular answers). If a read finds its answer there (a hit), Redis answers right away. Here, 85% of reads are hits. Only the remaining 15% that miss the cache (not found in Redis) plus all writes go to the database (Postgres, the main filing cabinet on disk that safely stores everything).',
 );
 
 const READ_RESULTS = tx(
-  'When every cook in a kitchen is busy, new orders wait in a queue (a waiting line, like at a coffee shop). On the canvas, each card shows how busy that part is: green means comfortable room, amber means getting full, and red means overloaded.\n\nAfter you press Run, the Results tab summarizes the user’s experience with three numbers: latency (total time from click to answer, including waiting in line), p99 (the time 99% of requests finish within, catching the slowest 1 in 100 trips that an average would hide), and error rate (the share of requests that fail instead of returning a page).\n\nIn this first run, traffic is steady and comfortable for 3 API servers. Make two quick guesses—no math needed—then press Run.',
+  'When every cook in a kitchen is busy, new orders wait in a queue (a waiting line, like at a coffee shop). On the canvas, each card shows how busy that part is: green means comfortable room, amber means getting full, and red means overloaded.\n\nAfter you press Run, the Results tab summarizes the user’s experience with three numbers: latency (total time from click to answer, including waiting in line), p99 (the 99th-slowest threshold out of 100 successful requests—99% of successful requests finish within this time, catching slowdowns an average hides), and error rate (the share of requests that fail instead of returning a page; latency counts only successful requests, while failures show up here).\n\nIn this first run, traffic is steady and comfortable for 3 API servers. Make two quick guesses—no math needed—then press Run.',
 );
 
 const dbBusy = (run: RunData) => run.result.nodes.db?.utilization ?? 0;
@@ -73,8 +73,8 @@ const lesson: Lesson = {
     },
     {
       term: tx('p99'),
-      plain: tx('The time within which 99% of requests finish—meaning the slowest 1 in 100 requests takes at least this long.'),
-      example: tx('If 99 out of 100 coffee orders take under 2 minutes and 1 takes 10 minutes, p99 exposes that painful wait.'),
+      plain: tx('The 99th-slowest threshold out of 100 successful requests—99% of successful requests finish within this time (latency in the simulator counts only successful requests; failures are counted in error rate).'),
+      example: tx('Sort 100 coffee orders from fastest to slowest: the 99th cup is p99 (the 100th cup is the maximum). If 98 cups take 1 minute and the 99th and 100th take 5 and 10 minutes, p99 is 5 minutes.'),
     },
     {
       term: tx('Error rate'),

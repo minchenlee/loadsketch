@@ -81,8 +81,12 @@ const retryStorm: Lesson = {
         return x < 4.5 ? 'x3' : x < 9 ? 'x6' : 'x10';
       },
       measured: (run) => t('At most {x} times the usual', { x: peakAmp(run, 'api', 20, 30).toFixed(1) }),
-      explain: tx('When the API servers are full, most calls time out or get rejected. Each failed call from the load balancer is retried up to 3 times.\n\nThis traffic amplification multiplies the 3× user spike by up to 4 sends per request, hitting the API with far more traffic than users actually sent.'),
-      calc: [tx('User spike: 3 × usual requests'), tx('Per load-balancer call: 1 original + 3 retries = up to 4 sends'), tx('Peak at API: up to 3 × 4 = 12 × usual traffic')],
+      explain: tx('When the API servers are full, most calls time out or get rejected. Each failed call from the load balancer is retried up to 3 times.\n\nThis traffic amplification multiplies the 3× user spike by up to 4 sends per request—and delayed retries from earlier seconds overlap with new arrivals, pushing the measured peak above a simple 3 × 4 estimate.'),
+      calc: [
+        tx('User spike: 3 × usual requests'),
+        tx('Per load-balancer call: 1 original + 3 retries = up to 4 sends'),
+        tx('Simplified estimate: 3 × 4 = 12 × usual traffic (the measured peak above can be higher because retries from earlier seconds carry over into the next second)'),
+      ],
       look: { node: 'api' },
       explainFor: { x3: tx('Retries did not multiply the traffic. The API servers receive roughly the same traffic that users send.') },
     },

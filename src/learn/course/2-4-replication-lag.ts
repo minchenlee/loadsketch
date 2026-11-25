@@ -87,8 +87,11 @@ const lesson: Lesson = {
         return s < 0.05 ? 'few' : s <= 0.25 ? 'some' : 'many';
       },
       measured: (run) => t('{stale} of {reads} replica reads were stale ({s})', { stale: db(run)?.staleReads ?? 0, reads: db(run)?.replicaReads ?? 0, s: pct(staleShare(run)) }),
-      calc: [tx('800 requests/s × 20% = 160 writes/s'), tx('A read is stale if its key was written in the last 300 ms')],
-      explain: tx('Any read of a key written within the last 300 ms gets outdated data from a replica.\n\nHere, 160 writes a second land mostly on the same popular keys. Those keys change so often that they almost always sit inside that 300 ms window, so the items users read most are also stale most often. Replicas catch up once writes stop (called eventual consistency), but a key that keeps changing stays behind.'),
+      calc: [
+        tx('800 requests/s × 20% = 160 writes/s'),
+        tx('Simulator rule: a replica read is stale whenever that replica still has an unapplied write for that same key (~300 ms behind here)'),
+      ],
+      explain: tx('In this simulator, a replica read is counted as stale whenever that key still has an unapplied write on its way to the replica (here, replication lag is ~300 ms).\n\nBecause 160 writes a second land mostly on the same popular keys, those keys almost always have an unapplied write in flight, so the items users read most are also stale most often. Replicas catch up once writes stop (called eventual consistency), while a key that keeps changing stays behind.'),
       explainFor: {
         few: tx('Few reads are stale because the replicas are only a few milliseconds behind, so a read rarely lands inside the lag window.'),
         some: tx('Some reads are stale. A shorter lag shrinks the window, but the hottest keys are written so often that they still fall inside it.'),
@@ -108,7 +111,7 @@ const lesson: Lesson = {
         return u < 0.1 ? 'low' : u <= 0.3 ? 'mid' : 'high';
       },
       measured: (run) => t('Primary {u} busy; replicas served {r} of the requests', { u: pct(primaryBusy(run)), r: pct(replicaShare(run)) }),
-      explain: tx('Because replication lag stays around 300 ms, neither replica meets the 200 ms limit. Every read falls back to the primary, which is the same as reading only from the primary.\n\nThe primary’s load more than doubles. Guaranteeing fresh reads costs primary capacity, so read replicas only help for reads that can safely be slightly behind.'),
+      explain: tx('The simulator measures each replica’s lag using the age of its oldest unapplied write. In this scenario, continuous writes keep both replicas ~300 ms behind, so neither meets the 200 ms limit: replicas serve the share shown in Measured above and reads fall back to the primary, raising its busyness as Measured shows.\n\nNote that a lag limit only bounds how far behind a replica may fall—it does not guarantee every individual read is fresh unless reads fall back to the primary. Protecting freshness costs primary capacity, so read replicas only help for reads that can safely be slightly behind.'),
       explainFor: {
         low: tx('The primary stays lightly loaded because the replicas stay within the lag limit and keep handling reads.'),
       },
@@ -138,7 +141,7 @@ const lesson: Lesson = {
     },
   ],
   steps: [
-    { kind: 'read', title: tx('Reads from replicas'), text: INTRO, key: tx('A replica read is stale whenever its key was written within the replication lag window.') },
+    { kind: 'read', title: tx('Reads from replicas'), text: INTRO, key: tx('In this simulator, a replica read is stale whenever that replica has not yet applied the latest write for that key.') },
     { kind: 'guess', title: tx('Stale reads'), questions: ['stale-share'] },
     { kind: 'run', title: tx('Run'), show: ['staleReads', 'busiestInstance:db', 'failRate'] },
     { kind: 'guess', title: tx('A lag limit'), questions: ['primary-busy'] },

@@ -79,9 +79,9 @@ const atLeastOnce: Lesson = {
     {
       id: 'duplicates',
       topic: 'recovery',
-      text: tx('At-least-once delivery can process a message twice. How many messages are processed twice in this run?'),
+      text: tx('At-least-once delivery can redeliver a message after a crash or timeout. In this simulator, a duplicate means a message is completed and acked twice. How many duplicate completions happen in this run?'),
       options: [
-        { id: 'none', text: tx('None: each message is processed once') },
+        { id: 'none', text: tx('None: 0 messages are completed twice') },
         { id: 'some', text: tx('Tens to hundreds') },
         { id: 'many', text: tx('More than a thousand') },
       ],
@@ -89,8 +89,8 @@ const atLeastOnce: Lesson = {
         const d = duplicates(run);
         return d === 0 ? 'none' : d <= 1000 ? 'some' : 'many';
       },
-      measured: (run) => t('{n} messages processed twice', { n: duplicates(run) }),
-      explain: tx('A duplicate happens when a ticket reappears while the first worker is still running it—meaning the job took longer than the visibility timeout.\n\nHere a job takes about 50 ms while the visibility timeout is 2000 ms (2 s), so normal jobs finish long before the timer expires. A crashed worker never finishes its job, so retrying it is not a duplicate.\n\nIn production, set the visibility timeout well above your slowest job, and still make workers idempotent in case a network glitch drops an ack.'),
+      measured: (run) => t('{n} duplicate completions ({r} redeliveries)', { n: duplicates(run), r: jobs(run).redelivered ?? 0 }),
+      explain: tx('Separate three things here: redelivery, duplicate completion in the simulator, and real-world side effects.\n\nFirst, whenever a worker crashes or a visibility timeout expires, the queue redelivers the message (see Measured above). Second, the simulator only counts a duplicate completion when one delivery already succeeded and acked, and a second delivery also finishes successfully—for instance, if a slow job runs past the visibility timeout and a second worker finishes it too. Here, normal jobs take ~50 ms while the visibility timeout is 2,000 ms (2 s), and the crashed worker fails before acking, so duplicate completions stay at 0.\n\nIn production, however, a worker can write a side effect (such as charging a card) and crash before sending the ack, or a network glitch can drop the ack. The redelivered message would run that side effect again—so set the visibility timeout well above your slowest job and make workers idempotent.'),
       look: { node: 'jobs' },
       explainFor: {
         some: tx('Some messages were processed twice because a few jobs took longer than the visibility timeout. The ticket reappeared while the first worker was still busy.'),
@@ -121,8 +121,8 @@ const atLeastOnce: Lesson = {
   terms: [
     {
       term: tx('At-least-once delivery'),
-      plain: tx('A queue guarantee that every message is delivered one or more times until a worker confirms it is done.'),
-      example: tx('A manager who keeps reassigning an unfinished task until someone reports back that it is complete.'),
+      plain: tx('A queue guarantee that every message is delivered one or more times until a worker confirms it is done—or until it hits the retry limit and moves to a dead-letter queue (DLQ).'),
+      example: tx('A manager who keeps reassigning an unfinished task until someone reports back that it is complete, or moves an unsolvable task to a review box after 3 failed tries.'),
     },
     {
       term: tx('Acknowledgment (ack)'),
@@ -150,11 +150,11 @@ const atLeastOnce: Lesson = {
   recap: [tx('A crash costs time, not messages: unacknowledged jobs reappear after the visibility timeout.'), tx('Set the visibility timeout well above the slowest job, and make workers idempotent.'), tx('A dead-letter queue (DLQ) stops poison messages from looping forever.'), tx('Size workers with N + 1 capacity so the surviving machines still keep up during a crash.')],
   steps: [
     { kind: 'read', title: tx('At-least-once delivery'), text: tx('What if a worker crashes halfway through making a thumbnail? If the queue deleted the ticket on pickup, that job would vanish forever.\n\nReliable queues prevent lost work with at-least-once delivery. The queue keeps each ticket until the worker sends an acknowledgment (ack)—a short “done!” reply. While a worker handles a ticket, the queue hides it for a visibility timeout (like hiding a ticket while one person works on it, then putting it back if they disappear).\n\nHere, the visibility timeout is 2000 ms (2 s), and a normal job takes about 50 ms (40 ms of worker processing plus ~10 ms writing back to Postgres).'), key: tx('With at-least-once delivery, a queue deletes a message only after the worker sends an acknowledgment (ack).') },
-    { kind: 'read', title: tx('Duplicates, idempotency, and the DLQ'), text: tx('At-least-once delivery has one catch: a message can be processed twice (a duplicate) if a job runs longer than the visibility timeout, or if a network glitch drops the ack. That is why workers should be idempotent—safe to run twice with the same result, like pressing an elevator button twice.\n\nWhat if a ticket is broken (like a corrupted image that crashes the worker every time)? We call that a poison message. Here, 1% of messages are poison. After 3 failed tries, a ticket moves to a dead-letter queue (DLQ)—a separate box for broken tickets that keep failing—so someone can inspect it later.') },
+    { kind: 'read', title: tx('Duplicates, idempotency, and the DLQ'), text: tx('At-least-once delivery has one catch: a message’s work can run twice if a job outlives the visibility timeout, if a worker writes a side effect (like charging a card) and crashes before sending the ack, or if a network glitch drops the ack. That is why workers should be idempotent—safe to run twice with the same result, like pressing an elevator button twice.\n\nWhat if a ticket is broken (like a corrupted image that crashes the worker every time)? We call that a poison message. Here, 1% of messages are poison. After 3 failed tries, a ticket moves to a dead-letter queue (DLQ)—a separate box for broken tickets that keep failing—so someone can inspect it later.') },
     { kind: 'read', title: tx('The worker crash'), text: tx('Now add a real failure. Traffic is 100 uploads a second. Two thumbnail worker machines share the work, with 4 slots each (8 slots total, about 50 ms hold time per job—40 ms of work plus ~10 ms writing to Postgres—so 100 uploads a second keeps about 5 slots busy).\n\nAt second 20, one of the two worker machines crashes for 20 seconds, leaving only 1 machine (4 slots). Guess what happens to wait times, the DLQ, and duplicates, then press Run.') },
     { kind: 'guess', title: tx('Guess: crash, DLQ, duplicates'), questions: ['crash-wait', 'dlq-share', 'duplicates'] },
     { kind: 'run', title: tx('Run the crash'), look: { panel: 'bottom' }, show: ['asyncP99', 'dlq', 'duplicates'] },
-    { kind: 'try', title: tx('A short visibility timeout'), text: tx('Set “Visibility timeout” on the Work queue to 100 ms and run again. Are any messages processed twice now? Even though the average job takes about 50 ms, why would some jobs outlive 100 ms?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 100 } }], show: ['duplicates', 'asyncP99'] },
+    { kind: 'try', title: tx('A short visibility timeout'), text: tx('Set “Visibility timeout” on the Work queue to 100 ms and run again. Are any duplicate completions counted now? Even though the average job takes about 50 ms, why would some jobs outlive 100 ms?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 100 } }], show: ['duplicates', 'asyncP99'] },
     { kind: 'try', title: tx('No DLQ'), text: tx('Set “Visibility timeout” back to 2000 ms (2 s), and set “Max receive count (DLQ)” to 0 (no DLQ—retry forever). Run again.\n\nDoes anything move to the DLQ now? What do the looping poison messages do to the worker and to async p99?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 2000, maxReceives: 0 } }], look: { node: 'thumb' }, show: ['dlq', 'asyncP99', 'busiest'] },
     { kind: 'challenge', title: tx('Crash-safe and on time'), challenges: ['async-reliable/crash-safe'] },
     { kind: 'practice', title: tx('Practice'), items: [{ kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },

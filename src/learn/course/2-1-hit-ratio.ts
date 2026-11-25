@@ -94,11 +94,15 @@ const cacheHitRatio: Lesson = {
         return s < 0.1 ? 'tenth' : s <= 0.4 ? 'quarter' : 'half';
       },
       measured: (run) => t('{n} of every 100 requests reach the database', { n: Math.round(shareReaching(run, 'db', 'api') * 100) }),
-      calc: [tx('Database load = reads × (1 − hit ratio) + writes'), tx('Database ceiling = 8 connections × 1000 ÷ 5 ms = 1600 reads/s')],
-      explain: tx('The hit ratio decides how much work reaches the database. Raising the hit ratio from 50% to 75% cuts database reads in half.\n\nHere the database has 8 connections and takes 5 ms per read, so its ceiling is about 1600 reads a second. If the hit ratio drops below 50%, 3000 clicks a second send more reads than the database can handle.'),
+      calc: [
+        tx('Database reads = 3,000/s × 99% reads × (1 − hit ratio) = 2,970 × (1 − hit ratio)'),
+        tx('Replica ceiling = 8 connections × 1,000 ÷ 5 ms = 1,600 reads/s (writes go to primary)'),
+        tx('Miss share that fills the replica: 1,600 ÷ 2,970 ≈ 54% → hit ratio below ~46%'),
+      ],
+      explain: tx('The hit ratio decides how much work reaches the database. Raising the hit ratio from 50% to 75% cuts database reads in half.\n\nHere the read replica has 8 connections and takes 5 ms per read, so its ceiling is about 1,600 reads/s. With 2,970 reads/s arriving (99% of 3,000 clicks/s), the replica saturates once misses pass 1,600 ÷ 2,970 ≈ 54%—that is, when the hit ratio drops below about 46%.'),
       explainFor: {
         tenth: tx('Fewer than 10 in 100 requests reach the database because the cache caught more than 90% of reads. Check whether this design has a very high hit ratio or uses a fixed hit rate.'),
-        half: tx('More than 40 in 100 requests reach the database. The hit ratio is around half or lower, pushing database reads close to its ceiling (about 1600 reads/s). Any lower and requests queue up and time out. Check the database card to see how many requests a second it receives.'),
+        half: tx('More than 40 in 100 requests reach the database. The hit ratio has fallen near or below the ~46% threshold where misses (2,970 × (1 − hit ratio)) exceed the replica’s 1,600 reads/s ceiling, so requests queue up and time out. Check the database card to see how many requests a second it receives.'),
       },
     },
   ],
@@ -117,7 +121,7 @@ const cacheHitRatio: Lesson = {
       text: tx('Shrink the cache to 1000 keys or fewer. Keep the error rate under 1% and p99 under 150 ms. This time you may add capacity, but only in the right place.'),
       goals: [cacheAtMost('capacityKeys', 1000, tx('Cache capacity (keys) ≤ 1000')), failUnder1, p99Under150],
       rules: [keepLru],
-      hint: tx('Once the hit ratio drops below half, the database hits its ceiling. Adding more API servers will not help.\n\nSelect the database and increase either its connections (“Concurrency per instance”) or its read replicas (“Read replica count”, extra read-only copies of the database).'),
+      hint: tx('At 1,000 keys, the hit ratio drops below the ~46% threshold where misses exceed the replica’s 1,600 reads/s ceiling. Adding more API servers will not help.\n\nSelect the database and increase either its connections (“Concurrency per instance”) or its read replicas (“Read replica count”, extra read-only copies of the database).'),
     },
     {
       id: 'cache/fresh',
