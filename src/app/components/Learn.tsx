@@ -9,7 +9,7 @@ import { LESSONS } from '../../learn/lessons.ts';
 import type { RunData } from '../../learn/metrics.ts';
 import { t } from '../../i18n/index.ts';
 import { SlaSection } from './Sla.tsx';
-import { CostSection } from './Constraints.tsx';
+import { ComplexitySection, CostSection } from './Constraints.tsx';
 import { useCauseHidden } from './OnCall.tsx';
 import { COURSE } from '../courseBridge.ts';
 
@@ -213,11 +213,11 @@ export function Learn() {
   const lesson = example && !COURSE ? LESSONS[example] : undefined;
   const run = useRun();
   const hidden = useCauseHidden();
-  if (COURSE && !run) return <div className="muted text-[14px] leading-relaxed">{t('Press "Run". When the run ends, this tab shows the SLA, the cost, and what happened, in time order.')}</div>;
+  if (COURSE && !run) return <div className="muted text-[14px] leading-relaxed">{t('Press "Run". When the run ends, this tab shows the SLA, the cost, the complexity, and what happened, in time order.')}</div>;
   if (!lesson && !run)
     return (
       <div>
-        <div className="muted text-[14px] leading-relaxed">{t('Press "Run". When the run ends, this tab shows the SLA, the cost, and what happened, in time order. Only the "Retry storm" example has questions and challenges for now; constraint problems, on-call practice and the guess log are under "Practice" at the top.')}</div>
+        <div className="muted text-[14px] leading-relaxed">{t('Press "Run". When the run ends, this tab shows the SLA, the cost, the complexity, and what happened, in time order. Only the "Retry storm" example has questions and challenges for now; constraint problems, on-call practice and the guess log are under "Practice" at the top.')}</div>
       </div>
     );
   return (
@@ -225,6 +225,7 @@ export function Learn() {
       {lesson && <Questions lesson={lesson} run={run} />}
       {run && <SlaSection run={run} />}
       {run && <CostSection run={run} />}
+      {run && <ComplexitySection run={run} />}
       {run && !hidden && <Why run={run} />}
       {run && hidden && <div className="faint mt-4 text-[13px]" data-testid="why-hidden">{t('On call: what happened shows after you answer.')}</div>}
       {lesson && <Challenges lesson={lesson} run={run} />}

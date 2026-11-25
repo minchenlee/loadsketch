@@ -70,6 +70,7 @@ html.course #root {
 .course-frame {
   min-width: 0;
   position: relative;
+  background: var(--bg);
 }
 .course-frame iframe {
   position: absolute;
@@ -78,6 +79,100 @@ html.course #root {
   height: 100%;
   border: 0;
   display: block;
+  background: var(--bg);
+}
+/* loading skeleton shown over the simulator iframe until it posts ready (eliminates white flash) */
+.course-frame-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  background: var(--bg);
+  pointer-events: none;
+}
+.course-skel-canvas {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+}
+.course-skel-graph {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.course-skel-node {
+  width: 112px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+.course-skel-edge {
+  width: 36px;
+  height: 2px;
+  background: var(--line-strong);
+}
+.course-skel-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  width: fit-content;
+  margin-inline: auto;
+}
+.course-skel-pill {
+  height: 24px;
+  border-radius: var(--radius-md);
+  background: var(--fill);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+.course-skel-side {
+  width: 320px;
+  flex: none;
+  background: var(--chrome);
+  border-left: 1px solid var(--line);
+  padding: 16px;
+}
+.course-skel-tabs {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.course-skel-line {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--fill);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+.course-skel-block {
+  height: 68px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+@keyframes course-skel-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (max-width: 720px) {
+  .course-skel-side {
+    display: none;
+  }
+  .course-skel-node {
+    width: 76px;
+    height: 44px;
+  }
 }
 .course-option {
   height: auto;
@@ -295,5 +390,11 @@ html.course #root {
 @media (prefers-reduced-motion: reduce) {
   .course-glossary-badge {
     transition: none;
+  }
+  .course-skel-node,
+  .course-skel-pill,
+  .course-skel-line,
+  .course-skel-block {
+    animation: none;
   }
 }

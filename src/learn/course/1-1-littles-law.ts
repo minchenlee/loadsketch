@@ -113,7 +113,7 @@ const lesson: Lesson = {
       },
       measured: (run) => t('Wait {w} ms for {h} ms of work ({s})', { w: (api(run)?.waitMs ?? 0).toFixed(2), h: (api(run)?.holdMs ?? 0).toFixed(2), s: pct(waitShare(run)) }),
       explain: tx(
-        'Requests arrive at random, not on a metronome. Even at 50% busy, small clusters occasionally arrive while all 4 slots are taken, so a few requests wait briefly.\n\nBecause traffic is steady here (no spikes), compare the measured wait with the theory row on the Results tab: they closely agree.',
+        'Requests arrive at random, not on a metronome. Even at 50% busy, small clusters occasionally arrive while all 4 slots are taken, so a few requests wait briefly.\n\nBecause traffic is steady here (no spikes), click the API server card (Settings tab) and compare the measured wait with the queueing theory row: they closely agree.',
       ),
       explainFor: {
         none: tx('Almost nobody waits: the server has plenty of spare room for this load.'),
@@ -174,7 +174,7 @@ const lesson: Lesson = {
   steps: [
     { kind: 'read', title: tx('One server'), text: INTRO, key: tx('Utilization = arrival rate ÷ max speed. Little’s Law: items inside = arrival rate × time inside.') },
     { kind: 'guess', title: tx('Wait and requests inside'), questions: ['wait-share', 'inside'] },
-    { kind: 'run', title: tx('Run at 50% busy'), look: { node: 'api', tab: 'results' } },
+    { kind: 'run', title: tx('Run at 50% busy'), look: { node: 'api', tab: 'design' } },
     { kind: 'try', title: tx('A slower release'), text: tx('Raise Process time from 2.5 ms to 4.5 ms (pushing the server to 90% busy) and run again. How much longer do requests wait compared with the actual work, and does the theory row still match?'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 1 } } }], show: ['p99', 'p50', 'busiest'] },
     { kind: 'try', title: tx('A wider spread'), text: tx('Keep the average Process time at 4.5 ms, but raise variation (cv) from 1 to 2. Higher variation means request times are less predictable—many are quick while a few are much slower, like a coffee shop where most orders are simple and a few are huge group orders.\n\nRun again: with the exact same average work time, does the queue wait change?'), patch: [{ node: 'api', params: { serviceMs: { mean: 4.5, cv: 2 } } }], show: ['p99', 'p50', 'busiest'] },
     { kind: 'challenge', title: tx('Two challenges'), challenges: ['littles/slower-release', 'littles/knee'] },

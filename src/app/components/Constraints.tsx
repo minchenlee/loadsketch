@@ -13,7 +13,7 @@ import { t, tx } from '../../i18n/index.ts';
 import { sameScenario } from '../../learn/lesson.ts';
 import type { RunData } from '../../learn/metrics.ts';
 import { costOf, fmtUsd, type Cost } from '../../learn/cost.ts';
-import { PROBLEMS, PROBLEM_BY_ID, judgeProblem, type Check, type Problem, type ProblemVerdict } from '../../learn/constraints.ts';
+import { PROBLEMS, PROBLEM_BY_ID, complexity, judgeProblem, type Check, type Problem, type ProblemVerdict } from '../../learn/constraints.ts';
 import { BRIEFS, BRIEF_BY_ID, judgeBrief, type Brief, type BriefVerdict } from '../../learn/briefs.ts';
 import { applyPatches } from '../../learn/oncall.ts';
 import { EXAMPLES, useApp } from '../store.ts';
@@ -182,6 +182,40 @@ export function CostSection({ run }: { run: RunData }) {
         <summary className="muted cursor-pointer text-[13px]">{t('Detail')}</summary>
         <CostTable cost={cost} design={run.design} testId="cost-items" />
       </details>
+    </section>
+  );
+}
+
+/** Operational complexity points of the design that ran (components and extra mechanisms). */
+export function ComplexitySection({ run }: { run: RunData }) {
+  const points = useMemo(() => complexity(run.design), [run.design]);
+  return (
+    <section className={SECTION} data-testid="complexity">
+      <div className="flex items-baseline justify-between">
+        <div className="text-[15px] font-semibold">{t('Complexity')}</div>
+        <div className="num text-[15px] font-semibold" data-testid="complexity-total">
+          {t('{n} pt', { n: points.total })}
+        </div>
+      </div>
+      <div className="faint text-[13px]">{t('Each component and extra mechanism costs points to build and run. Fewer points means a simpler system to maintain.')}</div>
+      {points.items.length > 0 && (
+        <details className="mt-1">
+          <summary className="muted cursor-pointer text-[13px]">{t('Detail')}</summary>
+          <table className="mt-1 w-full text-[13px]" data-testid="complexity-items">
+            <tbody>
+              {points.items.map((i, k) => (
+                <tr key={k} className="border-t border-[var(--line)] first:border-t-0">
+                  <td className="py-0.5 pr-2">
+                    {i.where ? (i.where.includes('->') ? i.where : nameOf(run.design, i.where)) : t('Whole design')}
+                    <span className="faint">{t(': {v}', { v: KINDS[i.text] ? t(KINDS[i.text].label) : t(i.text) })}</span>
+                  </td>
+                  <td className="num py-0.5 text-right">{t('{n} pt', { n: i.points })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
     </section>
   );
 }

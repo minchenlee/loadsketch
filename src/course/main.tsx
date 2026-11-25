@@ -483,7 +483,7 @@ const pageLabel = (p: Page): string => {
 
 type Clock = { atS: number; ofS: number };
 
-function RunButton({ status, clock, onRun, onSkip }: { status: Status; clock: Clock | null; onRun: () => void; onSkip: () => void }) {
+function RunButton({ status, clock, onRun, onSkip, extra }: { status: Status; clock: Clock | null; onRun: () => void; onSkip: () => void; extra?: React.ReactNode }) {
   const busy = status === 'running' || status === 'paused' || status === 'loading';
   const going = status === 'running' || status === 'paused';
   const at = clock ? { at: clock.atS, of: clock.ofS } : null;
@@ -493,6 +493,7 @@ function RunButton({ status, clock, onRun, onSkip }: { status: Status; clock: Cl
         <Play size={14} />
         {t('Run')}
       </button>
+      {extra}
       <span className="faint text-[14px]" data-testid="course-status" data-status={status}>
         {status === 'loading' ? t('The simulator is loading…') : status === 'running' ? (at ? t('Running… {at} / {of} s', at) : t('Running…')) : status === 'paused' ? (at ? t('Paused in the simulator at {at} / {of} s', at) : t('Paused in the simulator')) : status === 'done' ? t('The run ended.') : ''}
       </span>
@@ -721,6 +722,9 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   /** The page each of those runs started on (a challenge judges only a run started on its page). */
   const [runPages, setRunPages] = useState<Record<string, number>>({});
   const [reload, setReload] = useState(0);
+  /** Whether a try step patched the design on the current simulator frame (reset before challenges). */
+  const tryPatched = useRef(false);
+  const [autoResetNote, setAutoResetNote] = useState(false);
   /** Questions a run started in this visit answers: their guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
   const [started, setStarted] = useState<string[]>([]);
   const isLocked = (q: Question) => progress.answered.includes(q.id) || started.includes(q.id);
@@ -841,8 +845,16 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   };
   // a page's guesses go to the simulator when the page opens: a run started there answers them
   useEffect(() => void dispatch({ kind: 'page' }), [i]);
-  // a step about what changes over time opens the charts; a step's look points the simulator
+  // a step about what changes over time opens the charts; a step's look points the simulator;
+  // entering a challenge step after earlier try-step patches resets to the starting design so prior experiments never trap the learner
   useEffect(() => {
+    if (page.kind === 'challenge' && tryPatched.current) {
+      tryPatched.current = false;
+      send({ source: 'loadsketch-course', kind: 'reset' });
+      setAutoResetNote(true);
+    } else if (page.kind !== 'challenge') {
+      setAutoResetNote(false);
+    }
     if (opensCharts(page) && !charts) openCharts();
     const f = lookOf(page);
     if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
@@ -882,7 +894,11 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const frameKey = `${ctxKey(ctx)}#${reload}`;
   const firstFrame = useRef(frameKey);
   useEffect(() => {
-    if (frameKey !== firstFrame.current) dispatch({ kind: 'gone' });
+    if (frameKey !== firstFrame.current) {
+      tryPatched.current = false;
+      setAutoResetNote(false);
+      dispatch({ kind: 'gone' });
+    }
     firstFrame.current = frameKey;
   }, [frameKey]);
   const q = new URLSearchParams({ embed: '1', course: '1', example: ctx.example, scenario: ctx.scenario, lang: look.current.lang, theme: look.current.theme });
@@ -1007,6 +1023,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
             <button
               className="btn mt-3"
               onClick={() => {
+                tryPatched.current = true;
                 send({ source: 'loadsketch-course', kind: 'patch', patches: page.patch! });
                 // then the simulator shows the change: the node selected, centred, its settings open
                 const f = patchFocus(page);
@@ -1026,6 +1043,11 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       body = (
         <>
           <div className="faint mb-3 text-[14px]">{t('Change the design in the simulator (click a component or a connection to change its settings), then press Run. Each finished run is judged.')}</div>
+          {autoResetNote && (
+            <div className="faint mb-3 text-[13.5px]" data-testid="course-reset-note">
+              {t('Restored to the starting design so earlier try-step changes do not interfere with the challenges.')}
+            </div>
+          )}
           <div className="space-y-3">
             {cs(page.challenges).map((c) => (
               <ChallengeCard key={c.id} c={c} verdict={verdictOf(c)} passed={progress.passed.includes(c.id)} />
@@ -1034,7 +1056,28 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           {runs[ctxKey(ctx)] && runPages[ctxKey(ctx)] === i && scenarios[ctx.scenario] && !sameScenario(runs[ctxKey(ctx)].scenario, scenarios[ctx.scenario]) && (
             <div className="mt-2 text-[14px]" style={{ color: 'var(--warn-ink)' }}>{t('The scenario was changed. Switch back to "{name}" for the challenges to count.', { name: t(scenarios[ctx.scenario].name ?? ctx.scenario) })}</div>
           )}
-          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
+          <RunButton
+            status={status}
+            clock={clock}
+            onRun={startRun}
+            onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })}
+            extra={
+              <button
+                className="btn"
+                onClick={() => {
+                  tryPatched.current = false;
+                  setAutoResetNote(false);
+                  send({ source: 'loadsketch-course', kind: 'reset' });
+                }}
+                disabled={status === 'running' || status === 'paused' || status === 'loading'}
+                title={t('Restore this step’s original design and scenario')}
+                data-testid="course-reset"
+              >
+                <RotateCcw size={14} />
+                {t('Reset design')}
+              </button>
+            }
+          />
         </>
       );
       break;
@@ -1179,6 +1222,36 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       </section>
       <section className="course-frame" aria-label={t('Simulator')}>
         <iframe key={`${src}#${reload}`} ref={frame} src={src} title={t('Simulator')} data-testid="course-frame" />
+        {status === 'loading' && (
+          <div className="course-frame-skeleton" role="status" aria-busy="true" aria-label={t('The simulator is loading…')} data-testid="course-frame-skeleton">
+            <div className="course-skel-canvas">
+              <div className="course-skel-graph">
+                <div className="course-skel-node" />
+                <div className="course-skel-edge" />
+                <div className="course-skel-node" />
+                <div className="course-skel-edge" />
+                <div className="course-skel-node" />
+              </div>
+              <div className="course-skel-bar">
+                <div className="course-skel-pill w-20" />
+                <div className="course-skel-pill w-28" />
+                <div className="course-skel-pill w-16" />
+              </div>
+            </div>
+            <div className="course-skel-side">
+              <div className="course-skel-tabs">
+                <div className="course-skel-line w-12" />
+                <div className="course-skel-line w-14" />
+                <div className="course-skel-line w-12" />
+              </div>
+              <div className="course-skel-line mt-4 w-3/4" />
+              <div className="course-skel-line mt-2.5 w-full" />
+              <div className="course-skel-line mt-2 w-5/6" />
+              <div className="course-skel-block mt-5" />
+              <div className="course-skel-block mt-3" />
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

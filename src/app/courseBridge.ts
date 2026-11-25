@@ -4,7 +4,7 @@
 // takes requests from it: start a run or skip to its end, the learner's guesses (so the guess log records
 // them as in the simulator), and a change to the design that a lesson step offers (a patch). Messages go only to and from the parent page of the same origin.
 import { useEffect } from 'react';
-import { EMBEDDED, useApp } from './store.ts';
+import { EMBEDDED, EXAMPLES, SCENARIOS, useApp } from './store.ts';
 import { isPhone } from './phone.ts';
 import type { RunData } from '../learn/metrics.ts';
 import type { Patch } from '../learn/oncall.ts';
@@ -47,6 +47,8 @@ export type FromCourse =
   /** The guesses a run started now answers, and the course lesson they belong to (the guess log records them under it). */
   | { source: 'loadsketch-course'; kind: 'guesses'; lesson: string; guesses: Record<string, string> }
   | { source: 'loadsketch-course'; kind: 'patch'; patches: Patch[] }
+  /** Restore this frame's original example design and scenario in place (keeping logged guesses). */
+  | { source: 'loadsketch-course'; kind: 'reset' }
   /** The page's theme and language changed: the simulator follows without reloading (the design stays). */
   | { source: 'loadsketch-course'; kind: 'look'; theme: 'light' | 'dark'; lang: Lang }
   /**
@@ -105,6 +107,17 @@ export function useCourseBridge(): void {
           if ('node' in p) st.updateNode(p.node, { params: p.params as Record<string, ParamValue> });
           else st.updateEdge(p.edge, p.set as Partial<Omit<DesignEdge, 'from' | 'to'>>);
         }
+      } else if (m.kind === 'reset' && (st.status === 'idle' || st.status === 'done')) {
+        const { courseLesson, loggedGuesses, guesses, guessesLogged } = st;
+        if (CTX.example && EXAMPLES[CTX.example]) st.loadExample(CTX.example);
+        const sc = CTX.scenario ? SCENARIOS[CTX.scenario] : undefined;
+        useApp.setState({
+          ...(sc ? { scenario: structuredClone(sc) } : {}),
+          courseLesson,
+          loggedGuesses,
+          guesses,
+          guessesLogged,
+        });
       } else if (m.kind === 'guesses' && st.status !== 'running' && st.status !== 'paused' && typeof m.lesson === 'string') {
         // the page's open guesses replace those not logged yet; a later step's guesses come after a run
         const guesses: Record<string, string> = {};

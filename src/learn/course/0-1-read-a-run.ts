@@ -39,7 +39,7 @@ const apiAtMost5: Goal = {
 };
 
 const THEORY = tx(
-  'After the run, the Results tab also shows a theory row (labeled M/G/c, a standard math formula for waiting lines).\n\nThat formula uses only the average traffic across the whole 60-second run. It ignores whether requests arrive smoothly or rush in during one busy burst—just like saying a coffee shop averages 1 customer a minute when 60 people actually walk in during a single 15-minute rush.\n\nGuess how the real waiting time in the API queue compares with that average-based estimate, then press Run.',
+  'After the run, click the API server card on the canvas: its Settings panel also shows a queueing theory comparison (labeled M/G/c, a standard math formula for waiting lines).\n\nThat formula uses only the average traffic across the whole 60-second run. It ignores whether requests arrive smoothly or rush in during one busy burst—just like saying a coffee shop averages 1 customer a minute when 60 people actually walk in during a single 15-minute rush.\n\nGuess how the real waiting time in the API queue compares with that average-based estimate, then press Run.',
 );
 
 const lesson: Lesson = {
@@ -79,7 +79,7 @@ const lesson: Lesson = {
     },
     {
       term: tx('Theory row (M/G/c)'),
-      plain: tx('A classic waiting-line math formula on the Results tab that estimates average queue wait using only the run’s average load.'),
+      plain: tx('A classic waiting-line math formula (shown under a component’s Settings tab after a run) that estimates average queue wait using only the run’s average load.'),
       example: tx('Guessing coffee shop wait times from the daily average while ignoring the morning rush hour.'),
     },
   ],
@@ -163,7 +163,7 @@ const lesson: Lesson = {
     { kind: 'guess', title: tx('Measured wait or theory'), questions: ['theory-gap'] },
     { kind: 'run', title: tx('Run the spike'), look: { tab: 'results', panel: 'bottom' } },
     { kind: 'try', title: tx('6 API servers'), text: tx('Change the API servers’ Instances setting from 3 to 6 and run again. With twice as many servers, does the spike fit now, and how close is the measured wait to the theory estimate? (The challenge below asks you to hold the same spike with at most 5 servers.)'), patch: [{ node: 'api', params: { instances: 6 } }] },
-    { kind: 'try', title: tx('No spike'), text: tx('This switches back to 3 API servers and uses the Steady scenario (a flat 800 requests/s with no spike). Run it: when traffic stays steady, how close is the measured wait to the theory estimate?'), scenario: 'steady', look: { tab: 'results' } },
+    { kind: 'try', title: tx('No spike'), text: tx('This switches back to 3 API servers and uses the Steady scenario (a flat 800 requests/s with no spike). Run it, then look at the API server’s Settings panel: when traffic stays steady, how close is the measured wait to the theory estimate?'), scenario: 'steady', look: { node: 'api', tab: 'design' } },
     { kind: 'challenge', title: tx('Hold the spike'), challenges: ['read-run/hold-spike'] },
   ],
 };

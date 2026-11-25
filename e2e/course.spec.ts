@@ -850,3 +850,55 @@ test('course: beginner CTA opens 0.0 with key terms, glossary filters terms and 
   await noSideways(page);
   expect(errors).toEqual([]);
 });
+
+test('course: complexity shows in Results, 1.1 opens Settings for queueing theory, and challenge resets prior try patches', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/learn/?lang=en&speed=300&lesson=1.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(frame.locator('[data-node="api"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('course-frame-skeleton')).toHaveCount(0);
+
+  // Step 2 (Run): opens API Settings tab so the queueing theory row is right in view after running
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '2:run');
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(frame.getByTestId('tab-design')).toHaveAttribute('aria-selected', 'true');
+  await expect(frame.locator('body')).toContainText('Compared with queueing theory');
+
+  // Results tab shows Complexity alongside Cost
+  await frame.getByTestId('tab-learn').click();
+  await expect(frame.getByTestId('complexity')).toBeVisible();
+  await expect(frame.getByTestId('complexity-total')).toContainText(/\d+ pt/);
+
+  // Step 3 -> Step 4 (sets cv: 2) -> Step 5 (Challenge): auto-resets cv back to 1 so slower-release is solvable
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '3:try');
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+  await page.getByTestId('course-patch').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '5:challenge');
+  await expect(page.getByTestId('course-reset-note')).toBeVisible();
+
+  type S = { getState: () => { nodes: { id: string; data: { node: { params?: { serviceMs?: { mean: number; cv?: number }; concurrency?: number } } } }[]; updateNode: (id: string, p: Record<string, unknown>) => void } };
+  const apiParams = () =>
+    frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: S }).__loadsketch.getState().nodes.find((n) => n.id === 'api')?.data.node.params);
+  await expect.poll(async () => (await apiParams())?.serviceMs?.cv).toBe(1);
+
+  // Solving slower-release (4.5 ms, concurrency 8) now passes cleanly
+  await frame.locator('body').evaluate(() => {
+    const s = (window as unknown as { __loadsketch: S }).__loadsketch.getState();
+    s.updateNode('api', { params: { serviceMs: { mean: 4.5, cv: 1 }, concurrency: 8 } });
+  });
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-challenge-littles/slower-release').getByTestId('course-passed')).toBeVisible({ timeout: 60_000 });
+
+  // Reset design button restores original concurrency (4) and serviceMs (2.5)
+  await page.getByTestId('course-reset').click();
+  await expect.poll(async () => (await apiParams())?.concurrency).toBe(4);
+  expect(errors).toEqual([]);
+});
