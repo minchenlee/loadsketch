@@ -18,6 +18,8 @@ vi.stubGlobal('Worker', FakeWorker);
 const { connect, live, send } = await import('../src/app/runtime.ts');
 
 const error = (run: number, message: string) => ({ type: 'error', message, run }) as FromWorker;
+const normalFrame = (run: number, tView: number) =>
+  ({ type: 'frame', tView, endMs: 60000, durationMs: 60000, speed: 1, paused: false, lagging: false, scale: 1, snaps: [], windows: [], traces: [], timeline: [], run }) as FromWorker;
 const finishingFrame = (run: number, tView: number) =>
   ({ type: 'frame', tView, endMs: 60000, durationMs: 60000, speed: 1, paused: false, lagging: false, finishing: true, scale: 1, snaps: [], windows: [], traces: [], timeline: [], run }) as FromWorker;
 
@@ -55,5 +57,29 @@ describe('run numbers', () => {
     w.onmessage!({ data: finishingFrame(first, 30000) });
     expect(live.finishing).toBe(false);
     expect(live.clock.tView).toBe(15000);
+  });
+
+  it('in-flight normal playback frame after finish does not clear live.finishing, and worker error clears finishing + running', () => {
+    const start = { type: 'start', design: {}, scenario: {}, speed: 1, lang: 'en' } as never;
+    send(start);
+    const w = FakeWorker.last;
+    const id = w.sent.at(-1)!.run!;
+
+    // Normal playback starts, then user clicks Skip to end
+    w.onmessage!({ data: normalFrame(id, 1000) });
+    expect(live.clock.running).toBe(true);
+    expect(live.finishing).toBe(false);
+
+    send({ type: 'finish' });
+    expect(live.finishing).toBe(true);
+
+    // An earlier normal playback frame still in flight (finishing: undefined) must NOT clear live.finishing
+    w.onmessage!({ data: normalFrame(id, 1033) });
+    expect(live.finishing).toBe(true);
+
+    // A worker error during chunked finish must clean up both live.finishing and live.clock.running
+    w.onmessage!({ data: error(id, 'boom') });
+    expect(live.finishing).toBe(false);
+    expect(live.clock.running).toBe(false);
   });
 });

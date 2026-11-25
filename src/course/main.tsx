@@ -23,7 +23,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { addRun, answerable, judgedOn, learnTicks, lookOf, matchesStepPatch, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page, type PageRuns } from './steps.ts';
+import { addRun, answerable, judgedOn, learnTicks, lookOf, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, tryBaseline, type Ctx, type Page, type PageRuns } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 import { readings, type Row } from './measures.ts';
 import { calcParts } from './calc.ts';
@@ -1032,12 +1032,11 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     }
     return null;
   }, [lesson, pages, i, page.kind, ctx]);
-  /** Matching run from the previous experiment step (same ctx), used as the comparison baseline on a try step. */
+  /** Matching run from the previous experiment step (same ctx + matching patch & scenario), used as the comparison baseline on a try step. */
   const prevBaseline = useMemo(() => {
     if (prevExpStep === null) return undefined;
-    const prev = pageRuns.pages[prevExpStep]?.run;
-    return prev && matchesStepPatch(pages[prevExpStep], prev.design) ? prev : undefined;
-  }, [prevExpStep, pageRuns, pages]);
+    return tryBaseline(pages[prevExpStep], pageRuns.pages[prevExpStep]?.run, page, pageRuns.pages[i]?.run, scenarios[ctx.scenario]);
+  }, [prevExpStep, pageRuns, pages, page, i, scenarios, ctx.scenario]);
   /** The last run started on this step, next to its baseline (previous experiment step on a try step, else the run before it). */
   const measuredHere = (show: string[] | undefined) => {
     const here = pageRuns.pages[i];

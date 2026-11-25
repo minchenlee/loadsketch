@@ -21,10 +21,20 @@ describe('chunked Skip to end matches one-shot simulation', () => {
       design: loadDesign('autoscale'),
       scenario: { ...loadScenario('flash-crowd'), durationS: 600, events: [{ type: 'spike', atS: 60, forS: 240, multiplier: 3 }] },
     },
+    {
+      label: 'three-tier / overloaded with long 600s drain window',
+      design: (() => {
+        const d = loadDesign('three-tier');
+        const api = d.nodes.find((n) => n.id === 'api')!;
+        api.params = { ...api.params, queueLimit: 500_000 };
+        return d;
+      })(),
+      scenario: { schema: 'loadsketch/scenario@1', name: 'Long drain', seed: 1, durationS: 30, warmupS: 0, traffic: { rps: 2500, readRatio: 0.9, clientTimeoutMs: 600_000 } },
+    },
   ];
 
   for (const { label, design, scenario } of cases) {
-    it(`${label}: 1s chunked stepping + drain equals one-shot run`, { timeout: 30_000 }, () => {
+    it(`${label}: 1s chunked stepping (traffic + drain) equals one-shot run`, { timeout: 30_000 }, () => {
 
       // Reference: one-shot (same as original done() from t=0)
       const oneShot = new Simulation(design, scenario, { tracesPerSec: 150, maxTraces: 100000 });
@@ -35,7 +45,7 @@ describe('chunked Skip to end matches one-shot simulation', () => {
       const oneShotTimeline = oneShot.drainTimeline(0);
       const oneShotResult = oneShot.result();
 
-      // Chunked: a few normal playback ticks with lookahead, then 1,000 ms chunks like finishChunk()
+      // Chunked: a few normal playback ticks with lookahead, then 1,000 ms chunks across BOTH traffic and drain
       const chunked = new Simulation(design, scenario, { tracesPerSec: 150, maxTraces: 100000 });
       const windows: ReturnType<Simulation['drainWindows']> = [];
       const timeline: ReturnType<Simulation['drainTimeline']> = [];
@@ -56,14 +66,20 @@ describe('chunked Skip to end matches one-shot simulation', () => {
           drain();
         }
       }
-      // Now chunked Skip to end (FINISH_STEP_MS = 1_000)
+      // Phase 1: chunked traffic up to durationMs (FINISH_STEP_MS = 1_000)
       while (simT < chunked.durationMs && !chunked.done) {
         simT = Math.min(chunked.durationMs, simT + 1_000);
         chunked.runUntil(simT);
         drain();
       }
       const chunkedSnap = chunked.liveState();
-      chunked.runUntil(Infinity);
+      // Phase 2: chunked drain up to endMs (matching finishChunk())
+      while (!chunked.done && simT < chunked.endMs) {
+        simT = Math.min(chunked.endMs, simT + 1_000);
+        chunked.runUntil(simT);
+        drain();
+      }
+      if (!chunked.done) chunked.runUntil(Infinity);
       drain();
       const chunkedResult = chunked.result();
 
@@ -122,6 +138,41 @@ describe('sim.worker.ts finish / stop / restart protocol', () => {
 
       // Ensure run 1 still received nothing while run 2 ran
       expect(messages.filter((m) => m.run === 1).length).toBe(countAtStop);
+
+      // Run 3: stop DURING the post-traffic drain phase (huge 600s timeout drain) cancels within 1 chunk
+      const longDrainDesign = loadDesign('three-tier');
+      // High queueLimit so many requests wait inside the 600s drain window
+      const apiNode = longDrainDesign.nodes.find((n) => n.id === 'api')!;
+      apiNode.params = { ...apiNode.params, queueLimit: 500_000 };
+      const longDrainScenario: Scenario = {
+        schema: 'loadsketch/scenario@1',
+        name: 'Drain cancel test',
+        seed: 1,
+        durationS: 120,
+        warmupS: 0,
+        traffic: { rps: 2500, readRatio: 0.9, clientTimeoutMs: 600_000 },
+      };
+      dispatch({ type: 'start', design: longDrainDesign, scenario: longDrainScenario, speed: 1, lang: 'en', run: 3 });
+      dispatch({ type: 'finish' });
+
+      // Wait until the worker enters the post-traffic drain phase (finishing: true && tView === durationMs)
+      const drainDeadline = Date.now() + 15_000;
+      while (
+        !messages.some((m) => m.run === 3 && m.type === 'frame' && m.finishing && m.tView >= 120_000) &&
+        !messages.some((m) => m.run === 3 && m.type === 'result') &&
+        Date.now() < drainDeadline
+      ) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      const inDrainFrames = messages.filter((m) => m.run === 3 && m.type === 'frame' && m.finishing && m.tView >= 120_000);
+      expect(inDrainFrames.length).toBeGreaterThan(0);
+
+      // Sending stop during drain must stop immediately (no result, no further frames)
+      dispatch({ type: 'stop' });
+      const countAtDrainStop = messages.filter((m) => m.run === 3).length;
+      await new Promise((r) => setTimeout(r, 120));
+      expect(messages.filter((m) => m.run === 3).length).toBe(countAtDrainStop);
+      expect(messages.some((m) => m.run === 3 && m.type === 'result')).toBe(false);
     } finally {
       fakeSelf.onmessage?.({ data: { type: 'stop' } } as MessageEvent<ToWorker>);
       if (origSelf === undefined) delete (globalThis as Record<string, unknown>).self;

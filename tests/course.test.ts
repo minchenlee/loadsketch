@@ -1,7 +1,7 @@
 // The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
-import { addRun, answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, matchesStepPatch, nextTitle, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
+import { addRun, answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, matchesStepPatch, matchesStepRun, nextTitle, opensCharts, pagesOf, patchFocus, tryBaseline } from '../src/course/steps.ts';
 import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { calcParts } from '../src/course/calc.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
@@ -283,6 +283,34 @@ describe('runs kept by page', () => {
     expect(matchesStepPatch(step, oneServer)).toBe(true);
     expect(matchesStepPatch(step, threeServers)).toBe(false);
     expect(matchesStepPatch({ kind: 'run' as const, title: 'Run' }, threeServers)).toBe(true);
+  });
+
+  it('tryBaseline rejects mismatched scenarios (e.g. 200 RPS vs 2500 RPS) and unpatched runs', () => {
+    const step1 = { kind: 'try' as const, title: 'Drop to 1', text: 'x', patch: [{ node: 'api', params: { instances: 1 } }] };
+    const step3 = { kind: 'try' as const, title: 'Restore 3', text: 'x', patch: [{ node: 'api', params: { instances: 3 } }] };
+    const oneServer = { schema: 'loadsketch/design@1' as const, name: 'x', nodes: [{ id: 'api', kind: 'service', pos: [0, 0] as [number, number], params: { instances: 1 } }], edges: [] };
+    const threeServers = { ...oneServer, nodes: [{ ...oneServer.nodes[0], params: { instances: 3 } }] };
+    const steady = { schema: 'loadsketch/scenario@1' as const, name: 'Steady', durationS: 60, traffic: { rps: 800, readRatio: 0.9 } };
+    const slow200 = { ...steady, name: 'Custom', traffic: { rps: 200, readRatio: 0.9 } };
+    const fast2500 = { ...steady, name: 'Custom', traffic: { rps: 2500, readRatio: 0.9 } };
+
+    const validPrev = { design: oneServer, scenario: steady };
+    const validCurr = { design: threeServers, scenario: steady };
+
+    // Both steps match patch & scenario -> returns prevRun
+    expect(matchesStepRun(step1, validPrev, steady)).toBe(true);
+    expect(tryBaseline(step1, validPrev, step3, undefined, steady)).toBe(validPrev);
+    expect(tryBaseline(step1, validPrev, step3, validCurr, steady)).toBe(validPrev);
+
+    // Previous step ran with altered 200 RPS scenario -> no valid baseline (keeps resume note)
+    expect(tryBaseline(step1, { design: oneServer, scenario: slow200 }, step3, undefined, steady)).toBeUndefined();
+    expect(tryBaseline(step1, { design: oneServer, scenario: slow200 }, step3, { design: threeServers, scenario: fast2500 }, steady)).toBeUndefined();
+
+    // Current step ran with altered 2500 RPS scenario -> no misleading comparison
+    expect(tryBaseline(step1, validPrev, step3, { design: threeServers, scenario: fast2500 }, steady)).toBeUndefined();
+
+    // Current step ran without its patch (still 1 server) -> no comparison
+    expect(tryBaseline(step1, validPrev, step3, { design: oneServer, scenario: steady }, steady)).toBeUndefined();
   });
 });
 

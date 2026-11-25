@@ -1,7 +1,7 @@
 // 2.1 Hit ratio decides the database (url-shortener). Moved from feat/course-sample (cb667f4).
 import { t, tx } from '../../i18n/index.ts';
 import { noMoreCapacity, type Lesson } from '../lesson.ts';
-import { cacheAtMost, failUnder1, hitRatio, keepLru, p99Under, pct, shareReaching } from '../lessonKit.ts';
+import { cacheAtMost, failShareOf, failUnder1, hitRatio, keepLru, p99Under, pct, shareReaching } from '../lessonKit.ts';
 
 const p99Under150 = p99Under(150, tx('p99 of successful requests under 150 ms'));
 const p99Under100 = p99Under(100, tx('p99 of successful requests under 100 ms'));
@@ -93,16 +93,21 @@ const cacheHitRatio: Lesson = {
         const s = shareReaching(run, 'db', 'api');
         return s < 0.1 ? 'tenth' : s <= 0.4 ? 'quarter' : 'half';
       },
-      measured: (run) => t('{n} of every 100 requests reach the database', { n: Math.round(shareReaching(run, 'db', 'api') * 100) }),
+      measured: (run) =>
+        t('{n} of every 100 requests reach the database ({rps}/s total arrivals, {err} failed)', {
+          n: Math.round(shareReaching(run, 'db', 'api') * 100),
+          rps: Math.round(run.result.nodes.db?.rps ?? 0),
+          err: pct(failShareOf(run)),
+        }),
       calc: [
         tx('Database reads = 3,000/s × 99% reads × (1 − hit ratio) = 2,970 × (1 − hit ratio)'),
         tx('Replica ceiling = 8 connections × 1,000 ÷ 5 ms = 1,600 reads/s (writes go to primary)'),
-        tx('Miss share that fills the replica: 1,600 ÷ 2,970 ≈ 54% → hit ratio below ~46%'),
+        tx('Theoretical average-load boundary: 1,600 ÷ 2,970 ≈ 54% misses → ~46% hit ratio'),
       ],
-      explain: tx('The hit ratio decides how much work reaches the database. Raising the hit ratio from 50% to 75% cuts database reads in half.\n\nHere the read replica has 8 connections and takes 5 ms per read, so its ceiling is about 1,600 reads/s. With 2,970 reads/s arriving (99% of 3,000 clicks/s), the replica saturates once misses pass 1,600 ÷ 2,970 ≈ 54%—that is, when the hit ratio drops below about 46%.'),
+      explain: tx('The hit ratio decides how much work reaches the database. Raising the hit ratio from 50% to 75% cuts database reads in half.\n\nHere the read replica has 8 connections and takes 5 ms per read, so its ceiling is about 1,600 reads/s. With 2,970 reads/s arriving (99% of 3,000 clicks/s), ~46% hit ratio (54% misses) is the theoretical boundary where average reads exceed the replica’s capacity—queues already start forming from traffic bursts before you reach it, and past it the database queue fills and rejects excess requests.'),
       explainFor: {
         tenth: tx('Fewer than 10 in 100 requests reach the database because the cache caught more than 90% of reads. Check whether this design has a very high hit ratio or uses a fixed hit rate.'),
-        half: tx('More than 40 in 100 requests reach the database, meaning the hit ratio is under ~60%. That does not always overload the replica by itself: compare the reads/s on the database card against the replica’s ~1,600 reads/s ceiling (and check the error rate). Requests start queuing and timing out once the hit ratio falls below ~46% (where misses pass 1,600 reads/s).'),
+        half: tx('More than 40 in 100 requests reach the database, meaning the hit ratio is under ~60%. That does not always mean the replica is overloaded yet: ~46% is the theoretical boundary where average reads exceed the replica’s ~1,600 reads/s ceiling. Queues already start forming from traffic bursts as you approach that boundary, and once past it the queue fills and rejects excess requests—check Measured above and the Results tab for errors, and note that the /s figure on the database card is total arrivals (reads plus writes).'),
       },
     },
   ],

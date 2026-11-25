@@ -1,8 +1,8 @@
 // The pages of a lesson on the course page: one per step of the lesson (stepsOf() in
 // src/learn/lesson.ts), then a last page to finish. Each page has the run it works with: the
 // example and scenario the simulator on the right shows. Pure: no React, no DOM.
-import { runOf, stepsOf, type Lesson, type Look, type Step } from '../learn/lesson.ts';
-import type { Design } from '../schema/design.ts';
+import { runOf, sameScenario, stepsOf, type Lesson, type Look, type Step } from '../learn/lesson.ts';
+import type { Design, Scenario } from '../schema/design.ts';
 
 export type Page = Step | { kind: 'done' };
 
@@ -136,7 +136,36 @@ export interface PageRuns<R> {
 /** Records a finished run on the page it started on. */
 export const addRun = <R,>(s: PageRuns<R>, page: number, run: R): PageRuns<R> => ({ last: run, pages: { ...s.pages, [page]: { run, before: s.last } } });
 
-/** Whether a run's design matches every patch a try step asks for (so an unpatched run does not count as its baseline). */
+/** Whether a run matches both a step's required patch and its expected scenario (when known). */
+export function matchesStepRun(
+  page: Page,
+  run: { design: Design; scenario: Scenario },
+  expectedScenario?: Scenario,
+): boolean {
+  if (!matchesStepPatch(page, run.design)) return false;
+  if (expectedScenario && !sameScenario(run.scenario, expectedScenario)) return false;
+  return true;
+}
+
+/**
+ * Valid comparison baseline for a `try` step: returns the previous experiment step's run only when
+ * that run matches its own required patch and scenario, and (once the current step has run) the
+ * current run also matches its own patch and the same scenario. Otherwise returns `undefined` so
+ * mismatched scenarios/settings are never shown as a before/after comparison.
+ */
+export function tryBaseline<R extends { design: Design; scenario: Scenario }>(
+  prevPage: Page,
+  prevRun: R | undefined,
+  currPage: Page,
+  currRun: R | undefined,
+  expectedScenario: Scenario | undefined,
+): R | undefined {
+  if (!prevRun || !matchesStepRun(prevPage, prevRun, expectedScenario)) return undefined;
+  if (!currRun) return prevRun;
+  if (!matchesStepRun(currPage, currRun, expectedScenario)) return undefined;
+  if (!sameScenario(prevRun.scenario, currRun.scenario)) return undefined;
+  return prevRun;
+}
 export function matchesStepPatch(page: Page, design: Design): boolean {
   if (page.kind !== 'try' || !page.patch?.length) return true;
   for (const p of page.patch) {

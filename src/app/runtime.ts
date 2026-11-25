@@ -63,6 +63,7 @@ export function windowAt(t: number): WindowStat | null {
 }
 
 export function resetLive(): void {
+  finishingRequested = false;
   live.snaps = [];
   live.windows = [];
   live.traces = [];
@@ -86,15 +87,22 @@ export function connect(handler: (m: FromWorker) => void): void {
 
 /** The current run. 'start' and 'stop' change it; messages from an older run are dropped. */
 let run = 0;
+/** True once the page requested `finish` for the current run, so earlier in-flight normal frames do not clear `live.finishing`. */
+let finishingRequested = false;
 
 export function send(m: ToWorker): void {
   if (m.type === 'start') {
     m = { ...m, run: ++run };
+    finishingRequested = false;
     live.finishing = false;
   } else if (m.type === 'stop') {
     run++;
+    finishingRequested = false;
     live.finishing = false;
-  } else if (m.type === 'finish') live.finishing = true;
+  } else if (m.type === 'finish') {
+    finishingRequested = true;
+    live.finishing = true;
+  }
   if (!worker) {
     worker = new Worker(new URL('../worker/sim.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (ev: MessageEvent<FromWorker>) => {
@@ -113,7 +121,14 @@ function absorb(m: FromWorker): void {
     live.endMs = m.endMs;
     live.durationMs = m.durationMs;
     live.lagging = m.lagging;
-    live.finishing = !!m.finishing;
+    if (m.finishing === false) {
+      finishingRequested = false;
+      live.finishing = false;
+    } else if (m.finishing === true) {
+      live.finishing = true;
+    } else {
+      live.finishing = finishingRequested;
+    }
     live.scale = m.scale;
     if (m.snaps.length) live.snaps.push(...m.snaps);
     if (m.windows.length) live.windows.push(...m.windows);
@@ -126,8 +141,14 @@ function absorb(m: FromWorker): void {
     if (i > 0) live.snaps.splice(0, i);
     if (live.traces.length > 3000) live.traces = live.traces.filter((tr) => tr.t1 >= m.tView);
   } else if (m.type === 'result') {
+    finishingRequested = false;
     live.finishing = false;
     live.clock = { ...live.clock, tView: m.tView, at: performance.now(), running: false };
+  } else if (m.type === 'error') {
+    finishingRequested = false;
+    live.finishing = false;
+    live.lagging = false;
+    live.clock = { ...live.clock, at: performance.now(), paused: false, running: false };
   }
 }
 

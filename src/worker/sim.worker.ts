@@ -20,6 +20,7 @@ let finishTimer: ReturnType<typeof setTimeout> | null = null;
 let speed = 1;
 let paused = false;
 let finishing = false;
+let endSnap: Snapshot | null = null;
 let tView = 0;
 let lastReal = 0;
 let lookahead = 3050;
@@ -82,13 +83,19 @@ function frame(): void {
     traces: sim.drainTraces(),
     timeline,
   });
-  if (tView >= sim.durationMs) done();
+  if (tView >= sim.durationMs) {
+    stopTimers();
+    paused = false;
+    finishing = true;
+    finishChunk();
+  }
 }
 
 function done(extraSnaps?: Snapshot[]): void {
   if (!sim) return;
   stopTimers();
   finishing = false;
+  endSnap = null;
   tView = sim.durationMs;
   const snaps: Snapshot[] = extraSnaps ? [...extraSnaps] : [];
   if (simT < tView) {
@@ -97,7 +104,7 @@ function done(extraSnaps?: Snapshot[]): void {
     sim.runUntil(tView);
     snaps.push({ t: tView, live: sim.liveState() });
   }
-  sim.runUntil(Infinity);
+  if (!sim.done) sim.runUntil(Infinity);
   const windows = sim.drainWindows();
   const timeline = sim.drainTimeline(timelineSent);
   timelineSent += timeline.length;
@@ -107,23 +114,39 @@ function done(extraSnaps?: Snapshot[]): void {
   sim = null;
 }
 
-/** Advance to the end in ~40 ms chunks so long (e.g. 30-min) simulations report progress and stay cancellable. */
+/** Advance through both traffic and the post-traffic drain in ~40 ms chunks so long runs report progress and stay cancellable. */
 function finishChunk(): void {
   finishTimer = null;
   if (!sim || !finishing) return;
   try {
-    const wasBeforeEnd = simT < sim.durationMs;
     const t0 = performance.now();
-    while (simT < sim.durationMs && !sim.done) {
-      simT = Math.min(sim.durationMs, simT + FINISH_STEP_MS);
-      sim.runUntil(simT);
-      if (performance.now() - t0 >= FINISH_BUDGET_MS) break;
+    // Phase 1: traffic up to durationMs, capturing the end-of-traffic snapshot once
+    if (simT < sim.durationMs) {
+      while (simT < sim.durationMs && !sim.done) {
+        simT = Math.min(sim.durationMs, simT + FINISH_STEP_MS);
+        sim.runUntil(simT);
+        if (performance.now() - t0 >= FINISH_BUDGET_MS) break;
+      }
+      if (simT >= sim.durationMs && !endSnap) {
+        endSnap = { t: sim.durationMs, live: sim.liveState() };
+      }
     }
-    if (simT >= sim.durationMs || sim.done) {
-      done(wasBeforeEnd ? [{ t: sim.durationMs, live: sim.liveState() }] : undefined);
+    // Phase 2: drain in-flight requests up to endMs in the same ~40 ms chunks so Stop stays responsive
+    if (simT >= sim.durationMs && !sim.done) {
+      while (!sim.done && simT < sim.endMs) {
+        simT = Math.min(sim.endMs, simT + FINISH_STEP_MS);
+        sim.runUntil(simT);
+        if (performance.now() - t0 >= FINISH_BUDGET_MS) break;
+      }
+      if (!sim.done && simT >= sim.endMs) sim.runUntil(Infinity);
+    }
+    if (sim.done) {
+      const snaps = endSnap ? [endSnap] : undefined;
+      endSnap = null;
+      done(snaps);
       return;
     }
-    tView = simT;
+    tView = Math.min(simT, sim.durationMs);
     // Discard traces while skipping ahead so memory stays flat; clock and charts keep advancing.
     sim.drainTraces();
     const timeline = sim.drainTimeline(timelineSent);
@@ -138,7 +161,7 @@ function finishChunk(): void {
       lagging: false,
       finishing: true,
       scale: sim.scalePlan.k,
-      snaps: [{ t: simT, live: sim.liveState() }],
+      snaps: simT <= sim.durationMs ? [{ t: simT, live: sim.liveState() }] : [],
       windows: sim.drainWindows(),
       traces: [],
       timeline,
@@ -147,6 +170,7 @@ function finishChunk(): void {
   } catch (e) {
     stopTimers();
     finishing = false;
+    endSnap = null;
     sim = null;
     post({ type: 'error', message: (e as Error).message });
   }
@@ -163,6 +187,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
         speed = m.speed;
         paused = false;
         finishing = false;
+        endSnap = null;
         tView = 0;
         simT = 0;
         timelineSent = 0;
@@ -170,7 +195,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
         lookahead = sim.sc.clientTimeoutMs + 50;
         lastReal = performance.now();
         frame();
-        if (sim) timer = setInterval(frame, TICK_MS);
+        if (sim && !finishing) timer = setInterval(frame, TICK_MS);
         break;
       }
       case 'speed':
@@ -193,12 +218,14 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       case 'stop':
         stopTimers();
         finishing = false;
+        endSnap = null;
         sim = null;
         break;
     }
   } catch (e) {
     stopTimers();
     finishing = false;
+    endSnap = null;
     post({ type: 'error', message: (e as Error).message });
   }
 };
