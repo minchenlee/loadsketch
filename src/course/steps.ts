@@ -2,6 +2,7 @@
 // src/learn/lesson.ts), then a last page to finish. Each page has the run it works with: the
 // example and scenario the simulator on the right shows. Pure: no React, no DOM.
 import { runOf, stepsOf, type Lesson, type Look, type Step } from '../learn/lesson.ts';
+import type { Design } from '../schema/design.ts';
 
 export type Page = Step | { kind: 'done' };
 
@@ -134,3 +135,24 @@ export interface PageRuns<R> {
 
 /** Records a finished run on the page it started on. */
 export const addRun = <R,>(s: PageRuns<R>, page: number, run: R): PageRuns<R> => ({ last: run, pages: { ...s.pages, [page]: { run, before: s.last } } });
+
+/** Whether a run's design matches every patch a try step asks for (so an unpatched run does not count as its baseline). */
+export function matchesStepPatch(page: Page, design: Design): boolean {
+  if (page.kind !== 'try' || !page.patch?.length) return true;
+  for (const p of page.patch) {
+    if ('node' in p) {
+      const n = design.nodes.find((x) => x.id === p.node);
+      if (!n) return false;
+      for (const [k, v] of Object.entries(p.params)) {
+        if (JSON.stringify(n.params?.[k]) !== JSON.stringify(v)) return false;
+      }
+    } else {
+      const e = design.edges.find((x) => `${x.from}->${x.to}` === p.edge);
+      if (!e) return false;
+      for (const [k, v] of Object.entries(p.set)) {
+        if (JSON.stringify((e as unknown as Record<string, unknown>)[k]) !== JSON.stringify(v)) return false;
+      }
+    }
+  }
+  return true;
+}

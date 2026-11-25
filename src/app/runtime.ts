@@ -88,9 +88,13 @@ export function connect(handler: (m: FromWorker) => void): void {
 let run = 0;
 
 export function send(m: ToWorker): void {
-  if (m.type === 'start') m = { ...m, run: ++run };
-  else if (m.type === 'stop') run++;
-  else if (m.type === 'finish') live.finishing = true;
+  if (m.type === 'start') {
+    m = { ...m, run: ++run };
+    live.finishing = false;
+  } else if (m.type === 'stop') {
+    run++;
+    live.finishing = false;
+  } else if (m.type === 'finish') live.finishing = true;
   if (!worker) {
     worker = new Worker(new URL('../worker/sim.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (ev: MessageEvent<FromWorker>) => {

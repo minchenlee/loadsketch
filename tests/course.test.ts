@@ -1,7 +1,7 @@
 // The course page's pure parts: the table of contents, the pages of a lesson, saved progress.
 import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, UNITS, nextReady } from '../src/course/catalog.ts';
-import { addRun, answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, nextTitle, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
+import { addRun, answerable, clampStep, ctxOf, feedbackOf, judgedOn, learnProblems, learnTicks, lookOf, matchesStepPatch, nextTitle, opensCharts, pagesOf, patchFocus } from '../src/course/steps.ts';
 import { mergeStored, parseProgress, saveProgress, scoreOf, withAnswers } from '../src/course/progress.ts';
 import { calcParts } from '../src/course/calc.ts';
 import { COURSE, COURSE_BY_ID } from '../src/learn/course.ts';
@@ -274,6 +274,15 @@ describe('runs kept by page', () => {
     s = addRun(s, 2, 'c');
     expect(s.pages[2]).toEqual({ run: 'c', before: 'b' });
     expect(s.pages[4]).toEqual({ run: 'b', before: 'a' });
+  });
+
+  it('matchesStepPatch verifies whether a baseline run actually has the try step’s patch applied', () => {
+    const step = { kind: 'try' as const, title: 'Drop to 1', text: 'x', patch: [{ node: 'api', params: { instances: 1 } }] };
+    const oneServer = { schema: 'loadsketch/design@1' as const, name: 'x', nodes: [{ id: 'api', kind: 'service', pos: [0, 0] as [number, number], params: { instances: 1 } }], edges: [] };
+    const threeServers = { ...oneServer, nodes: [{ ...oneServer.nodes[0], params: { instances: 3 } }] };
+    expect(matchesStepPatch(step, oneServer)).toBe(true);
+    expect(matchesStepPatch(step, threeServers)).toBe(false);
+    expect(matchesStepPatch({ kind: 'run' as const, title: 'Run' }, threeServers)).toBe(true);
   });
 });
 

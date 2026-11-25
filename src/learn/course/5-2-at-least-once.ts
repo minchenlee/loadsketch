@@ -72,14 +72,14 @@ const atLeastOnce: Lesson = {
       explain: tx('Only the poison messages reach the DLQ. Each poison message fails 3 times and moves into the separate DLQ box for inspection.\n\nMessages held by the crashed worker reappear after the 2 s visibility timeout, and the healthy worker finishes them on the second try. A crash costs time, not messages. Without a DLQ, poison messages would loop forever and waste worker slots.'),
       look: { node: 'jobs' },
       explainFor: {
-        none: tx('Nothing entered the DLQ. Either there are no poison messages, or the try limit is turned off so poison messages retry forever.'),
+        none: tx('Nothing entered the DLQ. Either there are no poison messages, or the try limit is turned off so poison messages keep retrying until message retention (600 s here) expires.'),
         more: tx('Normal messages also hit the 3-try limit and went to the DLQ. Check the visibility timeout and the max receive count.'),
       },
     },
     {
       id: 'duplicates',
       topic: 'recovery',
-      text: tx('At-least-once delivery can redeliver a message after a crash or timeout. In this simulator, a duplicate means a message is completed and acked twice. How many duplicate completions happen in this run?'),
+      text: tx('At-least-once delivery can redeliver a message after a crash or timeout. In this simulator, a duplicate is counted when a second delivery finishes after an earlier delivery already succeeded and acked. How many duplicate completions happen in this run?'),
       options: [
         { id: 'none', text: tx('None: 0 messages are completed twice') },
         { id: 'some', text: tx('Tens to hundreds') },
@@ -155,7 +155,7 @@ const atLeastOnce: Lesson = {
     { kind: 'guess', title: tx('Guess: crash, DLQ, duplicates'), questions: ['crash-wait', 'dlq-share', 'duplicates'] },
     { kind: 'run', title: tx('Run the crash'), look: { panel: 'bottom' }, show: ['asyncP99', 'dlq', 'duplicates'] },
     { kind: 'try', title: tx('A short visibility timeout'), text: tx('Set “Visibility timeout” on the Work queue to 100 ms and run again. Are any duplicate completions counted now? Even though the average job takes about 50 ms, why would some jobs outlive 100 ms?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 100 } }], show: ['duplicates', 'asyncP99'] },
-    { kind: 'try', title: tx('No DLQ'), text: tx('Set “Visibility timeout” back to 2000 ms (2 s), and set “Max receive count (DLQ)” to 0 (no DLQ—retry forever). Run again.\n\nDoes anything move to the DLQ now? What do the looping poison messages do to the worker and to async p99?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 2000, maxReceives: 0 } }], look: { node: 'thumb' }, show: ['dlq', 'asyncP99', 'busiest'] },
+    { kind: 'try', title: tx('No DLQ'), text: tx('Set “Visibility timeout” back to 2000 ms (2 s), and set “Max receive count (DLQ)” to 0 (no DLQ—keep retrying until the queue’s 600-second message retention expires). Run again.\n\nDoes anything move to the DLQ now? What do the looping poison messages do to the worker and to async p99?'), patch: [{ node: 'jobs', params: { visibilityTimeoutMs: 2000, maxReceives: 0 } }], look: { node: 'thumb' }, show: ['dlq', 'asyncP99', 'busiest'] },
     { kind: 'challenge', title: tx('Crash-safe and on time'), challenges: ['async-reliable/crash-safe'] },
     { kind: 'practice', title: tx('Practice'), items: [{ kind: 'brief', id: 'brief-notify' }, { kind: 'oncall', id: 'db-errors' }] },
   ],

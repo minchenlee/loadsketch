@@ -11,7 +11,7 @@ const INTRO = tx(
 );
 
 const READ_RESULTS = tx(
-  'When every cook in a kitchen is busy, new orders wait in a queue (a waiting line, like at a coffee shop). On the canvas, each card shows how busy that part is: green means comfortable room, amber means getting full, and red means overloaded.\n\nAfter you press Run, the Results tab summarizes the user’s experience with three numbers: latency (total time from click to answer, including waiting in line), p99 (the 99th-slowest threshold out of 100 successful requests—99% of successful requests finish within this time, catching slowdowns an average hides), and error rate (the share of requests that fail instead of returning a page; latency counts only successful requests, while failures show up here).\n\nIn this first run, traffic is steady and comfortable for 3 API servers. Make two quick guesses—no math needed—then press Run.',
+  'When every cook in a kitchen is busy, new orders wait in a queue (a waiting line, like at a coffee shop). On the canvas, each card shows how busy that part is: green means comfortable room, amber means getting full, and red means overloaded.\n\nAfter you press Run, the Results tab summarizes the user’s experience with three numbers: latency (total time from click to answer, including waiting in line), p99 (sort 100 successful requests from fastest to slowest and take the 99th—99% of successful requests finish within this time, estimated from a histogram in the simulator, catching slowdowns an average hides), and error rate (the share of requests that fail instead of returning a page; latency counts only successful requests, while failures show up here).\n\nIn this first run, traffic is steady and comfortable for 3 API servers. Make two quick guesses—no math needed—then press Run.',
 );
 
 const dbBusy = (run: RunData) => run.result.nodes.db?.utilization ?? 0;
@@ -73,7 +73,7 @@ const lesson: Lesson = {
     },
     {
       term: tx('p99'),
-      plain: tx('The 99th-slowest threshold out of 100 successful requests—99% of successful requests finish within this time (latency in the simulator counts only successful requests; failures are counted in error rate).'),
+      plain: tx('Sort 100 successful requests from fastest to slowest and take the 99th—99% of successful requests finish within this time. The simulator estimates this threshold from a histogram, counting only successful requests (failures are counted in error rate).'),
       example: tx('Sort 100 coffee orders from fastest to slowest: the 99th cup is p99 (the 100th cup is the maximum). If 98 cups take 1 minute and the 99th and 100th take 5 and 10 minutes, p99 is 5 minutes.'),
     },
     {

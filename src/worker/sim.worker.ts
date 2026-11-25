@@ -111,37 +111,45 @@ function done(extraSnaps?: Snapshot[]): void {
 function finishChunk(): void {
   finishTimer = null;
   if (!sim || !finishing) return;
-  const t0 = performance.now();
-  while (simT < sim.durationMs && !sim.done) {
-    simT = Math.min(sim.durationMs, simT + FINISH_STEP_MS);
-    sim.runUntil(simT);
-    if (performance.now() - t0 >= FINISH_BUDGET_MS) break;
+  try {
+    const wasBeforeEnd = simT < sim.durationMs;
+    const t0 = performance.now();
+    while (simT < sim.durationMs && !sim.done) {
+      simT = Math.min(sim.durationMs, simT + FINISH_STEP_MS);
+      sim.runUntil(simT);
+      if (performance.now() - t0 >= FINISH_BUDGET_MS) break;
+    }
+    if (simT >= sim.durationMs || sim.done) {
+      done(wasBeforeEnd ? [{ t: sim.durationMs, live: sim.liveState() }] : undefined);
+      return;
+    }
+    tView = simT;
+    // Discard traces while skipping ahead so memory stays flat; clock and charts keep advancing.
+    sim.drainTraces();
+    const timeline = sim.drainTimeline(timelineSent);
+    timelineSent += timeline.length;
+    post({
+      type: 'frame',
+      tView,
+      endMs: sim.endMs,
+      durationMs: sim.durationMs,
+      speed,
+      paused: false,
+      lagging: false,
+      finishing: true,
+      scale: sim.scalePlan.k,
+      snaps: [{ t: simT, live: sim.liveState() }],
+      windows: sim.drainWindows(),
+      traces: [],
+      timeline,
+    });
+    finishTimer = setTimeout(finishChunk, 0);
+  } catch (e) {
+    stopTimers();
+    finishing = false;
+    sim = null;
+    post({ type: 'error', message: (e as Error).message });
   }
-  if (simT >= sim.durationMs || sim.done) {
-    done([{ t: sim.durationMs, live: sim.liveState() }]);
-    return;
-  }
-  tView = simT;
-  // Discard traces while skipping ahead so memory stays flat; clock and charts keep advancing.
-  sim.drainTraces();
-  const timeline = sim.drainTimeline(timelineSent);
-  timelineSent += timeline.length;
-  post({
-    type: 'frame',
-    tView,
-    endMs: sim.endMs,
-    durationMs: sim.durationMs,
-    speed,
-    paused: false,
-    lagging: false,
-    finishing: true,
-    scale: sim.scalePlan.k,
-    snaps: [{ t: simT, live: sim.liveState() }],
-    windows: sim.drainWindows(),
-    traces: [],
-    timeline,
-  });
-  finishTimer = setTimeout(finishChunk, 0);
 }
 
 self.onmessage = (ev: MessageEvent<ToWorker>) => {

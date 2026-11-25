@@ -15,9 +15,11 @@ class FakeWorker {
 }
 vi.stubGlobal('Worker', FakeWorker);
 
-const { connect, send } = await import('../src/app/runtime.ts');
+const { connect, live, send } = await import('../src/app/runtime.ts');
 
 const error = (run: number, message: string) => ({ type: 'error', message, run }) as FromWorker;
+const finishingFrame = (run: number, tView: number) =>
+  ({ type: 'frame', tView, endMs: 60000, durationMs: 60000, speed: 1, paused: false, lagging: false, finishing: true, scale: 1, snaps: [], windows: [], traces: [], timeline: [], run }) as FromWorker;
 
 describe('run numbers', () => {
   it('messages from a stopped or older run are dropped', () => {
@@ -36,5 +38,22 @@ describe('run numbers', () => {
     w.onmessage!({ data: error(first, 'late from the first run') });
     w.onmessage!({ data: error(second, 'new run') });
     expect(got).toEqual(['current', 'new run']);
+  });
+
+  it('stop and restart clear live.finishing and drop late finishing frames from the stopped run', () => {
+    const start = { type: 'start', design: {}, scenario: {}, speed: 1, lang: 'en' } as never;
+    send(start);
+    const w = FakeWorker.last;
+    const first = w.sent.at(-1)!.run!;
+    send({ type: 'finish' });
+    expect(live.finishing).toBe(true);
+    w.onmessage!({ data: finishingFrame(first, 15000) });
+    expect(live.clock.tView).toBe(15000);
+    send({ type: 'stop' });
+    expect(live.finishing).toBe(false);
+    // Late finishing frame from the stopped run must be ignored
+    w.onmessage!({ data: finishingFrame(first, 30000) });
+    expect(live.finishing).toBe(false);
+    expect(live.clock.tView).toBe(15000);
   });
 });

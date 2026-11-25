@@ -37,6 +37,8 @@ export type ToCourse =
   | { source: 'loadsketch-app'; kind: 'status'; ctx: CourseCtx; status: string; atS?: number; ofS?: number; finishing?: boolean }
   /** Another design loaded (it drops the guesses): the page sends them again. */
   | { source: 'loadsketch-app'; kind: 'loaded'; ctx: CourseCtx }
+  /** Confirms a course-requested `reset` actually applied to the simulator. */
+  | { source: 'loadsketch-app'; kind: 'reset'; ctx: CourseCtx }
   | { source: 'loadsketch-app'; kind: 'run'; ctx: CourseCtx; run: RunData };
 
 /** From the course page to this frame. */
@@ -118,6 +120,7 @@ export function useCourseBridge(): void {
           guesses,
           guessesLogged,
         });
+        post({ source: 'loadsketch-app', kind: 'reset', ctx: CTX });
       } else if (m.kind === 'guesses' && st.status !== 'running' && st.status !== 'paused' && typeof m.lesson === 'string') {
         // the page's open guesses replace those not logged yet; a later step's guesses come after a run
         const guesses: Record<string, string> = {};

@@ -23,7 +23,7 @@ import type { FromCourse, ToCourse } from '../app/courseBridge.ts';
 import { ALL_LESSONS, UNITS, findLesson, nextReady, type CourseLesson } from './catalog.ts';
 import { EMPTY, PROGRESS_KEY, loadProgress, mergeStored, saveProgress, scoreOf, withAnswers, type LessonProgress, type Progress } from './progress.ts';
 import { INITIAL, runStep, takesGuesses, type RunEvent, type RunState } from './runState.ts';
-import { addRun, answerable, judgedOn, learnTicks, lookOf, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page, type PageRuns } from './steps.ts';
+import { addRun, answerable, judgedOn, learnTicks, lookOf, matchesStepPatch, nextTitle, opensCharts, patchFocus, clampStep, ctxKey, ctxOf, feedbackOf, pagesOf, type Ctx, type Page, type PageRuns } from './steps.ts';
 import { loadExample, loadScenario } from './examples.ts';
 import { readings, type Row } from './measures.ts';
 import { calcParts } from './calc.ts';
@@ -205,7 +205,7 @@ function GlossaryDialog({ onClose, onOpenLesson }: { onClose: () => void; onOpen
   ];
   const numbersToWatch: { label: string; text: string }[] = [
     { label: t('Busy %'), text: t('How full a component is (utilization). Near 100% means a traffic jam is forming.') },
-    { label: t('p99'), text: t('The threshold 99% of successful requests stay under (the 99th slowest in 100). Failed requests are counted in Error rate instead.') },
+    { label: t('p99'), text: t('Sort 100 successful requests from fastest to slowest and take the 99th (99% stay under it, estimated from a histogram). Failed requests are counted in Error rate instead.') },
     { label: t('Error rate'), text: t('Share of requests that failed or timed out.') },
     { label: t('Bottleneck'), text: t('The part that fills up first and sets the limit for the whole system.') },
   ];
@@ -779,6 +779,9 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const [reload, setReload] = useState(0);
   /** Whether a try step patched the design on the current simulator frame (reset before challenges). */
   const tryPatched = useRef(false);
+  /** Challenge auto-reset queued until the iframe is idle/done and replies with `kind: 'reset'`. */
+  const pendingReset = useRef(false);
+  const resetInFlight = useRef(false);
   const [autoResetNote, setAutoResetNote] = useState(false);
   /** Questions a run started in this visit answers: their guesses are locked (the simulator's guess log keeps the guesses a run starts with). */
   const [started, setStarted] = useState<string[]>([]);
@@ -887,6 +890,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       } else if (msg.kind === 'loaded') {
         setFinishing(false);
         d({ kind: 'loaded' });
+      } else if (msg.kind === 'reset') {
+        tryPatched.current = false;
+        resetInFlight.current = false;
+        if (pendingReset.current) {
+          pendingReset.current = false;
+          setAutoResetNote(true);
+        }
       } else if (msg.kind === 'run') {
         setFinishing(false);
         const answers = d({ kind: 'finished', page: latest.current.i }).answer ?? [];
@@ -911,19 +921,30 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   // a page's guesses go to the simulator when the page opens: a run started there answers them
   useEffect(() => void dispatch({ kind: 'page' }), [i]);
   // a step about what changes over time opens the charts; a step's look points the simulator;
-  // entering a challenge step after earlier try-step patches resets to the starting design so prior experiments never trap the learner
+  // entering a challenge step after earlier try-step patches queues a reset until the iframe can accept it
   useEffect(() => {
     if (page.kind === 'challenge' && tryPatched.current) {
-      tryPatched.current = false;
-      send({ source: 'loadsketch-course', kind: 'reset' });
-      setAutoResetNote(true);
+      pendingReset.current = true;
     } else if (page.kind !== 'challenge') {
+      pendingReset.current = false;
+      resetInFlight.current = false;
       setAutoResetNote(false);
     }
     if (opensCharts(page) && !charts) openCharts();
     const f = lookOf(page);
     if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
   }, [i]);
+  // deliver a queued challenge auto-reset only when the iframe is idle or done; retry if it was busy
+  useEffect(() => {
+    if (status === 'running' || status === 'paused' || status === 'loading') {
+      resetInFlight.current = false;
+      return;
+    }
+    if (page.kind === 'challenge' && pendingReset.current && !resetInFlight.current) {
+      resetInFlight.current = true;
+      send({ source: 'loadsketch-course', kind: 'reset' });
+    }
+  }, [i, status, page.kind]);
   // the toggle (or such a step) opens or closes them now, on a phone as the charts drawer
   const chartsSent = useRef(charts);
   useEffect(() => {
@@ -961,6 +982,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   useEffect(() => {
     if (frameKey !== firstFrame.current) {
       tryPatched.current = false;
+      pendingReset.current = false;
+      resetInFlight.current = false;
       setAutoResetNote(false);
       setFinishing(false);
       dispatch({ kind: 'gone' });
@@ -1001,10 +1024,26 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     ) : (
       run && <p className="faint mt-2 text-[14px]">{t('What happened, second by second, is under "Results" in the simulator.')}</p>
     );
-  /** The last run started on this step, next to the run before it (in this visit, whatever it ran). */
+  const prevExpStep = useMemo(() => {
+    if (page.kind !== 'try') return null;
+    const key = ctxKey(ctx);
+    for (let k = i - 1; k >= 0; k--) {
+      if ((pages[k].kind === 'run' || pages[k].kind === 'try') && ctxKey(ctxOf(lesson, pages, k)) === key) return k;
+    }
+    return null;
+  }, [lesson, pages, i, page.kind, ctx]);
+  /** Matching run from the previous experiment step (same ctx), used as the comparison baseline on a try step. */
+  const prevBaseline = useMemo(() => {
+    if (prevExpStep === null) return undefined;
+    const prev = pageRuns.pages[prevExpStep]?.run;
+    return prev && matchesStepPatch(pages[prevExpStep], prev.design) ? prev : undefined;
+  }, [prevExpStep, pageRuns, pages]);
+  /** The last run started on this step, next to its baseline (previous experiment step on a try step, else the run before it). */
   const measuredHere = (show: string[] | undefined) => {
     const here = pageRuns.pages[i];
-    return here ? <Measured rows={readings(show, here.run, here.before)} /> : null;
+    if (!here) return null;
+    const before = prevExpStep !== null ? prevBaseline : here.before;
+    return <Measured rows={readings(show, here.run, before)} />;
   };
   // an answer that shows points where to look (the first answered question with a look)
   const lookAt = answeredHere.map((x) => lookOf(x)).find((f) => f);
@@ -1016,15 +1055,6 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     lesson.questions.map((x) => x.id),
     progress,
   );
-
-  const prevExpStep = useMemo(() => {
-    if (page.kind !== 'try') return null;
-    const key = ctxKey(ctx);
-    for (let k = i - 1; k >= 0; k--) {
-      if ((pages[k].kind === 'run' || pages[k].kind === 'try') && ctxKey(ctxOf(lesson, pages, k)) === key) return k;
-    }
-    return null;
-  }, [lesson, pages, i, page.kind, ctx]);
 
   let body: React.ReactNode;
   switch (page.kind) {
@@ -1095,7 +1125,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
       const prevTitle = prev ? (prev.kind !== 'done' && prev.title ? t(prev.title) : pageLabel(prev)) : '';
       body = (
         <>
-          {!pageRuns.last && prevExpStep !== null && (
+          {prevExpStep !== null && !prevBaseline && (
             <div className="card mb-3 p-3 text-[14px]" data-testid="course-resume-note">
               <p className="muted">
                 {t('The simulator reloaded its starting design, so your earlier run (and any previous step’s change) is not here to compare against.')}
@@ -1156,6 +1186,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
                 className="btn"
                 onClick={() => {
                   tryPatched.current = false;
+                  pendingReset.current = false;
+                  resetInFlight.current = false;
                   setAutoResetNote(false);
                   send({ source: 'loadsketch-course', kind: 'reset' });
                 }}

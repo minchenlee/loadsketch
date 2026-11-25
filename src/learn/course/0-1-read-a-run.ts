@@ -163,7 +163,7 @@ const lesson: Lesson = {
     { kind: 'guess', title: tx('Measured wait or theory'), questions: ['theory-gap'] },
     { kind: 'run', title: tx('Run the spike'), look: { tab: 'results', panel: 'bottom' } },
     { kind: 'try', title: tx('6 API servers'), text: tx('Change the API servers’ Instances setting from 3 to 6 and run again. With twice as many servers, does the spike fit now, and how close is the measured wait to the theory estimate? (The challenge below asks you to hold the same spike with at most 5 servers.)'), patch: [{ node: 'api', params: { instances: 6 } }] },
-    { kind: 'try', title: tx('No spike'), text: tx('This switches back to 3 API servers and uses the Steady scenario (a flat 800 requests/s with no spike). Run it, then look at the API server’s Settings panel: when traffic stays steady, how close is the measured wait to the theory estimate?'), scenario: 'steady', look: { node: 'api', tab: 'design' } },
+    { kind: 'try', title: tx('No spike'), text: tx('This switches back to 3 API servers and uses the Steady scenario (a flat 800 requests/s with no spike). Run it, then check the Settings tab of the API server card: when traffic stays steady, how close is the measured wait to the theory estimate?'), scenario: 'steady', look: { node: 'api', tab: 'design' } },
     { kind: 'challenge', title: tx('Hold the spike'), challenges: ['read-run/hold-spike'] },
   ],
 };

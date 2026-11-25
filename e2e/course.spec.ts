@@ -961,6 +961,18 @@ test('course: 0.0 guides re-running after reload on restore step, then finishes 
   await expect(page.getByTestId('course-frame-skeleton')).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '5:try');
   await expect(page.getByTestId('course-resume-note')).toBeVisible();
+
+  // Running directly on step 5 (even twice) must NOT dismiss the resume note or compare two 3-server runs
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(page.getByTestId('course-resume-note')).toBeVisible();
+  await expect(page.getByTestId('course-measured').locator('[data-before]')).toHaveCount(0);
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 30_000 });
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(page.getByTestId('course-resume-note')).toBeVisible();
+  await expect(page.getByTestId('course-measured').locator('[data-before]')).toHaveCount(0);
+
   await page.getByTestId('course-resume-back').click();
   await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
 
@@ -1034,5 +1046,39 @@ test('course: Skip to end on a 30-minute simulation shows progress feedback and 
   await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
   await expect(skipBtn).toHaveCount(0);
   await expect(page.getByTestId('course-measured')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('course: 1.1 queues challenge auto-reset if entering while previous run is still running', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  // Default 1x speed so the step-4 run stays running while we click Next into the challenge
+  await page.goto('/learn/?lang=en&lesson=1.1');
+  const frame = page.frameLocator('[data-testid="course-frame"]');
+  await expect(page.getByTestId('course-frame-skeleton')).toHaveCount(0, { timeout: 30_000 });
+
+  for (let k = 0; k < 4; k++) await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '4:try');
+  await page.getByTestId('course-patch').click();
+
+  type S = { getState: () => { nodes: { id: string; data: { node: { params?: { serviceMs?: { mean: number; cv?: number } } } } }[] } };
+  const apiCv = () =>
+    frame.locator('body').evaluate(() => (window as unknown as { __loadsketch: S }).__loadsketch.getState().nodes.find((n) => n.id === 'api')?.data.node.params?.serviceMs?.cv);
+  await expect.poll(apiCv).toBe(2);
+
+  // Start run on step 4, then advance to step 5 (challenge) BEFORE the run finishes
+  await page.getByTestId('course-run').click();
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'running', { timeout: 15_000 });
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '5:challenge');
+
+  // While still running, the iframe cannot reset yet, so "Restored..." must NOT falsely show
+  await expect(page.getByTestId('course-reset-note')).toHaveCount(0);
+  expect(await apiCv()).toBe(2);
+
+  // Finish the in-flight run: the queued reset now applies and confirms
+  await page.getByTestId('course-skip').click();
+  await expect(page.getByTestId('course-reset-note')).toBeVisible({ timeout: 30_000 });
+  await expect.poll(apiCv).toBe(1);
   expect(errors).toEqual([]);
 });
