@@ -28,6 +28,8 @@ export type FromWorkerBody =
       paused: boolean;
       /** The simulation could not keep up with the chosen speed. */
       lagging: boolean;
+      /** True while "Skip to end" is computing ahead in chunks so the UI can show progress. */
+      finishing?: boolean;
       /** Simulated at 1/scale of the traffic and capacity; counts are multiplied back (1: full size). */
       scale: number;
       snaps: Snapshot[];

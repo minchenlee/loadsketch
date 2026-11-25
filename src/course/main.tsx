@@ -6,7 +6,7 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, BookOpen, ChartLine, SkipForward, Calculator, Check, Circle, KeyRound, CircleCheck, CircleX, Languages, Lightbulb, Moon, Play, RotateCcw, Search, Sun, Trophy, Wrench, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, ChartLine, SkipForward, Calculator, Check, Circle, KeyRound, CircleCheck, CircleX, Languages, Lightbulb, Loader2, Moon, Play, RotateCcw, Search, Sun, Trophy, Wrench, X } from 'lucide-react';
 import '../app/index.css';
 import './course.css';
 import logoBlack from '../app/assets/logo-black.svg';
@@ -510,10 +510,29 @@ const pageLabel = (p: Page): string => {
 
 type Clock = { atS: number; ofS: number };
 
-function RunButton({ status, clock, onRun, onSkip, extra }: { status: Status; clock: Clock | null; onRun: () => void; onSkip: () => void; extra?: React.ReactNode }) {
+function RunButton({ status, clock, finishing, onRun, onSkip, extra }: { status: Status; clock: Clock | null; finishing: boolean; onRun: () => void; onSkip: () => void; extra?: React.ReactNode }) {
   const busy = status === 'running' || status === 'paused' || status === 'loading';
   const going = status === 'running' || status === 'paused';
   const at = clock ? { at: clock.atS, of: clock.ofS } : null;
+  const pct = clock && clock.ofS > 0 ? Math.min(99, Math.floor((clock.atS / clock.ofS) * 100)) : null;
+  const statusText =
+    status === 'loading'
+      ? t('The simulator is loading…')
+      : finishing && going
+        ? at && pct !== null
+          ? t('Skipping to end… {at} / {of} s ({p}%)', { ...at, p: pct })
+          : t('Skipping to end…')
+        : status === 'running'
+          ? at
+            ? t('Running… {at} / {of} s', at)
+            : t('Running…')
+          : status === 'paused'
+            ? at
+              ? t('Paused in the simulator at {at} / {of} s', at)
+              : t('Paused in the simulator')
+            : status === 'done'
+              ? t('The run ended.')
+              : '';
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <button className="btn btn-primary" onClick={onRun} disabled={busy} data-testid="course-run">
@@ -522,12 +541,19 @@ function RunButton({ status, clock, onRun, onSkip, extra }: { status: Status; cl
       </button>
       {extra}
       <span className="faint text-[14px]" data-testid="course-status" data-status={status}>
-        {status === 'loading' ? t('The simulator is loading…') : status === 'running' ? (at ? t('Running… {at} / {of} s', at) : t('Running…')) : status === 'paused' ? (at ? t('Paused in the simulator at {at} / {of} s', at) : t('Paused in the simulator')) : status === 'done' ? t('The run ended.') : ''}
+        {statusText}
       </span>
       {going && (
-        <button className="btn" onClick={onSkip} title={t('Skip the animation and compute to the end')} data-testid="course-skip">
-          <SkipForward size={14} />
-          {t('Skip to end')}
+        <button
+          className="btn"
+          onClick={onSkip}
+          disabled={finishing}
+          aria-busy={finishing || undefined}
+          title={finishing ? t('Computing to the end…') : t('Skip the animation and compute to the end')}
+          data-testid="course-skip"
+        >
+          {finishing ? <Loader2 size={14} className="motion-safe:animate-spin" /> : <SkipForward size={14} />}
+          {finishing ? t('Skipping…') : t('Skip to end')}
         </button>
       )}
     </div>
@@ -742,6 +768,8 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   const [status, setStatus] = useState<Status>('loading');
   /** The simulated time of the run that goes, from the frame's status (null when none goes). */
   const [clock, setClock] = useState<Clock | null>(null);
+  /** True while "Skip to end" is computing ahead in chunks. */
+  const [finishing, setFinishing] = useState(false);
   /** The latest run of each example and scenario, in this visit. */
   const [runs, setRuns] = useState<Record<string, RunData>>({});
   /** The last two finished runs in this visit, with the page each started on: a run or try step shows the last one, next to the one before it. */
@@ -849,13 +877,18 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         send({ source: 'loadsketch-course', kind: 'panels', bottom: latest.current.charts, ...(opensCharts(here) ? { show: true } : {}) });
         const f = lookOf(here);
         if (f) send({ source: 'loadsketch-course', kind: 'focus', ...f });
+        setFinishing(false);
         d({ kind: 'ready' });
       } else if (msg.kind === 'status') {
         setClock(typeof msg.atS === 'number' && typeof msg.ofS === 'number' ? { atS: msg.atS, ofS: msg.ofS } : null);
+        setFinishing(!!msg.finishing);
         // the clock ticks repeat the status: only a new status goes through the table
         if ((msg.status === 'idle' || msg.status === 'running' || msg.status === 'paused' || msg.status === 'done') && msg.status !== rs.current.frame) d({ kind: 'status', status: msg.status, page: latest.current.i });
-      } else if (msg.kind === 'loaded') d({ kind: 'loaded' });
-      else if (msg.kind === 'run') {
+      } else if (msg.kind === 'loaded') {
+        setFinishing(false);
+        d({ kind: 'loaded' });
+      } else if (msg.kind === 'run') {
+        setFinishing(false);
         const answers = d({ kind: 'finished', page: latest.current.i }).answer ?? [];
         onRunRef.current({ ctx: here, run: msg.run, answers, page: rs.current.runPage ?? latest.current.i });
       }
@@ -867,8 +900,13 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
   // the guesses lock when the simulator says the run started (status 'running'), not here: it
   // refuses a design that does not pass its checks, and then no run starts
   const startRun = () => {
+    setFinishing(false);
     if (takesGuesses(rs.current)) sendGuesses();
     send({ source: 'loadsketch-course', kind: 'run' });
+  };
+  const skipRun = () => {
+    setFinishing(true);
+    send({ source: 'loadsketch-course', kind: 'skip' });
   };
   // a page's guesses go to the simulator when the page opens: a run started there answers them
   useEffect(() => void dispatch({ kind: 'page' }), [i]);
@@ -924,6 +962,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
     if (frameKey !== firstFrame.current) {
       tryPatched.current = false;
       setAutoResetNote(false);
+      setFinishing(false);
       dispatch({ kind: 'gone' });
     }
     firstFrame.current = frameKey;
@@ -1044,7 +1083,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
         <>
           <Prose text={page.text ? t(page.text) : t('Press Run. The simulator sends the traffic of the lesson\'s scenario through the design. You can also press Run in the simulator itself, or jump to the end there.')} className="text-[16px]" />
           {!run && askedHere.some((x) => !progress.guesses[x.id]) && <p className="muted mt-2 text-[14px]">{t('Some questions have no guess yet. Go back to guess, or run without one.')}</p>}
-          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
+          <RunButton status={status} clock={clock} finishing={finishing} onRun={startRun} onSkip={skipRun} />
           {measuredHere(page.show)}
           {answers(run)}
         </>
@@ -1082,7 +1121,7 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
               {t('Make this change in the simulator')}
             </button>
           )}
-          <RunButton status={status} clock={clock} onRun={startRun} onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })} />
+          <RunButton status={status} clock={clock} finishing={finishing} onRun={startRun} onSkip={skipRun} />
           {measuredHere(page.show)}
           {answers(runs[ctxKey(ctx)])}
         </>
@@ -1109,8 +1148,9 @@ function LessonView({ entry, lesson, progress, update, lang, theme, openLesson, 
           <RunButton
             status={status}
             clock={clock}
+            finishing={finishing}
             onRun={startRun}
-            onSkip={() => send({ source: 'loadsketch-course', kind: 'skip' })}
+            onSkip={skipRun}
             extra={
               <button
                 className="btn"

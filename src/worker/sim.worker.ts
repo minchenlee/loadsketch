@@ -11,11 +11,15 @@ import type { FromWorkerBody, Snapshot, ToWorker } from './protocol.ts';
 
 const TICK_MS = 33;
 const MAX_EVENTS_PER_TICK = 1_500_000;
+const FINISH_BUDGET_MS = 40;
+const FINISH_STEP_MS = 1_000;
 
 let sim: Simulation | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
+let finishTimer: ReturnType<typeof setTimeout> | null = null;
 let speed = 1;
 let paused = false;
+let finishing = false;
 let tView = 0;
 let lastReal = 0;
 let lookahead = 3050;
@@ -25,6 +29,13 @@ let lagging = false;
 
 let run = 0;
 const post = (m: FromWorkerBody) => (self as unknown as Worker).postMessage({ ...m, run });
+
+function stopTimers(): void {
+  if (timer) clearInterval(timer);
+  timer = null;
+  if (finishTimer) clearTimeout(finishTimer);
+  finishTimer = null;
+}
 
 function snapEvery(): number {
   return Math.min(500, Math.max(0.5, speed * TICK_MS));
@@ -74,12 +85,12 @@ function frame(): void {
   if (tView >= sim.durationMs) done();
 }
 
-function done(): void {
+function done(extraSnaps?: Snapshot[]): void {
   if (!sim) return;
-  if (timer) clearInterval(timer);
-  timer = null;
+  stopTimers();
+  finishing = false;
   tView = sim.durationMs;
-  const snaps: Snapshot[] = [];
+  const snaps: Snapshot[] = extraSnaps ? [...extraSnaps] : [];
   if (simT < tView) {
     // "jump to the end": record the state at the end of the traffic, which is what the view shows
     simT = tView;
@@ -90,9 +101,47 @@ function done(): void {
   const windows = sim.drainWindows();
   const timeline = sim.drainTimeline(timelineSent);
   timelineSent += timeline.length;
-  post({ type: 'frame', tView, endMs: sim.endMs, durationMs: sim.durationMs, speed, paused, lagging: false, scale: sim.scalePlan.k, snaps, windows, traces: [], timeline });
+  sim.drainTraces();
+  post({ type: 'frame', tView, endMs: sim.endMs, durationMs: sim.durationMs, speed, paused, lagging: false, finishing: false, scale: sim.scalePlan.k, snaps, windows, traces: [], timeline });
   post({ type: 'result', result: sim.result(), tView });
   sim = null;
+}
+
+/** Advance to the end in ~40 ms chunks so long (e.g. 30-min) simulations report progress and stay cancellable. */
+function finishChunk(): void {
+  finishTimer = null;
+  if (!sim || !finishing) return;
+  const t0 = performance.now();
+  while (simT < sim.durationMs && !sim.done) {
+    simT = Math.min(sim.durationMs, simT + FINISH_STEP_MS);
+    sim.runUntil(simT);
+    if (performance.now() - t0 >= FINISH_BUDGET_MS) break;
+  }
+  if (simT >= sim.durationMs || sim.done) {
+    done([{ t: sim.durationMs, live: sim.liveState() }]);
+    return;
+  }
+  tView = simT;
+  // Discard traces while skipping ahead so memory stays flat; clock and charts keep advancing.
+  sim.drainTraces();
+  const timeline = sim.drainTimeline(timelineSent);
+  timelineSent += timeline.length;
+  post({
+    type: 'frame',
+    tView,
+    endMs: sim.endMs,
+    durationMs: sim.durationMs,
+    speed,
+    paused: false,
+    lagging: false,
+    finishing: true,
+    scale: sim.scalePlan.k,
+    snaps: [{ t: simT, live: sim.liveState() }],
+    windows: sim.drainWindows(),
+    traces: [],
+    timeline,
+  });
+  finishTimer = setTimeout(finishChunk, 0);
 }
 
 self.onmessage = (ev: MessageEvent<ToWorker>) => {
@@ -100,11 +149,12 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
   try {
     switch (m.type) {
       case 'start': {
-        if (timer) clearInterval(timer);
+        stopTimers();
         setLang(m.lang);
         run = m.run ?? 0;
         speed = m.speed;
         paused = false;
+        finishing = false;
         tView = 0;
         simT = 0;
         timelineSent = 0;
@@ -112,27 +162,35 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
         lookahead = sim.sc.clientTimeoutMs + 50;
         lastReal = performance.now();
         frame();
-        timer = setInterval(frame, TICK_MS);
+        if (sim) timer = setInterval(frame, TICK_MS);
         break;
       }
       case 'speed':
         speed = m.speed;
         break;
       case 'pause':
+        if (finishing) break;
         paused = m.paused;
         lastReal = performance.now();
         if (sim) frame();
         break;
       case 'finish':
-        if (sim) done();
+        if (sim && !finishing) {
+          stopTimers();
+          paused = false;
+          finishing = true;
+          finishChunk();
+        }
         break;
       case 'stop':
-        if (timer) clearInterval(timer);
-        timer = null;
+        stopTimers();
+        finishing = false;
         sim = null;
         break;
     }
   } catch (e) {
+    stopTimers();
+    finishing = false;
     post({ type: 'error', message: (e as Error).message });
   }
 };

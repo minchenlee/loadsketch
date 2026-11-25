@@ -1,4 +1,4 @@
-import { FastForward, Gauge, Pause, Play, RotateCcw, Square, TrendingUp, Zap } from 'lucide-react';
+import { FastForward, Gauge, Loader2, Pause, Play, RotateCcw, Square, TrendingUp, Zap } from 'lucide-react';
 import { useMemo } from 'react';
 import { useApp, GENERAL_SCENARIOS, SCENARIOS, SPEEDS, exampleScenario } from '../store.ts';
 import { live, viewTime } from '../runtime.ts';
@@ -14,12 +14,14 @@ import { presetOf } from '../presetName.ts';
 function Clock() {
   useTick();
   const status = useApp((s) => s.status);
+  const finishing = useApp((s) => s.finishing);
   const sec = status === 'idle' ? 0 : viewTime() / 1000;
   const dur = live.durationMs / 1000;
+  const pct = dur > 0 ? Math.min(99, Math.floor((sec / dur) * 100)) : 0;
   return (
     <span className="num faint shrink-0 text-[14px] whitespace-nowrap" style={{ minWidth: 92 }} data-testid="clock">
       {status === 'idle' ? t('Not run yet') : dur > LONG_RUN_S ? `${fmtClock(sec)} / ${fmtClock(dur)}` : t('{t} / {dur} s', { t: sec.toFixed(sec < 10 ? 2 : 1), dur: dur || '–' })}
-      {live.lagging && status === 'running' ? ` · ${t('Cannot keep up')}` : ''}
+      {finishing ? ` · ${t('Computing… {p}%', { p: pct })}` : live.lagging && status === 'running' ? ` · ${t('Cannot keep up')}` : ''}
     </span>
   );
 }
@@ -93,6 +95,7 @@ export function RunBar() {
   // the read share with APIs: depends on the client weights and edges too
   const setScenario = useApp((s) => s.setScenario);
   const status = useApp((s) => s.status);
+  const finishing = useApp((s) => s.finishing);
   const speed = useApp((s) => s.speed);
   const run = useApp((s) => s.run);
   const pause = useApp((s) => s.pause);
@@ -130,12 +133,20 @@ export function RunBar() {
         </button>
       ) : (
         <>
-          <button className="btn shrink-0" onClick={() => pause(status === 'running')} data-testid="pause">
+          <button className="btn shrink-0" onClick={() => pause(status === 'running')} disabled={finishing} data-testid="pause">
             {status === 'running' ? <Pause size={14} /> : <Play size={14} />}
             {status === 'running' ? t('Pause') : t('Resume')}
           </button>
-          <button className="btn shrink-0" onClick={finish} title={t('Skip the animation and compute to the end')} aria-label={t('Skip to end')}>
-            <FastForward size={14} /> <span className="sd-desk">{t('Skip to end')}</span>
+          <button
+            className="btn shrink-0"
+            onClick={finish}
+            disabled={finishing}
+            aria-busy={finishing || undefined}
+            title={finishing ? t('Computing to the end…') : t('Skip the animation and compute to the end')}
+            aria-label={finishing ? t('Skipping to end…') : t('Skip to end')}
+            data-testid="skip-to-end"
+          >
+            {finishing ? <Loader2 size={14} className="motion-safe:animate-spin" /> : <FastForward size={14} />} <span className="sd-desk">{finishing ? t('Skipping…') : t('Skip to end')}</span>
           </button>
           <button className="btn shrink-0 px-2" onClick={stop} title={t('Stop')} aria-label={t('Stop')}>
             <Square size={13} />

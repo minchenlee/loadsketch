@@ -1010,3 +1010,29 @@ test('course: on a phone, 0.0 runs overload (1 server) and recovery (3 servers) 
   await noSideways(page);
   expect(errors).toEqual([]);
 });
+
+test('course: Skip to end on a 30-minute simulation shows progress feedback and finishes cleanly', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  // Lesson 1.5 uses flash-crowd (durationS = 1800 = 30 min)
+  await page.goto('/learn/?lang=en&lesson=1.5');
+  await expect(page.getByTestId('course-frame-skeleton')).toHaveCount(0, { timeout: 30_000 });
+  await page.getByTestId('course-next').click();
+  await page.getByTestId('course-next').click();
+  await expect(page.getByTestId('course-step')).toHaveAttribute('data-step', '2:run');
+
+  await page.getByTestId('course-run').click();
+  const skipBtn = page.getByTestId('course-skip');
+  await expect(skipBtn).toBeVisible({ timeout: 15_000 });
+  await skipBtn.click();
+
+  // Immediately shows busy feedback instead of appearing frozen
+  await expect(skipBtn).toBeDisabled();
+  await expect(page.getByTestId('course-status')).toContainText(/Skipping to end…|The run ended\./);
+
+  // Completes cleanly to done
+  await expect(page.getByTestId('course-status')).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
+  await expect(skipBtn).toHaveCount(0);
+  await expect(page.getByTestId('course-measured')).toBeVisible();
+  expect(errors).toEqual([]);
+});

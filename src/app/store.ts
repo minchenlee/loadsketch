@@ -129,6 +129,8 @@ export interface AppState {
   dirty: boolean;
   scenario: Scenario;
   status: RunStatus;
+  /** True while "Skip to end" is computing ahead in chunks. */
+  finishing: boolean;
   speed: number;
   /** Display time in ms, refreshed a few times per second for React (the canvas animates on its own). */
   tView: number;
@@ -355,6 +357,7 @@ export const useApp = create<AppState>((set, get) => {
   dirty: false,
   scenario: defaultScenario(),
   status: 'idle',
+  finishing: false,
   speed: 1,
   tView: 0,
   windows: [],
@@ -553,11 +556,11 @@ export const useApp = create<AppState>((set, get) => {
       return;
     }
     resetLive();
-    set({ status: 'running', result: null, windows: [], timeline: [], tView: 0, error: null, limit: null, ran: { design: d, scenario: get().scenario } });
+    set({ status: 'running', finishing: false, result: null, windows: [], timeline: [], tView: 0, error: null, limit: null, ran: { design: d, scenario: get().scenario } });
     send({ type: 'start', design: d, scenario: get().scenario, speed: get().speed, lang: get().lang });
   },
   pause: (p) => {
-    if (get().status !== 'running' && get().status !== 'paused') return;
+    if ((get().status !== 'running' && get().status !== 'paused') || get().finishing) return;
     set({ status: p ? 'paused' : 'running' });
     send({ type: 'pause', paused: p });
   },
@@ -566,12 +569,16 @@ export const useApp = create<AppState>((set, get) => {
     send({ type: 'speed', speed: s });
   },
   finish: () => {
-    if (get().status === 'running' || get().status === 'paused') send({ type: 'finish' });
+    const st = get();
+    if ((st.status === 'running' || st.status === 'paused') && !st.finishing) {
+      set({ status: 'running', finishing: true });
+      send({ type: 'finish' });
+    }
   },
   stop: () => {
     if (get().status === 'running' || get().status === 'paused') send({ type: 'stop' });
     resetLive();
-    set({ status: 'idle', tView: 0 });
+    set({ status: 'idle', finishing: false, tView: 0 });
   },
   setTheme: (th) => {
     document.documentElement.classList.toggle('dark', th === 'dark');
@@ -621,7 +628,7 @@ export const useApp = create<AppState>((set, get) => {
       };
     }
     doc = { ...doc, name: swap(doc.name, untitledBefore, t(UNTITLED)) };
-    set({ lang: l, doc, nodes, status: 'idle', result: null, windows: [], timeline: [], tView: 0, error: null, ...withIssues(doc, nodes, get().edges) });
+    set({ lang: l, doc, nodes, status: 'idle', finishing: false, result: null, windows: [], timeline: [], tView: 0, error: null, ...withIssues(doc, nodes, get().edges) });
   },
   togglePanel: (p) => {
     const panels = { ...get().panels, [p]: !get().panels[p] };
@@ -819,12 +826,12 @@ let lastPush = 0;
 connect((m) => {
   const st = useApp.getState();
   if (m.type === 'error') {
-    useApp.setState({ error: t('The simulation failed: {why}', { why: m.message }), status: 'idle' });
+    useApp.setState({ error: t('The simulation failed: {why}', { why: m.message }), status: 'idle', finishing: false });
     return;
   }
   if (m.type === 'result') {
     const sec = m.tView / 1000;
-    useApp.setState({ status: 'done', result: m.result, tView: m.tView, windows: live.windows.filter((w) => w.t <= sec + 1e-9), timeline: live.timeline.filter((e) => e.t <= sec) });
+    useApp.setState({ status: 'done', finishing: false, result: m.result, tView: m.tView, windows: live.windows.filter((w) => w.t <= sec + 1e-9), timeline: live.timeline.filter((e) => e.t <= sec) });
     logGuesses();
     recordVersion();
     return;

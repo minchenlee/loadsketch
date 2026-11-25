@@ -20,6 +20,7 @@ export const live = {
   endMs: 0,
   durationMs: 0,
   lagging: false,
+  finishing: false,
   /** Simulated at 1/scale; counts already multiplied back. */
   scale: 1,
 };
@@ -27,7 +28,7 @@ export const live = {
 /** Current display time, interpolated between worker frames. */
 export function viewTime(now = performance.now()): number {
   const c = live.clock;
-  if (!c.running || c.paused) return c.tView;
+  if (!c.running || c.paused || live.finishing) return c.tView;
   // never extrapolate more than ~3 worker ticks
   return c.tView + Math.min(now - c.at, 100) * c.speed;
 }
@@ -69,6 +70,7 @@ export function resetLive(): void {
   live.endMs = 0;
   live.durationMs = 0;
   live.lagging = false;
+  live.finishing = false;
   live.scale = 1;
   live.clock = { tView: 0, at: performance.now(), speed: live.clock.speed, paused: false, running: false };
 }
@@ -88,6 +90,7 @@ let run = 0;
 export function send(m: ToWorker): void {
   if (m.type === 'start') m = { ...m, run: ++run };
   else if (m.type === 'stop') run++;
+  else if (m.type === 'finish') live.finishing = true;
   if (!worker) {
     worker = new Worker(new URL('../worker/sim.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (ev: MessageEvent<FromWorker>) => {
@@ -106,6 +109,7 @@ function absorb(m: FromWorker): void {
     live.endMs = m.endMs;
     live.durationMs = m.durationMs;
     live.lagging = m.lagging;
+    live.finishing = !!m.finishing;
     live.scale = m.scale;
     if (m.snaps.length) live.snaps.push(...m.snaps);
     if (m.windows.length) live.windows.push(...m.windows);
@@ -118,6 +122,7 @@ function absorb(m: FromWorker): void {
     if (i > 0) live.snaps.splice(0, i);
     if (live.traces.length > 3000) live.traces = live.traces.filter((tr) => tr.t1 >= m.tView);
   } else if (m.type === 'result') {
+    live.finishing = false;
     live.clock = { ...live.clock, tView: m.tView, at: performance.now(), running: false };
   }
 }

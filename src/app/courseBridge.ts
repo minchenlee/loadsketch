@@ -34,7 +34,7 @@ export type ToCourse =
    * The run's status, and while it runs or is paused its simulated time: `atS` of `ofS` seconds of
    * traffic. Sent on every change of status and, while running, about twice a second.
    */
-  | { source: 'loadsketch-app'; kind: 'status'; ctx: CourseCtx; status: string; atS?: number; ofS?: number }
+  | { source: 'loadsketch-app'; kind: 'status'; ctx: CourseCtx; status: string; atS?: number; ofS?: number; finishing?: boolean }
   /** Another design loaded (it drops the guesses): the page sends them again. */
   | { source: 'loadsketch-app'; kind: 'loaded'; ctx: CourseCtx }
   | { source: 'loadsketch-app'; kind: 'run'; ctx: CourseCtx; run: RunData };
@@ -133,13 +133,14 @@ export function useCourseBridge(): void {
     const clock = (s: ReturnType<typeof useApp.getState>) => {
       if (s.status !== 'running' && s.status !== 'paused') return {};
       const ofS = (s.ran ?? s).scenario.durationS ?? 60;
-      return { atS: Math.min(ofS, Math.floor(s.tView / 1000)), ofS };
+      return { atS: Math.min(ofS, Math.floor(s.tView / 1000)), ofS, finishing: s.finishing };
     };
     let ticked = 0;
     const off = useApp.subscribe((s, prev) => {
       if (s.loads !== prev.loads) post({ source: 'loadsketch-app', kind: 'loaded', ctx: CTX });
-      if (s.status === prev.status) {
-        if (s.status === 'running' && s.tView !== prev.tView && performance.now() - ticked >= 400) {
+      if (s.status === prev.status && s.finishing === prev.finishing) {
+        const gap = s.finishing ? 250 : 400;
+        if (s.status === 'running' && s.tView !== prev.tView && performance.now() - ticked >= gap) {
           ticked = performance.now();
           post({ source: 'loadsketch-app', kind: 'status', ctx: CTX, status: s.status, ...clock(s) });
         }
