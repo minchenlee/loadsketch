@@ -46,6 +46,7 @@ node scripts/check-agents-md.ts
 5. **速度預算看 CPU 時間。** 測試要檢查「跑得夠快」時，用 `tests/helpers.ts` 的 `cpuMs()`，不要用牆上時間：機器忙的時候牆上時間會變長。
 6. **格式只加不改。** `loadsketch/design@1` 只加選填欄位，不改已有欄位的意思；舊的設計檔和分享連結要能打開。格式改了要跑 `npm run schema`（`tests/format.test.ts` 會檢查 `schema/` 有沒有更新）。
 7. **改 UI 先讀 `docs/design-system.md`。** 玻璃只給浮在別的內容上面的東西；彈性曲線只用在 `transform`；資料（數字、圖表、請求的點）不加裝飾動畫；連線和箭頭是灰色；類別色光暈保持很淡；每個新動畫都要在 `prefers-reduced-motion` 時關閉。改了這些規則，要一起改那份文件。
+8. **合併流程。** 不要直接 push 到 main，main 有 GitHub ruleset 擋、沒有例外。一律開 PR，等 CI 的 `check` 和 `e2e` 兩個 job 通過後再用 squash 合併。Workers Builds 在 PR branch 上失敗是常態，不擋合併。
 
 ## 新增一種元件：要改的檔案
 
@@ -122,3 +123,5 @@ UI changes follow `docs/design-system.md`: glass only for things that float over
 Versions, the compare view, pasted designs, component presets and the custom service: see "新增其他東西" (`src/app/versions.ts`, `src/app/designDiff.ts`, `src/app/pasteDesign.ts`, `src/app/presets.ts`, `CUSTOM_KIND` in `src/schema/kinds.ts`). A practice judge must reject a custom service (`customUsed()` in `src/learn/constraints.ts`).
 
 To add a component kind, follow "新增一種元件" above: `KINDS` in `src/schema/kinds.ts`, the kind sets in `src/schema/design.ts`, the `handle()` and `runJob()` switches in `src/engine/sim.ts`, `src/engine/scale.ts`, cost, complexity points, parameter groups, icon, card summary, English strings, tests and an example. Run `npm run test:quick` (about 10 s) after every change, and the golden test after engine changes.
+
+Merge flow: never push directly to `main` (a GitHub ruleset blocks it with no exceptions); open a PR and squash-merge only after both CI `check` and `e2e` jobs pass (Workers Builds failing on a PR branch is normal and does not block merge).
