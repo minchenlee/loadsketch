@@ -96,6 +96,7 @@ const lesson: Lesson = {
       },
       measured: (run) => t('{e} of requests failed', { e: pct(failShareOf(run)) }),
       calc: [
+        tx('Hold time per request ≈ 24 ms (20 ms own processing + ~4 ms waiting on Postgres)'),
         tx('2 servers × 16 slots × (1000 ÷ 24 ms) ≈ 1300 requests/s max'),
         tx('2000/s arriving − 1300/s served ≈ 700/s that must fail'),
       ],

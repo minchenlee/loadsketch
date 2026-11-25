@@ -9,7 +9,7 @@ import { errorsUnder, failShareOf, ms, p99Under, pct } from '../lessonKit.ts';
 import { mostMachines, onlyMachinesOf } from '../courseMachines.ts';
 
 const INTRO = tx(
-  'A website that runs smoothly today can still crash tomorrow when traffic doubles. Before a product launch or sale, you need to know two things: your ceiling (the highest traffic the site can handle before breaking) and your headroom (the spare room left between today’s load and that ceiling).\n\nThis is the same three-tier site from 0.1: a load balancer, 3 API servers (4 slots each, about 9 ms per request), Redis (catching 85% of reads), and Postgres. Right now, a steady 800 requests arrive every second. Throughput—the number of requests the site actually finishes each second—matches 800/s, and nothing is broken yet.\n\nUtilization rises in step with traffic: if a part is 50% busy at 800/s, it hits 100% at 1,600/s. The busiest part hits 100% first and sets the ceiling for the entire site. Guess which component is busiest at 800/s, then press Run.',
+  'A website that runs smoothly today can still crash tomorrow when traffic doubles. Before a product launch or sale, you need to know two things: your ceiling (the highest traffic the site can handle before breaking) and your headroom (the spare room left between today’s load and that ceiling).\n\nThis is the same three-tier site from 0.1: a load balancer, 3 API servers (4 slots each; each request holds a slot for about 9 ms—6 ms of its own processing time plus about 3 ms waiting on Redis or Postgres), Redis (catching 85% of reads), and Postgres. Right now, a steady 800 requests arrive every second. Throughput—the number of requests the site actually finishes each second—matches 800/s, and nothing is broken yet.\n\nUtilization rises in step with traffic: if a part is 50% busy at 800/s, it hits 100% at 1,600/s. The busiest part hits 100% first and sets the ceiling for the entire site. Guess which component is busiest at 800/s, then press Run.',
 );
 
 const LAYERS = ['lb', 'api', 'cache', 'db'];
@@ -85,6 +85,7 @@ const lesson: Lesson = {
         return b ? t('Busiest: {name}, {u} busy on average', { name: t(b.label), u: pct(b.utilization) }) : t('No bottleneck');
       },
       calc: [
+        tx('Hold time per API request ≈ 9 ms (6 ms own processing + ~3 ms waiting on Redis/Postgres)'),
         tx('3 API servers × 4 slots × (1000 ÷ 9 ms) ≈ 1300 requests/s max'),
         tx('At 800/s, API servers are about 800 ÷ 1300 ≈ 60% busy'),
         tx('Ceiling estimate: 800/s ÷ 0.60 ≈ 1300 requests/s (~500/s headroom)'),
@@ -128,7 +129,7 @@ const lesson: Lesson = {
       goals: [apiAtMost5, errorsUnder(0.01, tx('Error rate under 1% for the whole run')), p99Under(1000, tx('p99 of successful requests under 1 s'))],
       rules: [onlyMachinesOf('api')],
       hint: tx(
-        'One API server has 4 slots taking about 9 ms per request, so 1 server handles about 4 × (1000 ÷ 9) ≈ 440 requests/s.\n\nDivide 2,000/s by 440/s per server to see how many API servers you need. Adding database connections will not help because Postgres is not the bottleneck.',
+        'One API server has 4 slots, and each request holds a slot for about 9 ms (6 ms own processing plus ~3 ms waiting on Redis or Postgres), so 1 server handles about 4 × (1000 ÷ 9) ≈ 440 requests/s.\n\nDivide 2,000/s by 440/s per server to see how many API servers you need. Adding database connections will not help because Postgres is not the bottleneck.',
       ),
     },
   ],
