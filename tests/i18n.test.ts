@@ -100,6 +100,27 @@ describe('i18n catalog', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('picks zh-CN via Intl.Locale.maximize() for zh-Hans-CN and zh-SG while keeping zh-Hant-TW on zh-TW', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loadsketch-zhcn-'));
+    let restore: (() => void) | undefined;
+    try {
+      writeFileSync(
+        join(dir, 'zh-CN.ts'),
+        `export default { code: 'zh-CN', label: '简体中文', intlLocale: 'zh-CN', htmlLang: 'zh-Hans', wordSeparator: '', messages: {} };\n`,
+        'utf8',
+      );
+      restore = await loadLocalesFromDirForTest(dir, { isolated: true });
+      expect(pickLang('zh-Hans-CN')).toBe('zh-CN');
+      expect(pickLang('zh-CN')).toBe('zh-CN');
+      expect(pickLang('zh-SG')).toBe('zh-CN');
+      expect(pickLang('zh-Hant-TW')).toBe('zh-TW');
+      expect(pickLang('zh-HK')).toBe('zh-TW');
+    } finally {
+      restore?.();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('user text', () => {
@@ -259,6 +280,16 @@ describe('adding a third language (isolated fixture)', () => {
       expect(addDupRes.status).not.toBe(0);
       expect(addDupRes.stderr).toContain('already exists');
 
+      // --add rejects codes canonicalizing to built-in en / zh-TW (same rule as parseLocaleModule)
+      for (const badCode of ['eng', 'zho-TW', 'en', 'zh-TW']) {
+        const badAdd = spawnSync('node', ['scripts/i18n-extract.ts', '--add', badCode, '--locales-dir', dir], {
+          cwd: root,
+          encoding: 'utf8',
+        });
+        expect(badAdd.status, badCode).not.toBe(0);
+        expect(existsSync(join(dir, `${badCode}.ts`)), badCode).toBe(false);
+      }
+
       const checkAdded = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dir], {
         cwd: root,
         encoding: 'utf8',
@@ -362,24 +393,39 @@ describe('adding a third language (isolated fixture)', () => {
       expect(checkRes.stderr).toContain('bad-locale.ts');
       expect(checkRes.stderr).not.toContain('ignored.js');
 
-      // Duplicate locale code across directories warns and skips at runtime
+      // Duplicate locale code across directories or canonical aliases (he.ts + iw.ts) fail checker & skip at runtime
       const dupDir = mkdtempSync(join(tmpdir(), 'loadsketch-dup-locale-'));
       let dupRestore: (() => void) | undefined;
       try {
         writeFileSync(
-          join(dupDir, 'zh-TW.ts'),
-          `export default { code: 'zh-TW', label: '繁體中文', intlLocale: 'zh-TW', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} };\n`,
+          join(dupDir, 'he.ts'),
+          `export default { code: 'he', label: 'עברית', intlLocale: 'he-IL', htmlLang: 'he', wordSeparator: ' ', messages: {} };\n`,
           'utf8',
         );
+        writeFileSync(
+          join(dupDir, 'iw.ts'),
+          `export default { code: 'iw', label: 'עברית (iw)', intlLocale: 'iw', htmlLang: 'iw', wordSeparator: ' ', messages: {} };\n`,
+          'utf8',
+        );
+        const dupCheckRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dupDir], {
+          cwd: root,
+          encoding: 'utf8',
+        });
+        expect(dupCheckRes.status).not.toBe(0);
+        expect(dupCheckRes.stderr).toContain('duplicate locale code');
+        expect(dupCheckRes.stderr).toContain('iw.ts');
+
         const dupWarns: string[] = [];
         const origWarn = console.warn;
         console.warn = (...args: unknown[]) => dupWarns.push(args.map(String).join(' '));
         try {
-          dupRestore = await loadLocalesFromDirForTest(dupDir);
+          dupRestore = await loadLocalesFromDirForTest(dupDir, { isolated: true });
         } finally {
           console.warn = origWarn;
         }
-        expect(dupWarns.some((w) => w.includes('duplicate locale code'))).toBe(true);
+        expect(LANGS).toContain('he');
+        expect(LANGS).not.toContain('iw');
+        expect(dupWarns.some((w) => w.includes('duplicate locale code') && w.includes('iw.ts'))).toBe(true);
       } finally {
         dupRestore?.();
         rmSync(dupDir, { recursive: true, force: true });

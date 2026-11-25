@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { CATEGORY_LABEL, EDGE_PARAMS, KINDS } from '../src/schema/kinds.ts';
 import { ZH } from '../src/i18n/zh-TW.ts';
 import { SAME_IN_ZH } from '../src/i18n/same.ts';
-import { isLocaleFile, isValidBcp47, parseLocaleModule } from '../src/i18n/locale.ts';
+import { canonicalLocaleTag, isLocaleFile, isValidBcp47, parseLocaleModule, reservedLocaleConflict } from '../src/i18n/locale.ts';
 
 const root = join(import.meta.dirname, '..');
 
@@ -186,8 +186,9 @@ const sortedAll = [...allIds].sort();
 // --add <code>: generate a new locale file with complete metadata and all English IDs
 if (hasAdd) {
   const code = addCode ?? '';
-  if (!isValidBcp47(code) || !/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(code) || code.toLowerCase() === 'en' || code.toLowerCase() === 'zh-tw') {
-    console.error(`invalid locale code for --add: ${JSON.stringify(code)} (expected a BCP 47 tag e.g. ja or pt-BR; not en or zh-TW)`);
+  const conflict = reservedLocaleConflict(code);
+  if (!isValidBcp47(code) || !/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(code) || conflict || code === 'zh-TW') {
+    console.error(`invalid locale code for --add: ${JSON.stringify(code)} (expected a BCP 47 tag e.g. ja or pt-BR; not built-in or alias of en/zh-TW)`);
     process.exit(1);
   }
   const target = join(localesDir, `${code}.ts`);
@@ -294,12 +295,14 @@ if (existsSync(localesDir)) {
     }
     const { code, messages: cat } = parsed.locale;
     const lower = code.toLowerCase();
-    if (seenLower.has(lower)) {
-      console.error(`${file}: duplicate locale code ${JSON.stringify(code)}`);
+    const canon = canonicalLocaleTag(code).toLowerCase();
+    if (seenLower.has(lower) || seenLower.has(canon)) {
+      console.error(`${file}: duplicate locale code ${JSON.stringify(code)} (canonical ${JSON.stringify(canonicalLocaleTag(code))} already registered)`);
       bad++;
       continue;
     }
     seenLower.add(lower);
+    seenLower.add(canon);
     if (code === 'zh-TW') continue;
 
     let locMissing = 0;

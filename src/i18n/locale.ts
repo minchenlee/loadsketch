@@ -28,6 +28,15 @@ export function canonicalLocaleTag(tag: string): string {
   }
 }
 
+/** Returns the conflicting built-in code ('en' or 'zh-TW') if `code` is reserved or canonicalizes to one. */
+export function reservedLocaleConflict(code: string): string | null {
+  const lower = code.toLowerCase();
+  const canonLower = canonicalLocaleTag(code).toLowerCase();
+  if (lower === 'en' || canonLower === 'en') return 'en';
+  if ((lower === 'zh-tw' || canonLower === 'zh-tw') && code !== 'zh-TW') return 'zh-TW';
+  return null;
+}
+
 /** Checks that `tag` is a syntactically valid BCP 47 locale tag accepted by Intl APIs. */
 export function isValidBcp47(tag: string): boolean {
   if (tag.trim() !== tag || tag.length === 0) return false;
@@ -83,13 +92,9 @@ export function parseLocaleModule(mod: unknown, file: string): { ok: true; local
     return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} must match filename ${JSON.stringify(`${stem}.ts`)}` };
   }
 
-  const lower = code.toLowerCase();
-  const canonLower = canonicalLocaleTag(code).toLowerCase();
-  if (lower === 'en' || canonLower === 'en') {
-    return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} conflicts with built-in "en"` };
-  }
-  if ((lower === 'zh-tw' || canonLower === 'zh-tw') && code !== 'zh-TW') {
-    return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} conflicts with built-in "zh-TW"` };
+  const conflict = reservedLocaleConflict(code);
+  if (conflict) {
+    return { ok: false, error: `${file}: locale code ${JSON.stringify(code)} conflicts with built-in ${JSON.stringify(conflict)}` };
   }
 
   if (typeof candidate.wordSeparator !== 'string') {

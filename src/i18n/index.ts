@@ -38,11 +38,13 @@ function registerLocaleModule(file: string, mod: unknown, target: Map<string, Lo
     return;
   }
   const lower = res.locale.code.toLowerCase();
-  if (seenLower.has(lower)) {
-    console.warn(`[i18n] skipping duplicate locale code ${JSON.stringify(res.locale.code)} in ${file}`);
+  const canon = canonicalLocaleTag(res.locale.code).toLowerCase();
+  if (seenLower.has(lower) || seenLower.has(canon)) {
+    console.warn(`[i18n] skipping duplicate locale code ${JSON.stringify(res.locale.code)} (canonical ${JSON.stringify(canonicalLocaleTag(res.locale.code))}) in ${file}`);
     return;
   }
   seenLower.add(lower);
+  seenLower.add(canon);
   target.set(res.locale.code, res.locale);
 }
 
@@ -67,7 +69,7 @@ async function scanNodeLocalesDir(dir: string, target: Map<string, LocaleDefinit
 if (typeof import.meta.env !== 'undefined' && import.meta.env.MODE) {
   const seenLower = new Set<string>(['en']);
   const modules = import.meta.glob('./locales/*.ts', { eager: true });
-  for (const [path, mod] of Object.entries(modules)) {
+  for (const [path, mod] of Object.entries(modules).sort(([a], [b]) => a.localeCompare(b))) {
     if (!isLocaleFile(path)) continue;
     registerLocaleModule(path, mod, LOCALES, seenLower);
   }
@@ -113,7 +115,11 @@ export async function loadLocalesFromDirForTest(dir: string, opts?: { isolated?:
     LOCALES.set('en', EN_LOCALE);
     LOCALES.set('zh-TW', snapshot.get('zh-TW') ?? ZH_FALLBACK_LOCALE);
   }
-  const seenLower = new Set<string>([...LOCALES.keys()].map((k) => k.toLowerCase()));
+  const seenLower = new Set<string>();
+  for (const k of LOCALES.keys()) {
+    seenLower.add(k.toLowerCase());
+    seenLower.add(canonicalLocaleTag(k).toLowerCase());
+  }
   await scanNodeLocalesDir(dir, LOCALES, seenLower);
   syncLangs();
   return () => {
@@ -150,6 +156,15 @@ export function getLang(): Lang {
   return lang;
 }
 
+function maximizeLocale(tag: string): { language: string; script?: string; region?: string } | null {
+  try {
+    const loc = new Intl.Locale(canonicalLocaleTag(tag)).maximize();
+    return { language: loc.language, script: loc.script, region: loc.region };
+  } catch {
+    return null;
+  }
+}
+
 /** Pick the closest registered language, or 'en'. Preserves zh* -> zh-TW, other -> en if not found. */
 export function pickLang(code: string | null | undefined): Lang {
   if (!code) return 'en';
@@ -163,6 +178,7 @@ export function pickLang(code: string | null | undefined): Lang {
     key,
     lower: key.toLowerCase(),
     canon: canonicalLocaleTag(key).toLowerCase(),
+    max: maximizeLocale(key),
   }));
 
   for (const r of registered) {
@@ -175,6 +191,23 @@ export function pickLang(code: string | null | undefined): Lang {
     const sub = parts.slice(0, i).join('-');
     for (const r of registered) {
       if (r.lower === sub || r.canon === sub) return r.key;
+    }
+  }
+
+  // Match equivalent likely subtags via Intl.Locale.maximize() (e.g. zh-Hans-CN -> zh-CN, zh-SG -> zh-CN)
+  const inputMax = maximizeLocale(raw);
+  if (inputMax) {
+    for (const r of registered) {
+      if (r.max && r.max.language === inputMax.language && r.max.script === inputMax.script && r.max.region === inputMax.region) {
+        return r.key;
+      }
+    }
+    if (inputMax.script) {
+      for (const r of registered) {
+        if (r.max && r.max.language === inputMax.language && r.max.script === inputMax.script) {
+          return r.key;
+        }
+      }
     }
   }
 
