@@ -6,6 +6,7 @@ import { edgeId, type Design, type ParamValue, type Scenario } from '../schema/d
 import { t, tx } from '../i18n/index.ts';
 import type { RunData } from './metrics.ts';
 import { customUsed } from './constraints.ts';
+import type { Patch } from './oncall.ts';
 
 export interface Option {
   id: string;
@@ -13,8 +14,32 @@ export interface Option {
 }
 
 /** Guess first, then run: the answer is read from the run, so it holds for a changed design too. */
+/**
+ * Course lessons: where to look on a step or a question's answer. The simulator selects and
+ * centres `node`, opens a tab of its settings panel (`tab`), or opens the charts under the canvas
+ * (`panel: 'bottom'`, for steps about what changes over time; on a phone, the charts drawer).
+ */
+export interface Look {
+  node?: string;
+  tab?: 'design' | 'scenario' | 'results' | 'versions';
+  panel?: 'bottom';
+}
+
+/**
+ * Course lessons: what a run or try step shows on the page after its run, compared with the run
+ * before it (keys of MEASURES in src/course/measures.ts). Without it: p99, failed requests and the
+ * busiest component.
+ */
+export type Show = string[];
+
 export interface Question {
   id: string;
+  /**
+   * Course lessons with more than one example (a pair) or scenario: the run this question reads.
+   * Defaults to the lesson's own example and scenario.
+   */
+  example?: string;
+  scenario?: string;
   text: string; // message id
   options: Option[];
   answer: (run: RunData) => string; // option id
@@ -25,6 +50,10 @@ export interface Question {
   explainFor?: Partial<Record<string, string>>;
   /** What the question is about, for the guess log (a key of TOPICS in guessLog.ts). Options run from low to high. */
   topic?: string;
+  /** Course lessons: where to look when the answer shows. */
+  look?: Look;
+  /** Course lessons: the arithmetic of the explanation, one line each (message ids), shown in a monospace box. */
+  calc?: string[];
 }
 
 export interface GoalResult {
@@ -41,22 +70,114 @@ export interface Goal {
 export type Rule = { short: string; text: string; check: (d: Design, original: Design) => string[] };
 
 export interface Challenge {
+  /** Unique over every lesson: the store keeps passed challenges by id. */
   id: string;
+  /** Course lessons: the run this challenge is judged on (default: the lesson's example and scenario). */
+  example?: string;
+  scenario?: string;
   title: string; // message id
   text: string; // message id
   goals: Goal[];
   rules: Rule[];
   hint: string; // message id
+  /**
+   * Components of the original design (ids) this challenge lets the user remove or replace. Any
+   * other one that is gone, renamed or of another kind breaks the challenge (judge()).
+   */
+  mayRemove?: string[];
+}
+
+/** A change to the design: params of a node, or fields of an edge ("from->to"). Same shape as on-call fixes. */
+export type { Patch };
+
+/** Where a practice problem lives: on-call drills, constraint problems, briefs (by their id). */
+export type PracticeLink = { kind: 'oncall' | 'constraint' | 'brief'; id: string };
+
+/**
+ * One step of a course lesson, in order. A course page shows them top to bottom; the side panel
+ * ignores them. Text is a message id.
+ * - read: a paragraph.
+ * - guess: the questions (ids) to answer before the next run.
+ * - run: open this example and scenario (default: the lesson's) and run it.
+ * - try: change the design (`patch`, optional: the text may only describe it) or open another
+ *   scenario, and run again. Not judged: the run shows the answer.
+ * - challenge: the challenges (ids), judged on every run.
+ * - practice: problems to do after the lesson.
+ *
+ * Every step may have a short `title` (message id; the Next button says "Next: <title>") and a
+ * `look` (where to look, see Look). A read step may have a `key` (message id): the one idea of the
+ * step, shown in a KEY IDEA box. Run and try steps may say what to `show` after their run.
+ */
+interface StepBase {
+  title?: string;
+  look?: Look;
+}
+export type Step = StepBase &
+  (
+    | { kind: 'read'; text: string; key?: string }
+    | { kind: 'guess'; questions: string[] }
+    | { kind: 'run'; example?: string; scenario?: string; text?: string; show?: Show }
+    | { kind: 'try'; text: string; example?: string; scenario?: string; patch?: Patch[]; show?: Show }
+    | { kind: 'challenge'; challenges: string[] }
+    | { kind: 'practice'; text?: string; items: PracticeLink[] }
+  );
+
+/** A key term introduced in a course lesson, shown in its collapsible Key Terms card and the course glossary. */
+export interface Term {
+  /** The term name (message id via tx), e.g. tx('Latency'). */
+  term: string;
+  /** One-sentence plain-language explanation (message id via tx). */
+  plain: string;
+  /** Optional everyday analogy (message id via tx). */
+  example?: string;
 }
 
 export interface Lesson {
   example: string;
+  /** Course lessons (src/learn/course/): the number in the outline, e.g. "2.1". Unique. */
+  id?: string;
+  /** Course lessons: the title (message id). */
+  title?: string;
+  /** Course lessons: the unit (0–6, a key of UNITS in course.ts) and the order inside it. */
+  unit?: number;
+  order?: number;
+  /** Course lessons: about how long it takes, in minutes. */
+  minutes?: number;
+  /** Course lessons: the wave it ships in. */
+  wave?: 1 | 2;
+  /** Course lessons: what the lesson teaches, 3 to 5 lines (message ids), shown at the top; ticked as the learner goes (learnAt). */
+  learn?: string[];
+  /** Course lessons: for each line of `learn`, the index of the step that teaches it (ticked once reached). Same length as `learn`. */
+  learnAt?: number[];
+  /** Course lessons: the points to remember, shown on the last page above the score (message ids). */
+  recap?: string[];
+  /** Course lessons: new terms introduced in this lesson, shown in a collapsible card and in the course glossary. */
+  terms?: Term[];
+  /** Course lessons: other examples the lesson opens (a pair: the problem, then the fix). */
+  extraExamples?: string[];
+  /** Course lessons: the steps in order. Without it: stepsOf() (intro, guess all, run, challenges). */
+  steps?: Step[];
   /** Shown instead of the example's description until the first run: the description gives the answer away. */
   intro: string; // message id
-  /** Challenges count only with this scenario (the one the example opens with). */
+  /** Challenges count only with this scenario (the one the example opens with). A key of SCENARIOS. */
   scenario: string;
   questions: Question[];
   challenges: Challenge[];
+}
+
+/** The steps of a lesson: its own, or read the intro, guess every question, run, then the challenges. */
+export function stepsOf(l: Lesson): Step[] {
+  if (l.steps) return l.steps;
+  const out: Step[] = [{ kind: 'read', text: l.intro }];
+  if (l.questions.length) out.push({ kind: 'guess', questions: l.questions.map((q) => q.id) });
+  out.push({ kind: 'run' });
+  if (l.challenges.length) out.push({ kind: 'challenge', challenges: l.challenges.map((c) => c.id) });
+  return out;
+}
+
+/** The example and scenario a question or challenge reads (its own, else the lesson's). */
+export function runOf(l: Lesson, x: { example?: string; scenario?: string }): { example: string; scenario: string } {
+  return { example: x.example ?? l.example, scenario: x.scenario ?? l.scenario };
 }
 
 export interface Verdict {
@@ -71,11 +192,12 @@ export interface Verdict {
 /** Parameters that add capacity: a larger value is more machines, slots or connections. */
 const MORE = ['instances', 'concurrency', 'connections', 'replicas', 'shards', 'maxInstances', 'partitions'];
 /** Parameters whose smaller value is faster code or hardware (a distribution's mean). */
-const FASTER = ['serviceMs', 'readMs', 'writeMs'];
+const FASTER = ['serviceMs', 'readMs', 'writeMs', 'opMs'];
 
 const num = (v: ParamValue | undefined): number | undefined => (typeof v === 'number' ? v : undefined);
+/** The mean of a time: a number is the mean itself; a distribution has its mean. */
 const mean = (v: ParamValue | undefined): number | undefined =>
-  v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined;
+  typeof v === 'number' ? v : v && typeof v === 'object' && 'mean' in v ? (v as { mean: number }).mean : undefined;
 
 function param(n: Design['nodes'][number], key: string): ParamValue | undefined {
   return n.params?.[key] ?? (KINDS[n.kind]?.params[key]?.default as ParamValue | undefined);
@@ -149,12 +271,47 @@ export function sameScenario(a: Scenario, b: Scenario): boolean {
   return key(a) === key(b);
 }
 
+/** Messages queued but neither done nor in a DLQ (still waiting, still running, expired, lost). */
+const UNFINISHED_MAX = 0.01;
+type QueueCounts = { arrivals?: number; asyncOk?: number; dlq?: number };
+
+/**
+ * Judged on every challenge whose design has a queue that got messages: queued work must finish.
+ * A worker too slow to finish anything, or messages that expire, leave the async histogram empty
+ * or short, and that must not pass as a fast p99.
+ */
+function asyncDone(run: RunData): (GoalResult & { text: string }) | undefined {
+  let n = 0;
+  let done = 0;
+  for (const q of run.design.nodes) {
+    if (q.kind !== 'queue') continue;
+    const s = run.result.nodes[q.id] as QueueCounts | undefined;
+    n += s?.arrivals ?? 0;
+    done += (s?.asyncOk ?? 0) + (s?.dlq ?? 0);
+  }
+  if (n === 0) return undefined;
+  const left = Math.max(0, n - done) / n;
+  return { ok: left <= UNFINISHED_MAX, value: pctText(left), text: t('Queued work finishes: at most 1% of messages are unfinished or expired (the DLQ counts as handled)') };
+}
+const pctText = (x: number) => `${(x * 100).toFixed(1)}%`;
+
 export function judge(c: Challenge, run: RunData, original: Design): Verdict {
   const goals = c.goals.map((g) => ({ ...g.check(run), text: t(g.text) }));
+  const done = asyncDone(run);
+  if (done) goals.push(done);
   const broken = [...customUsed(run.design).map((b) => t(b.text, b.vars)), ...c.rules.flatMap((r) => r.check(run.design, original))];
+  // every component of the original design is still there, under its id and kind (a new id is a
+  // new component; clients too), unless the challenge allows it in mayRemove
+  const now = new Map(run.design.nodes.map((n) => [n.id, n]));
+  for (const o of original.nodes) {
+    if (c.mayRemove?.includes(o.id)) continue;
+    const n = now.get(o.id);
+    if (!n || n.kind !== o.kind) broken.push(t('Removed "{name}"', { name: o.label ? t(o.label) : o.id }));
+  }
   // no way round the system: a component of the example that gets no request (e.g. behind a weight-0 connection)
   for (const o of original.nodes) {
     if (o.kind !== 'client' && run.design.nodes.some((n) => n.id === o.id) && !(run.result.nodes[o.id]?.arrivals > 0)) broken.push(t('"{name}" got no requests: you cannot go round a component of the original design', { name: o.label ? t(o.label) : o.id }));
   }
-  return { passed: broken.length === 0 && goals.every((g) => g.ok), goals, broken };
+  const unique = [...new Set(broken)];
+  return { passed: unique.length === 0 && goals.every((g) => g.ok), goals, broken: unique };
 }

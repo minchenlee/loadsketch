@@ -50,7 +50,7 @@ npm run dev        # 模擬器：http://127.0.0.1:5317/app/　介紹頁：http:/
   <img alt="跑完之後，模擬器照時間說明發生了什麼" src="src/site/media/why-zh-light.webp">
 </picture>
 
-### 47 個範例
+### 48 個範例
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/site/media/examples-zh-dark.webp">

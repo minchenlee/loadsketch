@@ -1,0 +1,400 @@
+/* The course page (/learn/). It uses the app's tokens and classes (src/app/index.css,
+   docs/design-system.md); only the page layout is added here. No glass: the bar and the step
+   panel do not float over other content. No animation. */
+
+/* the app fills the window and never scrolls; the table of contents scrolls */
+html.course,
+html.course body,
+html.course #root {
+  height: auto;
+  min-height: 100%;
+}
+
+.course-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.course-bar {
+  flex: none;
+  min-width: 0;
+}
+.course-wrap {
+  width: 100%;
+  max-width: 880px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+/* a lesson row in the table of contents */
+.course-row + .course-row {
+  border-top: 1px solid var(--line);
+}
+.course-row-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 14px;
+  font-size: 15px;
+  color: inherit;
+  text-decoration: none;
+}
+.course-row-link:hover {
+  background: var(--panel-2);
+}
+.course-row-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.course-row[data-state='soon'] .course-row-in {
+  color: var(--ink-3);
+}
+
+/* one lesson: the steps on the left, the simulator on the right, as tall as the window */
+.course-lesson {
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  height: calc(100dvh - 45px);
+  min-height: 560px;
+}
+.course-steps {
+  background: var(--chrome);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  min-width: 0;
+}
+.course-steps-in {
+  padding: 18px 20px 24px;
+}
+.course-frame {
+  min-width: 0;
+  position: relative;
+  background: var(--bg);
+}
+.course-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: var(--bg);
+}
+/* loading skeleton shown over the simulator iframe until it posts ready (eliminates white flash) */
+.course-frame-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  background: var(--bg);
+  pointer-events: none;
+}
+.course-skel-canvas {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+}
+.course-skel-graph {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.course-skel-node {
+  width: 112px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+.course-skel-edge {
+  width: 36px;
+  height: 2px;
+  background: var(--line-strong);
+}
+.course-skel-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  width: fit-content;
+  margin-inline: auto;
+}
+.course-skel-pill {
+  height: 24px;
+  border-radius: var(--radius-md);
+  background: var(--fill);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+.course-skel-side {
+  width: 320px;
+  flex: none;
+  background: var(--chrome);
+  border-left: 1px solid var(--line);
+  padding: 16px;
+}
+.course-skel-tabs {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.course-skel-line {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--fill);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+.course-skel-block {
+  height: 68px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  animation: course-skel-pulse 1.6s ease-in-out infinite;
+}
+@keyframes course-skel-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (max-width: 720px) {
+  .course-skel-side {
+    display: none;
+  }
+  .course-skel-node {
+    width: 76px;
+    height: 44px;
+  }
+}
+.course-option {
+  height: auto;
+  min-height: 34px;
+  padding-block: 6px;
+  white-space: normal;
+  font-size: 15px;
+}
+
+/* step dots: where you are, and which steps you have seen */
+.course-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.course-dot {
+  display: block;
+  width: 22px;
+  height: 6px;
+  border-radius: 3px;
+  border: 0;
+  padding: 0;
+  background: var(--line-strong);
+  cursor: pointer;
+}
+.course-dot[data-seen] {
+  background: var(--ink-3);
+}
+.course-dot[data-at] {
+  background: var(--accent);
+}
+.course-dot:disabled {
+  cursor: default;
+}
+.course-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* narrow windows: the steps first, the simulator under them */
+@media (max-width: 900px) {
+  .course-lesson {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+  .course-steps {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+  .course-frame {
+    height: 78dvh;
+    min-height: 480px;
+  }
+}
+@media (max-width: 720px) {
+  .course-bar .course-wide {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
+  .course-wide {
+    display: none;
+  }
+  .course-steps-in {
+    padding: 14px 14px 18px;
+  }
+  .course-wrap {
+    padding-inline: 14px;
+  }
+}
+
+/* readable measure and line height for explanation and step prose */
+.course-prose {
+  max-width: 34em;
+  line-height: 1.7;
+}
+.course-prose + .course-prose {
+  margin-top: 0.75em;
+}
+
+/* answer block hierarchy: separated questions, label + value rows, arithmetic box */
+.course-answer + .course-answer {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+.course-answer-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.75rem;
+  row-gap: 0.3rem;
+  align-items: baseline;
+}
+.course-answer-row {
+  display: contents;
+}
+.course-answer-row > dt {
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.course-answer-row > dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* what the lesson teaches (Lesson.learn), the key idea of a read step, the arithmetic of an answer */
+.course-learn summary {
+  cursor: pointer;
+}
+.course-key {
+  border-left: 3px solid var(--accent);
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.course-calc {
+  font-size: 14px;
+  line-height: 1.65;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+:lang(en) .course-calc-title {
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+/* per-lesson key terms card (Lesson.terms): solid .card, collapsed by default */
+.course-terms {
+  overflow: hidden;
+}
+.course-terms-sum {
+  cursor: pointer;
+  padding: 8px 12px;
+  user-select: none;
+}
+.course-terms-sum:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-lg);
+}
+.course-terms-list {
+  margin: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+.course-term + .course-term {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.course-term > dt {
+  font-size: 14.5px;
+  line-height: 1.4;
+  color: var(--ink-strong);
+  overflow-wrap: break-word;
+}
+.course-term-plain {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+.course-term-example {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+
+/* lesson badge inside the course glossary modal */
+.course-glossary-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--dur), color var(--dur), background-color var(--dur);
+}
+.course-glossary-badge:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+:root.dark .course-glossary-badge:hover {
+  color: var(--read);
+}
+.course-glossary-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.course-guide-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .course-glossary-badge {
+    transition: none;
+  }
+  .course-skel-node,
+  .course-skel-pill,
+  .course-skel-line,
+  .course-skel-block {
+    animation: none;
+  }
+}

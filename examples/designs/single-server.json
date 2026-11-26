@@ -1,0 +1,16 @@
+{
+  "schema": "loadsketch/design@1",
+  "name": "One server",
+  "description": "The smallest system: users call one API server directly, with no load balancer, cache or database, and the network is left out (0 ms). The server works on 4 requests at a time; each takes 2.5 ms on average (exponential). At 800 requests a second it is busy half the time. Compare the queueing time with the theory row (M/M/c), then make each request slower and watch the queue grow.",
+  "nodes": [
+    { "id": "users", "kind": "client", "pos": [0, 200] },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API server",
+      "pos": [320, 200],
+      "params": { "instances": 1, "concurrency": 4, "serviceMs": { "mean": 2.5, "cv": 1 } }
+    }
+  ],
+  "edges": [{ "from": "users", "to": "api", "latencyMs": 0 }]
+}

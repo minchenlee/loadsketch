@@ -4,12 +4,13 @@ import { useMemo, useRef, useState } from 'react';
 import { Download, Upload, Trash2 } from 'lucide-react';
 import { useApp } from '../store.ts';
 import { LESSONS } from '../../learn/lessons.ts';
-import { TOPICS, gap, logFile, measuredText, parseLog, patterns, topicStats, type GuessEntry } from '../../learn/guessLog.ts';
+import { COURSE_BY_ID } from '../../learn/course.ts';
+import { TOPICS, gap, lessonOfEntry, logFile, measuredText, parseLog, patterns, topicStats, type GuessEntry } from '../../learn/guessLog.ts';
 import { t } from '../../i18n/index.ts';
 
 /** The question and option texts of an entry (ids when the lesson no longer has them). */
 function texts(e: GuessEntry): { q: string; guess: string; answer: string } {
-  const q = LESSONS[e.example]?.questions.find((x) => x.id === e.question);
+  const q = lessonOfEntry(e, LESSONS, COURSE_BY_ID)?.questions.find((x) => x.id === e.question);
   const opt = (id: string) => {
     const o = q?.options.find((x) => x.id === id);
     return o ? t(o.text) : id;
@@ -45,7 +46,7 @@ export function GuessLog({ className = '' }: { className?: string }) {
   };
   const onFile = async (f: File | undefined) => {
     if (!f) return;
-    const r = parseLog(await f.text(), LESSONS);
+    const r = parseLog(await f.text(), LESSONS, COURSE_BY_ID);
     if (!r.ok) setMsg({ ok: false, text: r.error });
     else {
       // new ids that the log kept (a full log drops its oldest entries, so lengths do not tell)
