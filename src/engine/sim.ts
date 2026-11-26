@@ -15,7 +15,7 @@ import { Histogram, type LatencySummary } from './histogram.ts';
 import { KeySampler, keyBucket, makeRng, sampleDuration, sampleExp, type Rng } from './rng.ts';
 import { ekm1, mgc } from './theory.ts';
 import { ROLLOUT_KINDS, planScale, scaleDesign, scaleLive, scaleResult, scaleWindow, type ScalePlan } from './scale.ts';
-import { getLang, t, tx } from '../i18n/index.ts';
+import { getLocaleInfo, t, tx } from '../i18n/index.ts';
 import { KINDS, fanoutApplies, resolveParams, type Dist, type ResolvedParams } from '../schema/kinds.ts';
 import {
   RESULT_SCHEMA,
@@ -5113,7 +5113,7 @@ export class Simulation {
   private explain(b: SimResult['bottleneck'], nodes: SimResult['nodes']): void {
     if (!b) return;
     const parts = [this.why(b, nodes[b.node], nodes), this.failureSource(b, nodes)].filter(Boolean);
-    b.why = parts.join(getLang() === 'zh-TW' ? '' : ' ');
+    b.why = parts.join(getLocaleInfo().wordSeparator);
   }
 
   private why(b: NonNullable<SimResult['bottleneck']>, r: NodeResult, nodes?: SimResult['nodes']): string {
@@ -5171,7 +5171,7 @@ export class Simulation {
       else parts.push(t('Downstream is not very busy, but it responds slowly (for example slow, timeout or retry).'));
     }
     // Chinese sentences end in 。 and join without a space; English ones need one.
-    return parts.join(getLang() === 'zh-TW' ? '' : ' ');
+    return parts.join(getLocaleInfo().wordSeparator);
   }
 
   /** The busiest station reachable downstream of `id`, by peak window utilisation. */

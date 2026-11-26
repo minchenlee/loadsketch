@@ -1,6 +1,9 @@
-import { existsSync, readFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
+import { createServer } from 'vite';
 import { readStoredZip } from '../scripts/zip.ts';
 import { plan } from '../tests/import/plan-helper.ts';
 import { importTerraform } from '../src/import/terraform/index.ts';
@@ -398,6 +401,89 @@ test('a language change during a run: late messages from the stopped run are dro
   });
   expect(st).toEqual({ status: 'idle', result: null, timeline: 0, windows: 0 });
   await expect(page.getByTestId('clock')).toContainText('尚未執行');
+});
+
+test('third language menu, labels and switching (isolated Vite fixture)', async ({ page }) => {
+  const fixture = {
+    code: 'xx-test',
+    label: 'Test語',
+    intlLocale: 'ja-JP',
+    htmlLang: 'xx',
+    wordSeparator: '',
+    messages: {
+      Run: 'TEST_RUN',
+      Results: 'TEST_RESULTS',
+    },
+  };
+  const cacheDir = mkdtempSync(join(tmpdir(), 'loadsketch-vite-e2e-'));
+  let server: Awaited<ReturnType<typeof createServer>> | undefined;
+  try {
+    try {
+      server = await createServer({
+        configFile: join(import.meta.dirname, '..', 'vite.config.ts'),
+        cacheDir,
+        server: { host: '127.0.0.1', port: 0, strictPort: false },
+        plugins: [
+          {
+            name: 'e2e-third-locale-fixture',
+            enforce: 'pre',
+            transform(code, id) {
+              if (!id.replace(/\\/g, '/').endsWith('/src/i18n/index.ts')) return null;
+              const pattern = /import\.meta\.glob\((['"])\.\/locales\/(?:\*|zh-TW)\.ts\1,\s*\{\s*eager:\s*true\s*\}\)/;
+              if (!pattern.test(code)) {
+                throw new Error('e2e-third-locale-fixture: expected locales glob not found in src/i18n/index.ts');
+              }
+              return code.replace(
+                pattern,
+                `({ ...import.meta.glob('./locales/zh-TW.ts', { eager: true }), './locales/xx-test.ts': { default: ${JSON.stringify(fixture)} } })`,
+              );
+            },
+          },
+        ],
+      });
+      await server.listen();
+      const base = `http://127.0.0.1:${(server.httpServer!.address() as AddressInfo).port}`;
+      await page.goto(`${base}/app/?example=three-tier&lang=en`);
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+      await page.getByTestId('more-menu').click();
+      await expect(page.getByTestId('lang')).toHaveCount(0);
+      await expect(page.getByTestId('lang-zh-TW')).toHaveText('繁體中文');
+      await expect(page.getByTestId('lang-en')).toHaveText('✓ English');
+      await expect(page.getByTestId('lang-xx-test')).toHaveText('Test語');
+
+      await page.getByTestId('lang-xx-test').click();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'xx');
+      await expect(page.getByTestId('run')).toContainText('TEST_RUN');
+      await expect(page.getByTestId('tab-learn')).toContainText('TEST_RESULTS');
+      // Untranslated UI labels fall back to English
+      await expect(page.getByTestId('open-examples')).toContainText('Examples');
+
+      await page.getByTestId('more-menu').click();
+      await expect(page.getByTestId('lang-xx-test')).toHaveText('✓ Test語');
+      await page.getByTestId('lang-zh-TW').click();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
+      await expect(page.getByTestId('run')).toContainText('執行');
+
+      await page.getByTestId('more-menu').click();
+      await page.getByTestId('lang-en').click();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+      await expect(page.getByTestId('run')).toContainText('Run');
+
+      // Intro site cycles through the 3rd language (using English fallback screenshots) and reaches Traditional Chinese
+      await page.goto(`${base}/?lang=en&theme=light`);
+      await expect(page.getByTestId('site-lang')).toContainText('Test語');
+      await page.getByTestId('site-lang').click();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'xx');
+      await expect(page.getByTestId('site-carousel').locator('img').first()).toHaveAttribute('src', /-en-light/);
+      await page.getByTestId('site-lang').click();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('畫出系統 灌流量 看哪裡先壞');
+    } finally {
+      await server?.close();
+    }
+  } finally {
+    rmSync(cacheDir, { recursive: true, force: true });
+  }
 });
 
 test('retry-storm lesson: guess, run, see the answer and the story, then pass a challenge', async ({ page }) => {
@@ -1849,9 +1935,17 @@ test('intro site: it opens the simulator, and its live panels are the simulator 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('site-zoom')).toHaveCount(0);
   expect(await page.evaluate(() => document.getElementById('root')!.inert)).toBe(false);
-  // the language button changes the page text
-  await page.getByTestId('site-lang').click();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('畫出系統 灌流量 看哪裡先壞');
+  // the language button cycles languages (bounded) until Traditional Chinese text and lang appear
+  const heading = page.getByRole('heading', { level: 1 });
+  const maxClicks = 5;
+  for (let i = 0; i < maxClicks; i++) {
+    const langAttr = await page.locator('html').getAttribute('lang');
+    const h1Text = await heading.textContent();
+    if (langAttr === 'zh-Hant' && h1Text === '畫出系統 灌流量 看哪裡先壞') break;
+    await page.getByTestId('site-lang').click();
+  }
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant');
+  await expect(heading).toHaveText('畫出系統 灌流量 看哪裡先壞');
   await expect(carousel.getByRole('img', { name: '從需求開始設計' })).toHaveAttribute('src', /brief-zh-light/);
   // the page does not scroll sideways on a phone
   await page.setViewportSize({ width: 390, height: 800 });

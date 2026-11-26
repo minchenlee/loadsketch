@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:5317',
+    baseURL: 'http://127.0.0.1:5319',
     headless: true,
     viewport: { width: 1600, height: 960 },
     deviceScaleFactor: 1,
@@ -16,9 +16,11 @@ export default defineConfig({
     locale: 'zh-TW',
   },
   webServer: {
-    command: 'npx vite',
-    url: 'http://127.0.0.1:5317/app/',
-    reuseExistingServer: true,
+    // Dedicated port and reuseExistingServer: false ensure e2e never reuses a user's `npm run dev` on 5317 without builtin locale isolation.
+    command: 'npx vite --port 5319 --strictPort',
+    url: 'http://127.0.0.1:5319/app/',
+    reuseExistingServer: false,
     timeout: 60_000,
+    env: { LOADSKETCH_E2E_LOCALES: 'builtin' },
   },
 });

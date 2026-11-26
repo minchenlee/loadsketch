@@ -10,7 +10,7 @@ import '../app/index.css';
 import './site.css';
 import logoBlack from '../app/assets/logo-black.svg';
 import logoWhite from '../app/assets/logo-white.svg';
-import { pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
+import { getAllLocales, getLocaleInfo, pickLang, setLang, t, tx, type Lang } from '../i18n/index.ts';
 import { REPO } from '../repo.ts';
 
 const APP = './app/';
@@ -184,7 +184,10 @@ function Feature({ title, children, open, flip, live }: { title: string; childre
 // ---- the feature carousel: one screenshot of the simulator for each feature
 
 const MEDIA = import.meta.glob<string>('./media/*.webp', { eager: true, query: '?url', import: 'default' });
-const shot = (id: string, lang: Lang, theme: Theme) => MEDIA[`./media/${id}-${lang === 'en' ? 'en' : 'zh'}-${theme}.webp`];
+const shot = (id: string, lang: Lang, theme: Theme) => {
+  const tag = lang === 'zh-TW' ? 'zh' : lang;
+  return MEDIA[`./media/${id}-${tag}-${theme}.webp`] ?? MEDIA[`./media/${id}-${lang}-${theme}.webp`] ?? MEDIA[`./media/${id}-en-${theme}.webp`];
+};
 
 const SLIDES = [
   { id: 'oncall', title: tx('On-call practice'), text: tx('Something is broken. You see only the error rate and the latency. Find it. Fix it.') },
@@ -450,12 +453,15 @@ function Site() {
   const [theme, setTheme] = useState<Theme>(() => (document.documentElement.classList.contains('dark') ? 'dark' : 'light'));
   setLang(lang);
   useEffect(() => {
-    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-Hant';
+    document.documentElement.lang = getLocaleInfo(lang).htmlLang;
   }, [lang]);
+  const allLocales = getAllLocales();
+  const langIdx = allLocales.findIndex((x) => x.code === lang);
+  const nextLocale = allLocales[(langIdx + 1) % allLocales.length] ?? allLocales[0];
+  const nextLangLabel = allLocales.length <= 2 ? (lang === 'en' ? '中文' : 'English') : nextLocale.label;
   const flipLang = () => {
-    const l: Lang = lang === 'en' ? 'zh-TW' : 'en';
-    save('loadsketch-lang', l);
-    setL(l);
+    save('loadsketch-lang', nextLocale.code);
+    setL(nextLocale.code);
   };
   const flipTheme = () => {
     const th: Theme = theme === 'dark' ? 'light' : 'dark';
@@ -475,7 +481,7 @@ function Site() {
           <span className="flex-1" />
           <button className="btn" onClick={flipLang} aria-label={t('Language')} title={t('Language')} data-testid="site-lang">
             <Languages size={16} />
-            <span className="hidden sm:inline">{lang === 'en' ? '中文' : 'English'}</span>
+            <span className="hidden sm:inline">{nextLangLabel}</span>
           </button>
           <button className="btn" onClick={flipTheme} aria-label={t('Dark / light')} title={t('Dark / light')} data-testid="site-theme">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}

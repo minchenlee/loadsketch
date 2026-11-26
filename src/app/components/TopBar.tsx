@@ -12,7 +12,7 @@ import { PasteDesign } from './PasteDesign.tsx';
 import { Menu, type MenuItem } from './Menu.tsx';
 import { encodeShare, SHARE_WARN_CHARS } from '../share.ts';
 import { IS_MAC, SHORTCUT } from '../ui.ts';
-import { t, tx } from '../../i18n/index.ts';
+import { getAllLocales, t, tx } from '../../i18n/index.ts';
 import { usePhone } from '../phone.ts';
 import { importMessage } from '../../i18n/importMessages.ts';
 import { importTerraform, PlanError, runChecks } from '../../import/terraform/index.ts';
@@ -141,13 +141,32 @@ export function TopBar() {
     { label: t('Undo'), icon: <Undo2 size={14} />, onSelect: undo },
     { label: t('Redo'), icon: <Redo2 size={14} />, onSelect: redo },
   ];
+  const allLocales = getAllLocales();
+  const langItems: MenuItem[] =
+    allLocales.length <= 2
+      ? [
+          {
+            label: lang === 'en' ? '切換成中文' : 'Switch to English',
+            sep: phone,
+            icon: <Languages size={14} />,
+            onSelect: () => setLang(lang === 'en' ? 'zh-TW' : 'en'),
+            'data-testid': 'lang',
+          },
+        ]
+      : allLocales.map((loc, idx) => ({
+          label: loc.code === lang ? `✓ ${loc.label}` : loc.label,
+          sep: idx === 0 ? phone : false,
+          icon: idx === 0 ? <Languages size={14} /> : undefined,
+          onSelect: () => setLang(loc.code),
+          'data-testid': `lang-${loc.code}`,
+        }));
   const moreItems: MenuItem[] = [
     ...(phone ? phoneItems : []),
     // the course link is in the bar on a wide window; the course's own frame does not link to it
     ...(phone && !EMBEDDED ? [{ label: t('Course'), icon: <GraduationCap size={14} />, onSelect: () => void location.assign(COURSE_URL), 'data-testid': 'course-item' }] : []),
     // a phone has no room for the GitHub button either (M16); the embedded app links nowhere
     ...(phone && !EMBEDDED ? [{ label: 'GitHub', icon: <GithubMark />, onSelect: () => void window.open(REPO, '_blank', 'noopener,noreferrer'), title: t('View the source on GitHub'), 'data-testid': 'github-item' }] : []),
-    { label: lang === 'en' ? '切換成中文' : 'Switch to English', sep: phone, icon: <Languages size={14} />, onSelect: () => setLang(lang === 'en' ? 'zh-TW' : 'en'), 'data-testid': 'lang' },
+    ...langItems,
     { label: t('Toggle light/dark'), icon: theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />, onSelect: () => setTheme(theme === 'dark' ? 'light' : 'dark'), 'data-testid': 'theme' },
   ];
 

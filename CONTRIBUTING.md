@@ -12,6 +12,7 @@ Thanks for your interest in contributing to loadsketch! This document provides g
 - [Add an Example in 5 Minutes](#add-an-example-in-5-minutes)
 - [Adding a Terraform Resource Mapping](#adding-a-terraform-resource-mapping)
 - [Add a Practice Question](#add-a-practice-question)
+- [Add a Language](#add-a-language)
 - [Commit Messages](#commit-messages)
 - [Pull Request Process](#pull-request-process)
 
@@ -434,6 +435,73 @@ npx vitest run tests/briefs.test.ts        # for design briefs
 ```
 
 CI verifies strict schema and filename/id matching (`tests/practice-data.test.ts`), that `src/i18n/zh-TW.ts` is up to date with matching placeholders (`npm run i18n:check`; the nightly run on main also requires every entry to have Chinese), and simulation behavior: `naive` fails while `solution` or `reference` passes (`tests/oncall.test.ts`, `tests/constraints.test.ts`, `tests/briefs.test.ts`).
+
+## Add a Language
+
+Add one new file under `src/i18n/locales/` (for example, `ja.ts`).
+Do not edit any other code file.
+
+### 1. Generate the template
+
+Run the extractor with `--add` and your language code:
+
+```sh
+node scripts/i18n-extract.ts --add ja
+```
+
+This creates `ja.ts` under `src/i18n/locales/` with all metadata fields and every English message ID mapped to `""`.
+
+### 2. Fill metadata and translations
+
+Update the metadata fields at the top of the new file:
+
+- `code`: Language code matching the file stem (for example, `'ja'`).
+- `label`: Display name shown in the language menu (for example, `'日本語'`).
+- `intlLocale`: BCP 47 locale for number and date formatting (for example, `'ja-JP'`).
+- `htmlLang`: `lang` attribute for the HTML document (for example, `'ja'`).
+- `wordSeparator`: Separator between narrative words (`''` for Chinese/Japanese, `' '` for space-separated languages).
+- `messages`: Dictionary mapping English message IDs to your language.
+
+Minimal example:
+
+```ts
+// machine-translated, not proofread
+import type { LocaleDefinition } from '../locale.ts';
+
+const locale: LocaleDefinition = {
+  code: 'ja',
+  label: '日本語',
+  intlLocale: 'ja-JP',
+  htmlLang: 'ja',
+  wordSeparator: '',
+  messages: {
+    'Run': '実行',
+    'Stop': '停止',
+    'Second {at}: traffic {m}×{span}': '{at} 秒目: トラフィック {m}×{span}',
+  },
+};
+
+export default locale;
+```
+
+Rules for `messages`:
+
+- Empty values (`""`) and omitted keys fall back to English automatically.
+- Partial translations are welcome.
+- Keep all `{name}` placeholders identical to the English key.
+- If translations are machine-translated and not human proofread, keep `// machine-translated, not proofread` at the top of the file.
+
+### 3. Verify
+
+Run the check and quick tests:
+
+```sh
+npm run i18n:check
+npm run test:quick
+```
+
+- `npm run i18n:check` warns on missing translations and fails if `{name}` placeholders mismatch or metadata is invalid.
+- `npm run i18n:strict` fails if any translation is missing (used in release checks).
 
 ## Commit Messages
 

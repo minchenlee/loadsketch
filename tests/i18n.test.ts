@@ -1,9 +1,11 @@
-import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ZH } from '../src/i18n/zh-TW.ts';
-import { setLang, stripContext, t } from '../src/i18n/index.ts';
+import { LANGS, getAllLocales, getLang, getLocaleInfo, loadLocalesFromDirForTest, pickLang, setLang, stripContext, t } from '../src/i18n/index.ts';
+import { isLocaleFile, parseLocaleModule } from '../src/i18n/locale.ts';
 import { localizeDesign, localizeScenario } from '../src/i18n/content.ts';
 import { simulate } from '../src/engine/index.ts';
 import { checkDesign, type Design, type Scenario } from '../src/schema/design.ts';
@@ -26,7 +28,7 @@ describe('i18n catalog', () => {
     expect(bad).toEqual([]);
   });
 
-  it('t() fills placeholders, strips @@context, falls back to English, and translates legacy Chinese ids in en mode', () => {
+  it('t() fills placeholders, strips @@context, falls back to English, and preserves unknown Chinese in zh-TW while translating legacy ids in en', () => {
     expect(t('Second {at}: traffic {m}×{span}', { at: 20, m: 3, span: '' })).toBe('第 20 秒流量變 3 倍');
     // a new id the extractor added with empty Chinese: shown in English, without the @@context
     ZH['Missing message {x}@@ctx'] = '';
@@ -39,8 +41,85 @@ describe('i18n catalog', () => {
     }
     expect(t('Off@@not-used')).toBe('Off');
     expect(t('primary')).toBe('primary');
-    // legacy Chinese id in an old design file still translates in English mode
+
+    // Paired test: zh-TW preserves unknown keys as-is; en reverse-translates legacy Chinese ids
+    setLang('zh-TW');
+    expect(t('主庫')).toBe('主庫');
+    setLang('en');
     expect(t('主庫')).toBe('Primary');
+  });
+
+  it('discovers built-in locales via import.meta.glob in expected order and ignores Object.prototype keys in pickLang', () => {
+    const codes = getAllLocales().map((l) => l.code);
+    expect(codes).toContain('zh-TW');
+    expect(codes).toContain('en');
+    expect(codes.indexOf('zh-TW')).toBeLessThan(codes.indexOf('en'));
+    for (const key of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
+      expect(pickLang(key)).toBe('en');
+      expect(getLocaleInfo(key).code).toBe('en');
+    }
+  });
+
+  it('picks the closest registered locale via BCP 47 subtag truncation in an isolated fixture registry', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loadsketch-picklang-'));
+    let restore: (() => void) | undefined;
+    try {
+      writeFileSync(
+        join(dir, 'zh-Hant.ts'),
+        `export default { code: 'zh-Hant', label: '繁中', intlLocale: 'zh-Hant', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} };\n`,
+        'utf8',
+      );
+      writeFileSync(
+        join(dir, 'xx-test.ts'),
+        `export default { code: 'xx-test', label: 'Test', intlLocale: 'en-US', htmlLang: 'xx', wordSeparator: ' ', messages: {} };\n`,
+        'utf8',
+      );
+      writeFileSync(
+        join(dir, 'iw.ts'),
+        `export default { code: 'iw', label: 'עברית', intlLocale: 'iw', htmlLang: 'iw', wordSeparator: ' ', messages: {} };\n`,
+        'utf8',
+      );
+      restore = await loadLocalesFromDirForTest(dir, { isolated: true });
+      expect(pickLang('zh_TW')).toBe('zh-TW');
+      expect(pickLang('zho')).toBe('zh-TW');
+      expect(pickLang('zho-TW')).toBe('zh-TW');
+      expect(pickLang('zho_TW')).toBe('zh-TW');
+      expect(pickLang('zhx')).toBe('zh-TW');
+      expect(pickLang('zh-Hant-TW')).toBe('zh-Hant');
+      expect(pickLang('zh_Hant_HK')).toBe('zh-Hant');
+      expect(pickLang('zh-Hant')).toBe('zh-Hant');
+      expect(pickLang('zh-CN')).toBe('zh-TW');
+      expect(pickLang('iw')).toBe('iw');
+      expect(pickLang('IW')).toBe('iw');
+      expect(pickLang('iw-IL')).toBe('iw');
+      expect(pickLang('he-IL')).toBe('iw');
+      expect(pickLang('xx-custom')).toBe('xx-test');
+      expect(pickLang('fr-FR')).toBe('en');
+    } finally {
+      restore?.();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('picks zh-CN via Intl.Locale.maximize() for zh-Hans-CN and zh-SG while keeping zh-Hant-TW on zh-TW', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loadsketch-zhcn-'));
+    let restore: (() => void) | undefined;
+    try {
+      writeFileSync(
+        join(dir, 'zh-CN.ts'),
+        `export default { code: 'zh-CN', label: '简体中文', intlLocale: 'zh-CN', htmlLang: 'zh-Hans', wordSeparator: '', messages: {} };\n`,
+        'utf8',
+      );
+      restore = await loadLocalesFromDirForTest(dir, { isolated: true });
+      expect(pickLang('zh-Hans-CN')).toBe('zh-CN');
+      expect(pickLang('zh-CN')).toBe('zh-CN');
+      expect(pickLang('zh-SG')).toBe('zh-CN');
+      expect(pickLang('zh-Hant-TW')).toBe('zh-TW');
+      expect(pickLang('zh-HK')).toBe('zh-TW');
+    } finally {
+      restore?.();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -88,9 +167,286 @@ describe('English and Traditional Chinese output', () => {
     if (rawD.description && ZH[rawD.description]) expect(zhD.description).toMatch(CJK);
   });
 
-  it('the CLI prints English with --lang en', () => {
+  it('the CLI prints English with --lang en and ignores LOADSKETCH_LOCALES_DIR env var', () => {
     const out = execFileSync('node', ['cli/loadsketch.ts', 'run', 'examples/designs/priority-shedding.json', '--scenario', 'examples/scenarios/spike.json', '--duration', '20', '--lang', 'en'], { cwd: root, encoding: 'utf8' });
     expect(out).toContain('Bottleneck');
     expect(out.split('\n').filter((l) => CJK.test(l))).toEqual([]);
+
+    const emptyDir = mkdtempSync(join(tmpdir(), 'loadsketch-ignore-env-'));
+    try {
+      const helpRes = spawnSync('node', ['cli/loadsketch.ts', '--help'], {
+        cwd: root,
+        env: { ...process.env, LOADSKETCH_LOCALES_DIR: emptyDir },
+        encoding: 'utf8',
+      });
+      expect(helpRes.status).toBe(0);
+      expect(helpRes.stdout).toContain('--lang zh-TW|en');
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('adding a third language (isolated fixture)', () => {
+  it('discovers a third language via the Node directory loader, translates matched keys including SAME_IN_ZH, falls back to English, and checks with i18n-extract', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loadsketch-i18n-'));
+    let restore: (() => void) | undefined;
+    try {
+      const fakeLangCode = 'xx-test';
+      const keyWithPlaceholder = 'Second {at}: traffic {m}×{span}';
+      const sameInZhKey = 'p99 ≤ {v}';
+
+      writeFileSync(
+        join(dir, `${fakeLangCode}.ts`),
+        `export default {\n` +
+          `  code: '${fakeLangCode}',\n` +
+          `  label: 'TestLang',\n` +
+          `  intlLocale: 'en-US',\n` +
+          `  htmlLang: 'xx',\n` +
+          `  wordSeparator: ' ',\n` +
+          `  messages: {\n` +
+          `    ${JSON.stringify(keyWithPlaceholder)}: 'FAKE_TRANSLATION {at} {m}{span}',\n` +
+          `    ${JSON.stringify(sameInZhKey)}: 'P99 <= {v}',\n` +
+          `  },\n` +
+          `};\n`,
+        'utf8',
+      );
+
+      // 1. Real Node directory discovery path via Vitest-only loader helper (no env override)
+      restore = await loadLocalesFromDirForTest(dir);
+      expect(LANGS).toContain(fakeLangCode);
+      expect(getAllLocales().some((l) => l.code === fakeLangCode && l.label === 'TestLang')).toBe(true);
+      expect(pickLang(fakeLangCode)).toBe(fakeLangCode);
+      expect(pickLang('xx_TEST')).toBe(fakeLangCode);
+      expect(pickLang('xx-custom')).toBe(fakeLangCode);
+      expect(pickLang('toString')).toBe('en');
+
+      setLang(fakeLangCode);
+      expect(getLang()).toBe(fakeLangCode);
+      expect(getLocaleInfo().wordSeparator).toBe(' ');
+      expect(t(keyWithPlaceholder, { at: 10, m: 2, span: '' })).toBe('FAKE_TRANSLATION 10 2');
+      expect(t(sameInZhKey, { v: 500 })).toBe('P99 <= 500');
+      expect(t('Off@@not-used')).toBe('Off');
+      expect(t('Database@@kind')).toBe('Database');
+      expect(t('主庫')).toBe('Primary');
+      expect(t('壓測@@臺北')).toBe('壓測@@臺北');
+
+      // 2. i18n-extract --check exits 0, warns about missing keys, and accepts SAME_IN_ZH keys
+      const checkRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(checkRes.status).toBe(0);
+      expect(checkRes.stderr).toContain(fakeLangCode);
+      expect(checkRes.stderr).toContain('missing translation(s)');
+      expect(checkRes.stderr).not.toContain('extra key(s)');
+
+      // 3. i18n-extract --check --strict exits non-zero and lists the language missing translations
+      const strictRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--strict', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(strictRes.status).not.toBe(0);
+      expect(strictRes.stderr).toContain(fakeLangCode);
+      expect(strictRes.stderr).toContain('missing translation(s)');
+
+      // 4. Rejects mutually exclusive --check --add flags without writing file
+      const mutexRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--add', 'pt-BR', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(mutexRes.status).not.toBe(0);
+      expect(existsSync(join(dir, 'pt-BR.ts'))).toBe(false);
+
+      // 5. i18n-extract --add creates a valid scaffold with metadata and full English IDs (including SAME_IN_ZH)
+      const addRes = spawnSync('node', ['scripts/i18n-extract.ts', '--add', 'pt-BR', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(addRes.status, addRes.stderr).toBe(0);
+      const addedFile = join(dir, 'pt-BR.ts');
+      expect(existsSync(addedFile)).toBe(true);
+      const addedText = readFileSync(addedFile, 'utf8');
+      expect(addedText).toContain('machine-translated, not proofread');
+      expect(addedText).toContain(`code: "pt-BR"`);
+      expect(addedText).toContain(`"p99 ≤ {v}": ""`);
+      expect(addedText).toContain(`"Second {at}: traffic {m}×{span}": ""`);
+
+      // Re-running --add for an existing file fails via wx flag without overwriting
+      const addDupRes = spawnSync('node', ['scripts/i18n-extract.ts', '--add', 'pt-BR', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(addDupRes.status).not.toBe(0);
+      expect(addDupRes.stderr).toContain('already exists');
+
+      // --add rejects codes canonicalizing to built-in en / zh-TW (same rule as parseLocaleModule)
+      for (const badCode of ['eng', 'zho-TW', 'en', 'zh-TW']) {
+        const badAdd = spawnSync('node', ['scripts/i18n-extract.ts', '--add', badCode, '--locales-dir', dir], {
+          cwd: root,
+          encoding: 'utf8',
+        });
+        expect(badAdd.status, badCode).not.toBe(0);
+        expect(existsSync(join(dir, `${badCode}.ts`)), badCode).toBe(false);
+      }
+
+      const checkAdded = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(checkAdded.status).toBe(0);
+      expect(checkAdded.stderr).toContain('pt-BR');
+    } finally {
+      restore?.();
+      setLang('zh-TW');
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid metadata (BCP 47, filename stem, built-in case conflicts, duplicates), nonexistent --locales-dir, and non-.ts files', async () => {
+    expect(isLocaleFile('ja.ts')).toBe(true);
+    expect(isLocaleFile('ja.js')).toBe(false);
+    expect(isLocaleFile('ja.d.ts')).toBe(false);
+
+    // Missing wordSeparator
+    expect(parseLocaleModule({ default: { code: 'bad', label: 'Bad', intlLocale: 'en-US', htmlLang: 'en', messages: {} } }, 'bad.ts')).toEqual({
+      ok: false,
+      error: 'bad.ts: "wordSeparator" must be a string',
+    });
+    // Non-string message value
+    expect(
+      parseLocaleModule(
+        { default: { code: 'bad', label: 'Bad', intlLocale: 'en-US', htmlLang: 'en', wordSeparator: ' ', messages: { Run: 123 } } },
+        'bad.ts',
+      ),
+    ).toEqual({
+      ok: false,
+      error: 'bad.ts: messages["Run"] must be a string',
+    });
+    // Invalid BCP 47 tag (underscore ja_JP would throw RangeError in Intl toLocaleTimeString)
+    expect(
+      parseLocaleModule(
+        { default: { code: 'ja', label: '日本語', intlLocale: 'ja_JP', htmlLang: 'ja', wordSeparator: '', messages: {} } },
+        'ja.ts',
+      ).ok,
+    ).toBe(false);
+    // Code must match filename stem
+    expect(
+      parseLocaleModule(
+        { default: { code: 'fr', label: 'Français', intlLocale: 'fr-FR', htmlLang: 'fr', wordSeparator: ' ', messages: {} } },
+        'ja.ts',
+      ).ok,
+    ).toBe(false);
+    // Built-in case-only conflicts
+    expect(
+      parseLocaleModule(
+        { default: { code: 'EN', label: 'English', intlLocale: 'en-US', htmlLang: 'en', wordSeparator: ' ', messages: {} } },
+        'EN.ts',
+      ).ok,
+    ).toBe(false);
+    expect(
+      parseLocaleModule(
+        { default: { code: 'zh-tw', label: '繁體中文', intlLocale: 'zh-TW', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} } },
+        'zh-tw.ts',
+      ).ok,
+    ).toBe(false);
+    expect(
+      parseLocaleModule(
+        { default: { code: 'eng', label: 'English', intlLocale: 'en-US', htmlLang: 'en', wordSeparator: ' ', messages: {} } },
+        'eng.ts',
+      ).ok,
+    ).toBe(false);
+    expect(
+      parseLocaleModule(
+        { default: { code: 'zho-TW', label: '繁體中文', intlLocale: 'zh-TW', htmlLang: 'zh-Hant', wordSeparator: '', messages: {} } },
+        'zho-TW.ts',
+      ).ok,
+    ).toBe(false);
+
+    // Nonexistent --locales-dir fails instead of silently passing
+    const missingDirRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', join(tmpdir(), 'loadsketch-does-not-exist-xyz')], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    expect(missingDirRes.status).not.toBe(0);
+
+    const dir = mkdtempSync(join(tmpdir(), 'loadsketch-bad-locale-'));
+    let restore: (() => void) | undefined;
+    try {
+      writeFileSync(
+        join(dir, 'bad-locale.ts'),
+        `export default { code: 'bad-locale', label: 'Bad', intlLocale: 'ja_JP', htmlLang: 'ja', wordSeparator: ' ', messages: { Run: 'X' } };\n`,
+        'utf8',
+      );
+      writeFileSync(
+        join(dir, 'ignored.js'),
+        `export default { code: 'ignored', label: 'Ignored', intlLocale: 'en-US', htmlLang: 'ig', wordSeparator: ' ', messages: {} };\n`,
+        'utf8',
+      );
+
+      // Checker must fail and include the bad filename
+      const checkRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dir], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(checkRes.status).not.toBe(0);
+      expect(checkRes.stderr).toContain('bad-locale.ts');
+      expect(checkRes.stderr).not.toContain('ignored.js');
+
+      // Duplicate locale code across directories or canonical aliases (he.ts + iw.ts) fail checker & skip at runtime
+      const dupDir = mkdtempSync(join(tmpdir(), 'loadsketch-dup-locale-'));
+      let dupRestore: (() => void) | undefined;
+      try {
+        writeFileSync(
+          join(dupDir, 'he.ts'),
+          `export default { code: 'he', label: 'עברית', intlLocale: 'he-IL', htmlLang: 'he', wordSeparator: ' ', messages: {} };\n`,
+          'utf8',
+        );
+        writeFileSync(
+          join(dupDir, 'iw.ts'),
+          `export default { code: 'iw', label: 'עברית (iw)', intlLocale: 'iw', htmlLang: 'iw', wordSeparator: ' ', messages: {} };\n`,
+          'utf8',
+        );
+        const dupCheckRes = spawnSync('node', ['scripts/i18n-extract.ts', '--check', '--locales-dir', dupDir], {
+          cwd: root,
+          encoding: 'utf8',
+        });
+        expect(dupCheckRes.status).not.toBe(0);
+        expect(dupCheckRes.stderr).toContain('duplicate locale code');
+        expect(dupCheckRes.stderr).toContain('iw.ts');
+
+        const dupWarns: string[] = [];
+        const origWarn = console.warn;
+        console.warn = (...args: unknown[]) => dupWarns.push(args.map(String).join(' '));
+        try {
+          dupRestore = await loadLocalesFromDirForTest(dupDir, { isolated: true });
+        } finally {
+          console.warn = origWarn;
+        }
+        expect(LANGS).toContain('he');
+        expect(LANGS).not.toContain('iw');
+        expect(dupWarns.some((w) => w.includes('duplicate locale code') && w.includes('iw.ts'))).toBe(true);
+      } finally {
+        dupRestore?.();
+        rmSync(dupDir, { recursive: true, force: true });
+      }
+
+      // Runtime Node loader skips invalid file with console.warn(filename) and ignores .js
+      const warns: string[] = [];
+      const origWarn = console.warn;
+      console.warn = (...args: unknown[]) => warns.push(args.map(String).join(' '));
+      try {
+        restore = await loadLocalesFromDirForTest(dir);
+      } finally {
+        console.warn = origWarn;
+      }
+      expect(LANGS).not.toContain('bad-locale');
+      expect(LANGS).not.toContain('ignored');
+      expect(warns.some((w) => w.includes('bad-locale.ts'))).toBe(true);
+      expect(warns.some((w) => w.includes('ignored.js'))).toBe(false);
+    } finally {
+      restore?.();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

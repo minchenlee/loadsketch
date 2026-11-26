@@ -4,7 +4,27 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(process.env.LOADSKETCH_E2E_LOCALES === 'builtin'
+      ? [
+          {
+            name: 'e2e-builtin-locales',
+            apply: 'serve' as const,
+            enforce: 'pre' as const,
+            transform(code: string, id: string) {
+              if (!id.replace(/\\/g, '/').endsWith('/src/i18n/index.ts') || code.includes('./locales/xx-test.ts')) return null;
+              const pattern = /import\.meta\.glob\((['"])\.\/locales\/\*\.ts\1,\s*\{\s*eager:\s*true\s*\}\)/;
+              if (!pattern.test(code)) {
+                throw new Error('e2e-builtin-locales: expected locales glob not found in src/i18n/index.ts');
+              }
+              return code.replace(pattern, "import.meta.glob('./locales/zh-TW.ts', { eager: true })");
+            },
+          },
+        ]
+      : []),
+  ],
   server: { host: '127.0.0.1', port: 5317, strictPort: true },
   preview: { host: '127.0.0.1', port: 5318, strictPort: true },
   worker: { format: 'es' },

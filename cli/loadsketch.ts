@@ -22,7 +22,7 @@ import {
   type Scenario,
 } from '../src/schema/design.ts';
 import { FAIL_LABEL, FAIL_REASONS, simulate, type SimResult } from '../src/engine/index.ts';
-import { pickLang, setLang, t } from '../src/i18n/index.ts';
+import { LANGS, pickLang, setLang, t } from '../src/i18n/index.ts';
 import { localizeDesign, localizeScenario } from '../src/i18n/content.ts';
 import { importMessage } from '../src/i18n/importMessages.ts';
 import { ANSWERS_SCHEMA, assumptionsOf, blocking, findLimit, importTerraform, parseAnswers, PlanError, runChecks, simulateImport, type Answers } from '../src/import/terraform/index.ts';
@@ -39,7 +39,7 @@ function usage(code = 0): never {
       '  loadsketch fmt <file.json>... [--write | --check]   ' + t('Rewrite in canonical format (--check: exit 1 if the format is off)'),
       '  loadsketch schema [--write]             ' + t('Print (or write to schema/) the JSON Schema'),
       '  loadsketch import terraform <plan.json> [--answers <answers.json>] [--out <design.json>] [--report <report.md>] [--strict] [--simulate] [--find-limit] [--name <name>] [--json]   ' + t('Turn a Terraform plan (terraform show -json) into a design file'),
-      '  --lang zh-TW|en                     ' + t('Output language (you can also use the LOADSKETCH_LANG environment variable)'),
+      `${`  --lang ${LANGS.join('|')}`.padEnd(37)} ` + t('Output language (you can also use the LOADSKETCH_LANG environment variable)'),
     ].join('\n'),
   );
   process.exit(code);

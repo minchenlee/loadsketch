@@ -25,7 +25,7 @@ loadsketch is a system design simulator. Put components on a canvas, connect the
 - **Designs are JSON files.** Designs and scenarios (`loadsketch/design@1`, `loadsketch/scenario@1`) have a JSON Schema in `schema/`. They are easy to read and write for people and AI agents.
 - **A CLI.** The engine does not use the browser, so the CLI and the UI run the same engine.
 - **Share links with no server.** The design and the scenario are compressed into the part of the URL after `#`, which is never sent to a server.
-- **English and Traditional Chinese**, light and dark.
+- **English and Traditional Chinese**, light and dark. (Want to add another language? See [CONTRIBUTING.md](CONTRIBUTING.md#add-a-language)).
 
 The examples are simplified models. Some refer to public information about well-known services; they are not the real architecture of any company.
 
