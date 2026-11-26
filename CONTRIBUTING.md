@@ -497,6 +497,8 @@ Include:
 
 ### Review Process
 
+The CI checks `check` and `e2e` must pass before a maintainer merges; nobody pushes to main directly.
+
 1. Maintainer will review your PR
 2. Address any requested changes
 3. Once approved, maintainer will merge your PR
