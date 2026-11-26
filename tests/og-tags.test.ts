@@ -1,4 +1,4 @@
-// Every entry page (/, /app/, /learn/) carries Open Graph and Twitter card metadata whose og:image exists in public/ at 1200x630.
+// Every entry page (/, /app/, /learn/) carries Open Graph and Twitter card metadata in <head> whose og:image matches the expected 1200x630 PNG in public/.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,14 +8,17 @@ const ORIGIN = 'https://loadsketch.mclee.dev';
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 const PAGES = [
-  { file: 'index.html', path: '/' },
-  { file: 'app/index.html', path: '/app/' },
-  { file: 'learn/index.html', path: '/learn/' },
+  { file: 'index.html', path: '/', image: 'og.png' },
+  { file: 'app/index.html', path: '/app/', image: 'og.png' },
+  { file: 'learn/index.html', path: '/learn/', image: 'og-learn.png' },
 ] as const;
 
 function parseMeta(html: string): Map<string, string> {
   const tags = new Map<string, string>();
-  for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
+  const clean = html.replace(/<!--[\s\S]*?-->/g, '');
+  const head = clean.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1];
+  if (!head) return tags;
+  for (const match of head.matchAll(/<meta\b[^>]*>/gi)) {
     const tag = match[0];
     const attrs = new Map<string, string>();
     for (const a of tag.matchAll(/([a-zA-Z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
@@ -39,9 +42,28 @@ function pngSize(file: string): { width: number; height: number; bytes: number }
   };
 }
 
+describe('parseMeta', () => {
+  it('ignores meta tags inside HTML comments and outside <head>', () => {
+    const sample = `<!doctype html>
+<html>
+  <head>
+    <!-- <meta property="og:title" content="commented" /> -->
+    <meta property="og:description" content="real" />
+  </head>
+  <body>
+    <meta property="og:url" content="https://loadsketch.mclee.dev/body/" />
+  </body>
+</html>`;
+    const meta = parseMeta(sample);
+    expect(meta.get('og:title')).toBeUndefined();
+    expect(meta.get('og:description')).toBe('real');
+    expect(meta.get('og:url')).toBeUndefined();
+  });
+});
+
 describe('link preview meta tags', () => {
   for (const page of PAGES) {
-    it(`${page.file} has Open Graph and Twitter card tags with a valid 1200x630 public image`, () => {
+    it(`${page.file} has Open Graph and Twitter card tags pointing to ${page.image} (1200x630)`, () => {
       const html = readFileSync(join(ROOT, page.file), 'utf8');
       const meta = parseMeta(html);
 
@@ -49,19 +71,13 @@ describe('link preview meta tags', () => {
       expect(meta.get('og:description')?.trim()).toBeTruthy();
       expect(meta.get('og:type')).toBe('website');
       expect(meta.get('og:url')).toBe(`${ORIGIN}${page.path}`);
+      expect(meta.get('og:image')).toBe(`${ORIGIN}/${page.image}`);
       expect(meta.get('og:image:width')).toBe('1200');
       expect(meta.get('og:image:height')).toBe('630');
       expect(meta.get('og:image:alt')?.trim()).toBeTruthy();
       expect(meta.get('twitter:card')).toBe('summary_large_image');
 
-      const image = meta.get('og:image');
-      expect(image).toBeTruthy();
-      const url = new URL(image!);
-      expect(url.origin).toBe(ORIGIN);
-      const rel = url.pathname.replace(/^\/+/, '');
-      expect(rel).toMatch(/\.png$/);
-
-      const diskPath = join(ROOT, 'public', rel);
+      const diskPath = join(ROOT, 'public', page.image);
       expect(existsSync(diskPath), `missing ${diskPath}`).toBe(true);
       const size = pngSize(diskPath);
       expect(size.width).toBe(1200);
